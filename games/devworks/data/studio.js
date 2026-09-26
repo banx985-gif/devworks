@@ -1,5 +1,5 @@
-// The studio (Milestone 1): S1 Rented Office (bible §35) — room size, view, the Starter Desks, the rest spot and
-// Alex Byte's loop. Plain data only.
+// The studio (Milestones 1–2): S1 Rented Office (bible §35) — room size, view, look, the four starting stations and
+// how the staff walk between them. Plain data only.
 // Grid cells are in "plan" space (col → right-down, row → left-down on screen); the back walls run along row 0 and col 0.
 
 export const STUDIO = {
@@ -30,8 +30,6 @@ export const STUDIO_LOOK = {
   doorFrame: '#7E5434',
   board: '#FFFFFF', // a little whiteboard
   boardInk: ['#1597BF', '#F2862B', '#2E8B57'],
-  rug: '#C85A3C',
-  rugEdge: '#F2C66D',
   gridLine: 'rgba(21,151,191,0.55)', // Build Mode shows the hidden grid
   valid: 'rgba(46,139,87,0.45)',
   validEdge: '#2E8B57',
@@ -46,57 +44,75 @@ export const STUDIO_WALLS = {
   door: { side: 'left', t0: 9.4, t1: 11.2, h0: 0, h1: 190 },
 };
 
-// The one station (bible §36 F01). fp = footprint on the grid (blocked for walking); the worker sits at `spot`,
-// given relative to the footprint so it moves with the desk. Build Mode can move it (Milestone 1).
-// draw: art width as a share of the footprint's drawn width; drop = how far below the footprint's bottom corner
-// the art's base sits, in cell heights.
-export const DESK = {
-  id: 'F01',
-  name: 'Starter Desks',
-  role: 'Maker',
-  art: 'facility_f01',
-  purpose: 'Where the team makes its games. Needed for one active game project.',
-  fp: { col: 3, row: 2, w: 3, h: 2 },
-  spot: { dc: 1, dr: 2 }, // the cell in front of the desk's middle
-  draw: { width: 1, drop: 0 },
-};
+// The starting stations (bible §36: all "Start" facilities). fp = footprint on the grid (blocked for walking).
+// seats = where a worker stands to use it, relative to the footprint, so they move with it. Any station can be
+// moved in Build Mode. draw: art width as a share of the footprint's drawn width; drop = how far below the
+// footprint's bottom corner the art's base sits, in cell heights. effects are the bible's numbers, as data.
+export const STATIONS = [
+  {
+    id: 'F01',
+    name: 'Starter Desks',
+    role: 'Maker',
+    art: 'facility_f01',
+    purpose: 'Where the team makes its games. Needed for one active game project.',
+    fp: { col: 1, row: 1, w: 3, h: 2 },
+    seats: [{ dc: 1, dr: 2 }],
+    draw: { width: 1, drop: 0 },
+  },
+  {
+    id: 'F03',
+    name: 'Design Board',
+    role: 'Specialist',
+    art: 'facility_f03',
+    purpose: 'Plan the game on the board. Design milestones go 8% faster.',
+    fp: { col: 6, row: 1, w: 2, h: 2 },
+    seats: [{ dc: 1, dr: 2 }],
+    draw: { width: 1.05, drop: 0.2 },
+  },
+  {
+    id: 'F06',
+    name: 'Producer Desk',
+    role: 'Thinker',
+    art: 'facility_f06',
+    purpose: 'Keep the schedule on track: 5% less schedule slip.',
+    fp: { col: 6, row: 5, w: 2, h: 2 },
+    seats: [{ dc: 1, dr: 2 }],
+    draw: { width: 1.05, drop: 0.2 },
+  },
+  {
+    id: 'F08',
+    name: 'Break Area',
+    role: 'Rest',
+    art: 'facility_f08',
+    purpose: 'Where the team rests. Energy comes back 20% faster.',
+    fp: { col: 5, row: 9, w: 3, h: 3 },
+    seats: [{ dc: 0, dr: 3 }, { dc: 1, dr: 3 }, { dc: 2, dr: 3 }],
+    draw: { width: 1.05, drop: 0.2 },
+    rest: true,
+    effects: { restEnergyPct: 20 },
+  },
+];
 
-// The rest spot: a code-drawn rug (no Break Area facility yet). Walkable, but nothing can be built on it.
-export const REST_SPOT = {
-  name: 'Rest spot',
-  area: { col: 5, row: 9, w: 2, h: 2 },
-  spot: { col: 5, row: 9 },
-};
-
-// The floor inside the door: the way in must stay clear, so nothing can be built here.
+// The floor inside the door: the way in must stay clear, so nothing can be built here. New staff walk in from it.
 export const DOORWAY = { col: 0, row: 9, w: 2, h: 3 };
 
-// The one worker (bible §11 PRG01). Loop: desk → work → rest spot → rest → desk.
-export const WORKER = {
-  id: 'PRG01',
-  name: 'Alex Byte',
-  role: 'Programmer',
-  art: 'staff_prg01',
-  blurb: 'Programmer. Writes the code that makes a game run.',
-  height: 210, // drawn px at zoom 1
-  speed: 240, // plan units per second
-  workSec: 5,
-  restSec: 3,
+// How the staff move (bible §11 art sizes are in the files). Drawn height and walking speed at 1×.
+export const WALKER = { height: 210, speed: 240 };
+
+// Each state as the name tag and the cards say it. {station} = the station's name.
+export const WORK_STATE = {
+  toWork: { label: 'Walking', line: 'Walking to the {station}' },
+  working: { label: 'Working', line: 'Working at the {station}' },
+  toBreak: { label: 'Walking', line: 'Going to the Break Area' },
+  resting: { label: 'Resting', line: 'Resting in the Break Area' },
 };
 
-// His state, as the world chip and the sheet show it.
-export const WORKER_STATE = {
-  toDesk: { label: 'Walking', line: 'Walking to the desks' },
-  working: { label: 'Working', line: 'Working at the desks' },
-  toRest: { label: 'Walking', line: 'Walking to the rest spot' },
-  resting: { label: 'Resting', line: 'Resting at the rest spot' },
-};
-
-// Why a desk spot is refused in Build Mode.
+// Why a spot is refused in Build Mode.
 export const BUILD_TEXT = {
-  hint: 'Drag the desks to move them.',
+  hint: 'Drag a station to move it.',
   offGrid: 'Off the floor',
-  overlap: 'Overlaps the rest spot',
-  noSeat: 'No room in front to sit',
+  overlap: 'Overlaps another station',
+  noSeat: 'No room in front to use it',
+  seatBlocked: "Blocks another station's spot",
   walkway: 'Blocks the walkway',
 };

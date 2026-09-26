@@ -1,18 +1,130 @@
-// Stand-ins for DEVWORKS art that is not drawn yet (Milestone 1). Registered as AssetManager fallbacks, so they
-// show in the studio and in sheet headers now, and the real files (same keys, final art-list paths) replace them
-// with no code change. Each drawer fits itself inside the box it is given, keeping its own shape.
+// Stand-ins for DEVWORKS art that is not drawn yet, or a file that fails to load (Milestones 1–2). Registered as
+// AssetManager fallbacks, so they show wherever the image would (studio, sheets, cards), and the real files (same
+// keys, final art-list paths) replace them with no code change. Each drawer fits itself inside its box.
+// Also the small code-drawn icons: Credits and Studio Tokens (Batch 6 will draw them) and the tired / low-Morale
+// status icons over a worker's head.
 import { THEME, font } from '../../../../core/Theme.js';
-import { DESK, WORKER, STUDIO } from '../../data/studio.js';
+import { STATIONS, STUDIO } from '../../data/studio.js';
+import { STARTERS } from '../../data/staff.js';
+import { TOP_ICONS, STATUS_ICONS } from '../../data/home.js';
 
 const C = THEME.color;
-const DESK_H = 80 / STUDIO.view.halfW; // desk height, in cell half-widths
+const DESK_H = 80 / STUDIO.view.halfW; // block height, in cell half-widths
 
 export function registerPlaceholders(assets) {
-  const { w: fw, h: fh } = DESK.fp;
-  assets.setFallback(DESK.art, (ctx, x, y, w, h) => drawDeskBlock(ctx, x, y, w, h, fw, fh, 'Starter Desks'), {
-    aspect: (fw + fh) / ((fw + fh) / 2 + DESK_H),
-  });
-  assets.setFallback(WORKER.art, (ctx, x, y, w, h) => drawPerson(ctx, x, y, w, h, WORKER.name.split(' ')[0]), { aspect: PERSON_ASPECT });
+  for (const st of STATIONS) {
+    const { w: fw, h: fh } = st.fp;
+    assets.setFallback(st.art, (ctx, x, y, w, h) => drawDeskBlock(ctx, x, y, w, h, fw, fh, st.name), { aspect: (fw + fh) / ((fw + fh) / 2 + DESK_H) });
+  }
+  for (const def of STARTERS) assets.setFallback(def.art, (ctx, x, y, w, h) => drawPerson(ctx, x, y, w, h, def.name.split(' ')[0]), { aspect: PERSON_ASPECT });
+  assets.setFallback(TOP_ICONS.credits, drawCoin);
+  assets.setFallback(TOP_ICONS.tokens, drawGem);
+  assets.setFallback(STATUS_ICONS.tired, drawTired);
+  assets.setFallback(STATUS_ICONS.stressed, drawStressed);
+}
+
+// --- small icons (square box; each draws inside the largest centred square) --------------------------------
+const square = (x, y, w, h) => {
+  const s = Math.min(w, h);
+  return { cx: x + w / 2, cy: y + h / 2, s };
+};
+
+// Credits: a gold coin with a "C".
+function drawCoin(ctx, x, y, w, h) {
+  const { cx, cy, s } = square(x, y, w, h);
+  ctx.fillStyle = '#F2B233';
+  ctx.strokeStyle = C.outline;
+  ctx.lineWidth = s * 0.07;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.44, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#B87A00';
+  ctx.lineWidth = s * 0.05;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.32, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#8A5A00';
+  ctx.font = font(s * 0.42, true);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('C', cx, cy + s * 0.02);
+}
+
+// Studio Tokens: a purple gem.
+function drawGem(ctx, x, y, w, h) {
+  const { cx, cy, s } = square(x, y, w, h);
+  const t = cy - s * 0.3;
+  const m = cy - s * 0.08;
+  const b = cy + s * 0.42;
+  ctx.lineJoin = 'round';
+  ctx.fillStyle = '#9B6BE0';
+  ctx.strokeStyle = C.outline;
+  ctx.lineWidth = s * 0.07;
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.24, t);
+  ctx.lineTo(cx + s * 0.24, t);
+  ctx.lineTo(cx + s * 0.44, m);
+  ctx.lineTo(cx, b);
+  ctx.lineTo(cx - s * 0.44, m);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.2, t + s * 0.05);
+  ctx.lineTo(cx, t + s * 0.05);
+  ctx.lineTo(cx - s * 0.08, m);
+  ctx.lineTo(cx - s * 0.34, m);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Tired (low Energy): an almost empty battery on a warm badge.
+function drawTired(ctx, x, y, w, h) {
+  const { cx, cy, s } = square(x, y, w, h);
+  badge(ctx, cx, cy, s, C.warn);
+  const bw = s * 0.5;
+  const bh = s * 0.28;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = s * 0.06;
+  ctx.strokeRect(cx - bw / 2, cy - bh / 2, bw, bh);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(cx + bw / 2, cy - bh * 0.22, s * 0.06, bh * 0.44);
+  ctx.fillStyle = C.bad;
+  ctx.fillRect(cx - bw / 2 + s * 0.05, cy - bh / 2 + s * 0.05, bw * 0.2, bh - s * 0.1);
+}
+
+// Low Morale: a small rain cloud on a blue badge.
+function drawStressed(ctx, x, y, w, h) {
+  const { cx, cy, s } = square(x, y, w, h);
+  badge(ctx, cx, cy, s, C.purple);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(cx - s * 0.1, cy - s * 0.05, s * 0.13, 0, Math.PI * 2);
+  ctx.arc(cx + s * 0.08, cy - s * 0.1, s * 0.15, 0, Math.PI * 2);
+  ctx.arc(cx + s * 0.2, cy - s * 0.02, s * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(cx - s * 0.22, cy - s * 0.04, s * 0.44, s * 0.1);
+  ctx.strokeStyle = '#BFE3F0';
+  ctx.lineWidth = s * 0.05;
+  ctx.lineCap = 'round';
+  for (const dx of [-0.12, 0.02, 0.16]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * dx, cy + s * 0.12);
+    ctx.lineTo(cx + s * (dx - 0.04), cy + s * 0.24);
+    ctx.stroke();
+  }
+}
+
+function badge(ctx, cx, cy, s, fill) {
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = C.outline;
+  ctx.lineWidth = s * 0.07;
+  ctx.beginPath();
+  ctx.arc(cx, cy, s * 0.44, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
 }
 
 // A labelled 3/4 block with a footprint of fw × fh cells: wood top, darker sides, a row of little monitors.
