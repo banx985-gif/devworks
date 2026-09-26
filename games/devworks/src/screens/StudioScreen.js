@@ -312,7 +312,9 @@ export function createStudioScreen({ renderer, layout, assets, bus, sheet, openM
 
     onDown(p) {
       if (overSheet(p) || onUi(p)) return; // the shortcut, the banner and the sheet never pan or pinch the studio
-      if (buildMode && gestures.fingers === 0 && pickAt(p.x, p.y) === desk) {
+      // In Build Mode the desks win even with Alex standing in front of them (only the desks can move).
+      const w = camera.screenToWorld(p.x, p.y);
+      if (buildMode && gestures.fingers === 0 && selection.hits(desk, w.x, w.y)) {
         deskPress = p.id; // this finger moves the desks
         return;
       }

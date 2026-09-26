@@ -103,9 +103,15 @@ export class SaveSlot {
   async _save(data) {
     const t0 = globalThis.performance?.now() ?? Date.now();
     const json = JSON.stringify(data); // plain data only: never class instances or functions
+    const sum = checksum(json);
+    // Nothing changed since the last write: skip it (the account and the archived endings rarely change).
+    if (this.lastRecord && this.lastRecord.checksum === sum && this.lastRecord.saveVersion === this.version) {
+      this.lastWrite = { ms: 0, bytes: json.length, seq: this.lastRecord.seq, skipped: true };
+      return this.lastRecord;
+    }
     if (this.seq == null) this.seq = Math.max(-1, ...(await this._copies()).map((c) => c.seq));
     const seq = this.seq + 1;
-    const record = { saveVersion: this.version, savedAt: Date.now(), seq, checksum: checksum(json), bytes: json.length, data: JSON.parse(json) };
+    const record = { saveVersion: this.version, savedAt: Date.now(), seq, checksum: sum, bytes: json.length, data: JSON.parse(json) };
     const k = this.slotKey(seq % this.rolling);
     await this.adapter.set(k, record);
     // Read it back: only a copy that checks out may become current (a bad one is never picked by load anyway).
@@ -116,6 +122,7 @@ export class SaveSlot {
     }
     this.seq = seq;
     this.lastSavedAt = record.savedAt;
+    this.lastRecord = { saveVersion: record.saveVersion, seq, checksum: sum };
     const ms = (globalThis.performance?.now() ?? Date.now()) - t0;
     this.lastWrite = { ms, bytes: json.length, seq };
     this.bus?.emit('save:written', { key: this.key, savedAt: record.savedAt, seq, ms, bytes: json.length });
@@ -175,6 +182,7 @@ export class SaveSlot {
     const c = (await this._copies()).find((x) => recordStatus(x.raw) === 'ok');
     if (!c) return false;
     const bad = { ...c.raw, data: { ...c.raw.data, __damaged: Date.now() } };
+    this.lastRecord = null;
     await this.adapter.set(c.k, bad);
     return c.k;
   }
@@ -189,6 +197,7 @@ export class SaveSlot {
     const record = { ...raw, seq, checksum: checksum(json), bytes: json.length, data: JSON.parse(json) };
     await this.adapter.set(this.slotKey(seq % this.rolling), record);
     this.seq = seq;
+    this.lastRecord = null;
     return record;
   }
 
@@ -197,6 +206,7 @@ export class SaveSlot {
     for (let i = 0; i < this.rolling; i++) await this.adapter.remove(this.slotKey(i));
     await this.adapter.remove(this.key);
     this.seq = null;
+    this.lastRecord = null;
     this.lastSavedAt = null;
   }
 }
