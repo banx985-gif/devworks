@@ -7,7 +7,7 @@
 import { Grid } from '../../../../core/Grid.js';
 import { Agent } from '../../../../core/Agent.js';
 import { StaffSystem } from '../../../../core/StaffSystem.js';
-import { STUDIO, STATIONS, DOORWAY, WALKER } from '../../data/studio.js';
+import { STUDIO, STATIONS, PROPS, DOORWAY, WALKER } from '../../data/studio.js';
 import { STAFF_BALANCE } from '../../data/balance.js';
 import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
 
@@ -18,27 +18,32 @@ export function createStudioWorld({ bus, rng, debug }) {
   const { cols, rows, cellSize: CELL } = STUDIO;
   const grid = new Grid({ cols, rows, tileSize: CELL });
 
-  // --- stations ---------------------------------------------------------------------
+  // --- stations and props ---------------------------------------------------------------
   const stations = STATIONS.map((def) => ({ kind: 'station', id: def.id, def, fp: { ...def.fp } }));
   const stationById = (id) => stations.find((s) => s.id === id) ?? null;
   const breakArea = stations.find((s) => s.def.rest);
+  // Props (Milestone 5) never move: their cells are simply taken (walked round, never built on).
+  const props = PROPS.map((def) => ({ kind: 'prop', id: def.id, def, fp: { ...def.fp } }));
+  const onProp = (col, row) => props.some((p) => inArea(p.fp, col, row));
   const seatsOf = (st, fp = st.fp) => st.def.seats.map((s) => ({ col: fp.col + s.dc, row: fp.row + s.dr }));
   const blockAll = () => {
     grid.blocked.fill(0);
-    for (const st of stations) grid.blockRect(st.fp.col, st.fp.row, st.fp.w, st.fp.h, true);
+    for (const it of [...stations, ...props]) grid.blockRect(it.fp.col, it.fp.row, it.fp.w, it.fp.h, true);
   };
   blockAll();
 
   // Can this station stand with its back corner at (col, row)? null = yes, else the reason (BUILD_TEXT key).
   // Rules (bible §36, style guide §4): on the floor, clear of the other stations and the doorway, its own spots
   // free, nobody else's spot covered, and every free floor cell still reachable from every other (the walkway).
-  function whyNot(st, col, row) {
+  // among: the stations that count (all of them, except while settling an old save).
+  function whyNot(st, col, row, among = stations) {
     const fp = { col, row, w: st.fp.w, h: st.fp.h };
     if (col < 0 || row < 0 || col + fp.w > cols || row + fp.h > rows) return 'offGrid';
-    const others = stations.filter((o) => o !== st);
+    const others = among.filter((o) => o !== st);
     if (others.some((o) => overlaps(fp, o.fp))) return 'overlap';
+    if (props.some((p) => overlaps(fp, p.fp))) return 'prop';
     if (overlaps(fp, DOORWAY)) return 'walkway';
-    const blockedAt = (c, r) => !grid.inBounds(c, r) || inArea(fp, c, r) || others.some((o) => inArea(o.fp, c, r));
+    const blockedAt = (c, r) => !grid.inBounds(c, r) || inArea(fp, c, r) || others.some((o) => inArea(o.fp, c, r)) || onProp(c, r);
     if (seatsOf(st, fp).some((s) => blockedAt(s.col, s.row))) return 'noSeat';
     if (others.some((o) => seatsOf(o).some((s) => inArea(fp, s.col, s.row)))) return 'seatBlocked';
     // Flood fill the free floor from the doorway.
@@ -79,6 +84,29 @@ export function createStudioWorld({ bus, rng, debug }) {
     bus.emit('world:moved', { id: st.id, col, row });
     debug?.log(`${st.def.name} moved to ${col},${row}`);
     return null;
+  }
+
+  // Every station on a spot it may stand on (Milestone 5): a save from before the props and the Showcase Shelf can
+  // have a station where they now stand. Such a station goes back to its starting spot, or else the first free one.
+  // Stations are placed one at a time, each checked against those already placed, so a station that was fine
+  // stays put; if the result still breaks a rule, the whole room goes back to the starting layout.
+  function settle() {
+    const placed = [];
+    for (const st of stations) {
+      const ok = (c, r) => !whyNot(st, c, r, [...placed, st]);
+      if (!ok(st.fp.col, st.fp.row)) {
+        const home = st.def.fp;
+        let spot = ok(home.col, home.row) ? home : null;
+        for (let r = 0; !spot && r < rows; r++) for (let c = 0; !spot && c < cols; c++) if (ok(c, r)) spot = { col: c, row: r };
+        if (spot) {
+          debug?.log(`${st.def.name} moved from ${st.fp.col},${st.fp.row} to ${spot.col},${spot.row} (its spot was taken)`);
+          st.fp = { ...st.fp, col: spot.col, row: spot.row };
+        }
+      }
+      placed.push(st);
+    }
+    if (stations.some((st) => whyNot(st, st.fp.col, st.fp.row))) for (const st of stations) st.fp = { ...st.def.fp };
+    blockAll();
   }
 
   // --- staff ---------------------------------------------------------------------------
@@ -179,7 +207,7 @@ export function createStudioWorld({ bus, rng, debug }) {
       const st = stationById(s.id);
       if (st) st.fp = { ...st.fp, col: s.fp.col, row: s.fp.row };
     }
-    blockAll();
+    settle();
     staffSystem.load(data.staff ?? []);
     workers.length = 0;
     staffSystem.staff.forEach((staff, i) => {
@@ -208,6 +236,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   return {
     grid,
     stations,
+    props,
     workers,
     staffSystem,
     phaseLog,

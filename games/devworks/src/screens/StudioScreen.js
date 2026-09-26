@@ -1,10 +1,14 @@
-// The studio (Milestones 1–3): the home screen. S1 Rented Office — one cramped room on a hidden grid, seen in the
+// The studio (Milestones 1–3, 5): the home screen. S1 Rented Office — one cramped room on a hidden grid, seen in the
 // 3/4 "dollhouse" view, drawn by code — between the shared top bar and five-button bottom bar (core/ui).
-// The four starting stations and the three starters walking their loop (studioWorld). Drag pans, pinch/wheel zooms
-// (clamped to the room, in the space between the bars), tapping a station opens its sheet, tapping a worker opens
-// their staff card, and a long press on empty floor enters Build Mode, where any station can be dragged to a new
-// grid spot (invalid spots show red and are refused; the staff re-path). While a game is in the works a small
-// progress bar floats over the Starter Desks, and bugs / breakthroughs pop up there (placeholders until Milestone 5).
+// The starting stations (one scale for every facility), the props that dress the room, and the starters walking their
+// loop (studioWorld). Drag pans, pinch/wheel zooms (clamped to the room, in the space between the bars), tapping a
+// station opens its sheet (the Showcase Shelf opens the Catalogue), tapping a worker opens their staff card, and a long
+// press on empty floor enters Build Mode, where any station can be dragged to a new grid spot (invalid spots show red
+// and are refused; the staff re-path). Props are decoration only: never tapped, never moved.
+// Milestone 5: the workers hop and sway as they walk (one hop per stride, so no sliding), bounce as they type and
+// breathe as they rest (core/CharacterMotion); a small progress card floats over the Starter Desks while a game is in
+// the works; the art pops (src/ui/devPops.js) draw here, in the world, through core/VfxSystem's 'world' layer; the
+// released games' covers stand on the Showcase Shelf, with a tag naming each in turn.
 //
 // Plan space lives in the world (studioWorld); only drawing and tapping go through the IsoProjection here.
 import { THEME, font } from '../../../../core/Theme.js';
@@ -13,9 +17,10 @@ import { Camera } from '../../../../core/Camera.js';
 import { WorldGestures } from '../../../../core/WorldGestures.js';
 import { CachedLayer } from '../../../../core/CachedLayer.js';
 import { Selection } from '../../../../core/Selection.js';
+import { characterPose, drawCharacter } from '../../../../core/CharacterMotion.js';
 import { drawIsoRoom, isoPath, wallPatch } from '../../../../core/IsoRoom.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
-import { STUDIO, STUDIO_LOOK, STUDIO_WALLS, DOORWAY, WALKER, WORK_STATE, BUILD_TEXT } from '../../data/studio.js';
+import { STUDIO, STUDIO_LOOK, STUDIO_WALLS, STUDIO_FLOOR, FACILITY_DRAW, SHOWCASE, DOORWAY, WALKER, WORK_STATE, BUILD_TEXT } from '../../data/studio.js';
 import { STATUS_ICONS } from '../../data/home.js';
 
 const C = THEME.color;
@@ -23,13 +28,14 @@ const S = THEME.size;
 const L = STUDIO_LOOK;
 const REFUSED_SEC = 2.5; // how long a refused move's reason stays in the banner
 const STATE_COLOR = { Walking: C.progress, Working: C.action, Resting: C.good };
-const POP_SEC = 1.6; // how long a bug / breakthrough pop floats
+const TAG_H = 50; // name tags: small text (28), never smaller
+const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, topBar, bottomBar, debug }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug }) {
   const W = renderer.width;
   const { cols, rows, cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
-  const { grid, stations, workers } = world;
+  const { grid, stations, props, workers } = world;
 
   // --- the room --------------------------------------------------------------
   const iso = new IsoProjection({ tileSize: CELL, halfW: HW, halfH: HH, originX: margin + rows * HW, originY: margin + wallH });
@@ -41,24 +47,29 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   camera.minZoom = STUDIO.zoom.min;
   camera.maxZoom = STUDIO.zoom.max;
 
-  // Where a station's art is drawn (projected world): centred on the footprint, base just below its front corner.
-  const stationRect = (st, fp = st.fp) => {
-    const { draw } = st.def;
-    const w = (fp.w + fp.h) * HW * draw.width;
-    const h = w / assets.aspect(st.def.art);
+  // Where a station's or a prop's art is drawn (projected world): centred on the footprint, base just below its front
+  // corner. Every facility at one scale (FACILITY_DRAW); a prop at its own size in cell widths.
+  const artRect = (it, fp = it.fp) => {
+    const w = it.kind === 'prop' ? it.def.size * 2 * HW : (fp.w + fp.h) * HW * FACILITY_DRAW.width;
+    const h = w / assets.aspect(it.def.art);
     const cx = iso.corner(fp.col + fp.w / 2, fp.row + fp.h / 2).x;
-    const base = iso.corner(fp.col + fp.w, fp.row + fp.h).y + HH * draw.drop;
+    const base = iso.corner(fp.col + fp.w, fp.row + fp.h).y + HH * FACILITY_DRAW.drop;
     return { x: cx - w / 2, y: base - h, w, h };
   };
-  const workerRect = (w) => {
+  const stationRect = artRect;
+  const feetOf = (w) => {
     const f = iso.toWorld(w.agent.x, w.agent.y);
+    return { x: f.x, y: f.y + HH * 0.25 };
+  };
+  const workerRect = (w) => {
+    const f = feetOf(w);
     const h = WALKER.height;
     const wd = h * assets.aspect(w.def.art);
-    return { x: f.x - wd / 2, y: f.y - h + HH * 0.25, w: wd, h };
+    return { x: f.x - wd / 2, y: f.y - h, w: wd, h };
   };
   const depthOf = (it) => (it.kind === 'worker' ? it.agent.x + it.agent.y : (it.fp.col + it.fp.w / 2 + it.fp.row + it.fp.h / 2) * CELL);
 
-  // Tapping: everything is hit-tested where it is drawn (projected), nearest-to-viewer first.
+  // Tapping: everything is hit-tested where it is drawn (projected), nearest-to-viewer first. Props are not in it.
   const selection = new Selection(bus, {
     boundsOf: (it) => (it.kind === 'worker' ? workerRect(it) : stationRect(it)),
     depthOf,
@@ -72,6 +83,38 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     for (const it of [...selection.items]) if (it.kind === 'worker' && !workers.includes(it)) selection.remove(it);
     for (const w of workers) selection.add(w);
   };
+
+  // --- how each worker moves (Milestone 5) ---------------------------------------------------------------------
+  // stride: plan distance walked (the walking clock, so hops keep pace with the feet at any speed); flip: the way
+  // they face on screen; shake: seconds left of a bug's little shake.
+  const motion = new Map(); // id → { x, y, stride, flip, shake, seed }
+  const pose = { bob: 0, tilt: 0, flip: 1 };
+  const poseAgent = { state: 'idle', facing: 1 };
+  let animT = 0; // work / rest clock (stops while the game is paused)
+  const motionOf = (w) => {
+    let m = motion.get(w.id);
+    if (!m) {
+      m = { x: w.agent.x, y: w.agent.y, stride: 0, flip: 1, shake: 0, seed: motion.size * 1.7 + 0.4 };
+      motion.set(w.id, m);
+    }
+    return m;
+  };
+  function updateMotion(dt) {
+    if (isRunning()) animT += dt;
+    for (const w of workers) {
+      const m = motionOf(w);
+      const dx = w.agent.x - m.x;
+      const dy = w.agent.y - m.y;
+      const d = Math.hypot(dx, dy);
+      if (d > CELL * 3) m.stride = 0; // placed, not walked (a load, the stuck fallback)
+      else m.stride += d;
+      const sx = dx - dy; // plan → screen: x grows with col, shrinks with row
+      if (Math.abs(sx) > 0.5) m.flip = sx > 0 ? 1 : -1;
+      m.x = w.agent.x;
+      m.y = w.agent.y;
+      if (m.shake > 0) m.shake = Math.max(0, m.shake - dt);
+    }
+  }
 
   // --- UI rects ---------------------------------------------------------------------
   let buildMode = false;
@@ -93,11 +136,11 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     camera.viewY = top.y + top.h + 8;
     camera.setView(W, bottom.y - 8 - camera.viewY);
   }
-  // Start looking at the middle of the stations.
+  // Start looking at the middle of the working stations (the shelf sits off to the side).
   function resetView() {
     fitView();
     camera.zoom = STUDIO.zoom.start;
-    const pts = stations.map((s) => iso.cellCenter(s.fp.col + s.fp.w / 2, s.fp.row + s.fp.h / 2));
+    const pts = stations.filter((s) => !s.def.showcase).map((s) => iso.cellCenter(s.fp.col + s.fp.w / 2, s.fp.row + s.fp.h / 2));
     const xs = pts.map((p) => p.x);
     const ys = pts.map((p) => p.y);
     camera.centerOn((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2);
@@ -143,15 +186,9 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     if (reason) debug?.log(`${m.station.def.name} refused at ${m.col},${m.row}: ${BUILD_TEXT[reason]}`);
   }
 
-  // Placeholder pops over the Starter Desks: "+1 bug" (red) and "Breakthrough! +4 GAMEPLAY" (gold). Real effects: M5.
-  const pops = []; // { text, color, t }
   const maker = stations.find((s) => s.def.role === 'Maker');
-  const pushPop = (text, color) => {
-    pops.push({ text, color, t: 0 });
-    if (pops.length > 4) pops.shift();
-  };
-  bus.on('project:bug', ({ count }) => pushPop(`+${count} bug${count > 1 ? 's' : ''}`, C.bad));
-  bus.on('project:breakthrough', ({ key, points }) => pushPop(`Breakthrough! +${points} ${key === 'audienceFit' ? 'AUDIENCE FIT' : key.toUpperCase()}`, C.gold));
+  const shelf = stations.find((s) => s.def.showcase);
+  const fpNow = (st) => (moving?.station === st ? { ...st.fp, col: moving.col, row: moving.row } : st.fp);
 
   // ?debug=1: a small button that lights / clears every attention badge.
   let debugBadge = null; // set by main: { rect(), onTap(), label() }
@@ -165,6 +202,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     moves,
     doneRect,
     stationRect,
+    motion,
     get buildMode() {
       return buildMode;
     },
@@ -190,6 +228,26 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     cellAt(sx, sy) {
       const c = rawCell(sx, sy);
       return grid.inBounds(c.col, c.row) ? c : null;
+    },
+    // World point for an art pop: just over a worker's head, or over the top of a station's art (devPops).
+    popPoint(target) {
+      const w = target.kind === 'worker' ? target : null;
+      if (w) {
+        const r = workerRect(w); // beside the head, clear of the name tag and the progress card
+        return { x: r.x + r.w + 40, y: r.y + 30 };
+      }
+      const r = stationRect(target, fpNow(target));
+      return { x: r.x + r.w / 2, y: r.y + r.h * 0.2 };
+    },
+    // A bug's little shake on a worker.
+    shake(id, sec) {
+      const w = world.workerById(id);
+      if (w) motionOf(w).shake = sec;
+    },
+    // Is a world point on screen now (pops off screen are skipped)?
+    onScreen(p) {
+      const s = camera.worldToScreen(p.x, p.y);
+      return s.x > -60 && s.x < W + 60 && s.y > camera.viewY - 60 && s.y < camera.viewY + camera.viewH + 60;
     },
 
     setBuildMode(on) {
@@ -240,10 +298,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     update(dt) {
       if (refused && (refused.t += dt) > REFUSED_SEC) refused = null;
-      for (const p of pops) p.t += dt;
-      while (pops.length && pops[0].t > POP_SEC) pops.shift();
+      updateMotion(dt);
     },
-    pops,
 
     onDown(p) {
       if (overSheet(p) || onUi(p)) return; // the bars, the banner and the sheet never pan or pinch the studio
@@ -341,22 +397,25 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       room.render(ctx, 0, 0);
       if (buildMode) drawBuildFloor(ctx);
       drawSelectionMark(ctx);
-      // Stations and staff, back to front. Sprites are cached at full-zoom size so they stay sharp when zoomed.
+      drawShadows(ctx);
+      // Stations, props and staff, back to front. Sprites are cached at full-zoom size so they stay sharp when zoomed.
       assets.detail = STUDIO.zoom.max;
-      const items = [...stations, ...workers].sort((a, b) => depthOf(a) - depthOf(b));
+      const items = [...stations, ...props, ...workers].sort((a, b) => depthOf(a) - depthOf(b));
       for (const it of items) {
-        if (it.kind === 'worker') {
-          const r = workerRect(it);
-          assets.draw(ctx, it.def.art, r.x, r.y, r.w, r.h);
-        } else if (it !== moving?.station) {
+        if (it.kind === 'worker') drawWorker(ctx, it);
+        else if (it.kind === 'prop') drawProp(ctx, it);
+        else if (it !== moving?.station) {
           const r = stationRect(it);
           assets.draw(ctx, it.def.art, r.x, r.y, r.w, r.h);
+          if (it === shelf) drawShelfCovers(ctx, r);
         }
       }
       if (moving) drawMovingStation(ctx);
       assets.detail = 1;
+      vfx?.render(ctx, 'world'); // the art pops, over the room but under the tags, so names always read
       for (const w of workers) drawNameTag(ctx, w);
-      drawProjectBar(ctx);
+      drawShelfTag(ctx);
+      drawProjectCard(ctx);
       camera.restore(ctx);
 
       // Build Mode's banner takes the top bar's place; the bottom bar steps aside until Done.
@@ -370,7 +429,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   };
 
   // --- drawing -------------------------------------------------------------------
-  // Floor, walls, the window, the whiteboard and the door, drawn once into the cached layer.
+  // Floor, walls, the window, the door, the rug and the window's light, drawn once into the cached layer.
   function drawRoom(g) {
     drawIsoRoom(g, iso, {
       cols,
@@ -383,6 +442,23 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       ],
     });
     g.lineJoin = 'round';
+    // A soft shade along the foot of both back walls (the floor meets the wall).
+    const shade = (pts) => {
+      isoPath(g, pts);
+      g.fillStyle = L.shadow;
+      g.fill();
+    };
+    shade([iso.corner(0, 0), iso.corner(cols, 0), iso.corner(cols, 0.3), iso.corner(0.3, 0.3)]);
+    shade([iso.corner(0, 0), iso.corner(0.3, 0.3), iso.corner(0.3, rows), iso.corner(0, rows)]);
+    // Window light on the floor, then the rug under the work area (a border and two stripes).
+    const sun = STUDIO_FLOOR.sun;
+    isoPath(g, iso.outline(sun.col, sun.row, sun.w, sun.h));
+    g.fillStyle = L.sunlight;
+    g.fill();
+    const rug = STUDIO_FLOOR.rug;
+    fillPatch(g, iso.outline(rug.col, rug.row, rug.w, rug.h), L.rugEdge, L.wallCap, 2);
+    fillPatch(g, iso.outline(rug.col + 0.18, rug.row + 0.18, rug.w - 0.36, rug.h - 0.36), L.rug);
+    for (const f of [0.3, 0.7]) fillPatch(g, iso.outline(rug.col + 0.18, rug.row + rug.h * f - 0.06, rug.w - 0.36, 0.12), L.rugStripe);
     // Window: frame, glass, cross bars and a shine.
     const wn = STUDIO_WALLS.window;
     fillPatch(g, wallPatch(iso, wn.side, wn.t0, wn.t1, wn.h0, wn.h1), L.windowFrame, L.wallCap, 3);
@@ -391,13 +467,6 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     fillPatch(g, wallPatch(iso, wn.side, mid - 0.05, mid + 0.05, wn.h0 + 10, wn.h1 - 10), L.windowFrame);
     fillPatch(g, wallPatch(iso, wn.side, wn.t0 + 0.15, wn.t1 - 0.15, (wn.h0 + wn.h1) / 2 - 3, (wn.h0 + wn.h1) / 2 + 3), L.windowFrame);
     fillPatch(g, wallPatch(iso, wn.side, wn.t0 + 0.4, wn.t0 + 0.75, wn.h0 + 60, wn.h1 - 18), L.windowShine);
-    // Whiteboard with a few coloured scribbles.
-    const bd = STUDIO_WALLS.board;
-    fillPatch(g, wallPatch(iso, bd.side, bd.t0, bd.t1, bd.h0, bd.h1), L.board, L.wallCap, 3);
-    L.boardInk.forEach((ink, i) => {
-      const h = bd.h1 - 22 - i * 24;
-      fillPatch(g, wallPatch(iso, bd.side, bd.t0 + 0.25, bd.t0 + 0.25 + (1.6 - i * 0.4), h - 4, h + 4), ink);
-    });
     // Door (left wall) with a handle.
     const dr = STUDIO_WALLS.door;
     fillPatch(g, wallPatch(iso, dr.side, dr.t0 - 0.12, dr.t1 + 0.12, dr.h0, dr.h1 + 12), L.doorFrame, L.wallCap, 3);
@@ -423,11 +492,124 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     g.stroke();
   }
 
-  // Build Mode: the hidden grid, plus the doorway (no building there) and every station's spots, marked faintly.
+  // Soft shadows on the floor: under each station and prop (its footprint, a little inset) and at each worker's feet
+  // (the shadow stays on the floor while they hop, so the hop reads as a hop).
+  function drawShadows(ctx) {
+    ctx.fillStyle = L.shadow;
+    for (const it of [...stations, ...props]) {
+      if (it === moving?.station) continue;
+      isoPath(ctx, iso.outline(it.fp.col + 0.08, it.fp.row + 0.08, it.fp.w - 0.16, it.fp.h - 0.16));
+      ctx.fill();
+    }
+    for (const w of workers) {
+      const f = feetOf(w);
+      ctx.beginPath();
+      ctx.ellipse(f.x, f.y - 4, 44, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawProp(ctx, it) {
+    const r = artRect(it);
+    if (!it.def.flip) {
+      assets.draw(ctx, it.def.art, r.x, r.y, r.w, r.h);
+      return;
+    }
+    ctx.save();
+    ctx.translate(r.x + r.w / 2, 0);
+    ctx.scale(-1, 1);
+    assets.draw(ctx, it.def.art, -r.w / 2, r.y, r.w, r.h);
+    ctx.restore();
+  }
+
+  // A worker with their pose: hop + sway walking, typing bounce working, breathing resting, and a bug's shake.
+  function drawWorker(ctx, w) {
+    const m = motionOf(w);
+    poseAgent.state = w.agent.state;
+    poseAgent.facing = m.flip;
+    const t = w.agent.state === 'walking' ? m.stride / WALKER.stride : animT;
+    characterPose(poseAgent, t, m.seed, pose, WALKER.motion);
+    const f = feetOf(w);
+    const shakeX = m.shake > 0 ? Math.sin(animT * 70) * 5 * Math.min(1, m.shake / 0.2) : 0;
+    const r = workerRect(w);
+    drawCharacter(ctx, assets, w.def.art, f.x + shakeX, f.y, r.w, r.h, pose);
+  }
+
+  // The released games' covers on the Showcase Shelf, newest first (art only; the tag over the shelf names them).
+  let tagIndex = 0;
+  function drawShelfCovers(ctx, r) {
+    const list = showcase().slice(0, SHOWCASE.max);
+    const cycle = list.length ? Math.floor(animT / SHOWCASE.cycleSec) % list.length : 0;
+    tagIndex = cycle;
+    list.forEach((rec, i) => {
+      const slot = SHOWCASE.slots[i];
+      const h = slot.h * r.h;
+      const w = h * COVER_ASPECT;
+      const x = r.x + slot.x * r.w - w / 2;
+      const y = r.y + slot.y * r.h - h / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 4);
+      ctx.clip();
+      const a = assets.aspect(rec.result.cover);
+      const fit = w / h > a ? { w, h: w / a } : { w: h * a, h };
+      assets.draw(ctx, rec.result.cover, x + (w - fit.w) / 2, y + (h - fit.h) / 2, fit.w, fit.h);
+      ctx.restore();
+      ctx.strokeStyle = i === cycle ? C.gold : C.outline;
+      ctx.lineWidth = i === cycle ? 4 : 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 4);
+      ctx.stroke();
+    });
+  }
+
+  // Tags and cards over the room keep one size on screen at any zoom (small text 28 is the floor, style guide §7):
+  // fn draws around (0, 0) in screen units, with (0, 0) at the world point (wx, wy).
+  function fixedSize(ctx, wx, wy, fn) {
+    ctx.save();
+    ctx.translate(wx, wy);
+    ctx.scale(1 / camera.zoom, 1 / camera.zoom);
+    fn();
+    ctx.restore();
+  }
+
+  // The tag over the shelf: a star and the title of the cover being shown (small text, drawn by code).
+  function drawShelfTag(ctx) {
+    if (!shelf || shelf === moving?.station) return;
+    const list = showcase().slice(0, SHOWCASE.max);
+    if (!list.length) return;
+    const rec = list[tagIndex % list.length];
+    const r = stationRect(shelf);
+    const label = `★ ${rec.result.title}`;
+    fixedSize(ctx, r.x + r.w / 2, r.y - 8, () => {
+      ctx.font = font(S.small, true);
+      const w = Math.min(ctx.measureText(label).width + 36, 420);
+      const x = -w / 2;
+      const y = -TAG_H;
+      ctx.fillStyle = C.panelGold;
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, TAG_H, TAG_H / 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = C.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + w / 2, y + TAG_H / 2 + 1, w - 28);
+    });
+  }
+
+  // Build Mode: the hidden grid, plus the doorway (no building there), the props and every station's spots, marked
+  // faintly.
   function drawBuildFloor(ctx) {
     isoPath(ctx, iso.outline(DOORWAY.col, DOORWAY.row, DOORWAY.w, DOORWAY.h));
     ctx.fillStyle = 'rgba(59,51,44,0.12)';
     ctx.fill();
+    for (const p of props) {
+      isoPath(ctx, iso.outline(p.fp.col, p.fp.row, p.fp.w, p.fp.h));
+      ctx.fill();
+    }
     ctx.strokeStyle = L.gridLine;
     ctx.lineWidth = 3 / camera.zoom;
     for (let c = 0; c <= cols; c++) line(ctx, iso.corner(c, 0), iso.corner(c, rows));
@@ -480,83 +662,72 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   }
 
   // Name tag over each worker's head (style guide §6): first name · state, in the state's colour, plus a status
-  // icon when Energy or Morale is low.
+  // icon when Energy or Morale is low. Small text (28), the smallest the game uses.
   function drawNameTag(ctx, w) {
     const st = WORK_STATE[w.phase];
     const r = workerRect(w);
     const label = `${w.staff.name.split(' ')[0]} · ${st.label}`;
-    ctx.font = font(26, true);
+    ctx.font = font(S.small, true);
     const tw = ctx.measureText(label).width;
     const tagW = tw + 36;
-    const h = 44;
+    const h = TAG_H;
     const icons = [];
     if (w.tiredIcon) icons.push(STATUS_ICONS.tired);
     if (w.staff.status.stressed) icons.push(STATUS_ICONS.stressed);
-    const iconS = 52;
+    const iconS = 56;
     const total = tagW + icons.length * (iconS + 6);
-    const x = r.x + r.w / 2 - total / 2;
-    const y = r.y - h - 10;
-    ctx.fillStyle = STATE_COLOR[st.label];
-    ctx.strokeStyle = C.outline;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(x, y, tagW, h, h / 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = C.textOnAction;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, x + tagW / 2, y + h / 2 + 1);
-    icons.forEach((key, i) => assets.draw(ctx, key, x + tagW + 6 + i * (iconS + 6), y + h / 2 - iconS / 2, iconS, iconS));
+    fixedSize(ctx, r.x + r.w / 2, r.y - 10, () => {
+      const x = -total / 2;
+      const y = -h;
+      ctx.fillStyle = STATE_COLOR[st.label];
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, tagW, h, h / 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = C.textOnAction;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + tagW / 2, y + h / 2 + 1);
+      icons.forEach((key, i) => assets.draw(ctx, key, x + tagW + 6 + i * (iconS + 6), y + h / 2 - iconS / 2, iconS, iconS));
+    });
   }
 
-  // The game in the works: a small bar over the Starter Desks (milestone name + progress through the whole game),
-  // with the pops rising above it.
-  function drawProjectBar(ctx) {
+  // The game in the works: a small card over the Starter Desks — milestone name and % (small text), and a bar for the
+  // whole game.
+  function drawProjectCard(ctx) {
     const v = projectView();
-    const r = stationRect(maker, moving?.station === maker ? { ...maker.fp, col: moving.col, row: moving.row } : maker.fp);
-    const cx = r.x + r.w / 2;
-    let y = r.y - 20;
-    if (v) {
-      const w = 300;
-      const h = 64;
-      const x = cx - w / 2;
-      y = r.y - h - 12;
+    if (!v) return;
+    const r = stationRect(maker, fpNow(maker));
+    const w = 380;
+    const h = 92;
+    // Above the heads (and name tags) of whoever works at the desks.
+    fixedSize(ctx, r.x + r.w / 2, r.y - 40 - 40 / camera.zoom, () => {
+      const cx = 0;
+      const x = -w / 2;
+      const y = -h;
       ctx.fillStyle = C.sheet;
       ctx.strokeStyle = C.outline;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 16);
+      ctx.roundRect(x, y, w, h, 18);
       ctx.fill();
       ctx.stroke();
-      ctx.font = font(22, true);
+      ctx.font = font(S.small, true);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillStyle = C.text;
-      ctx.fillText(`${v.phaseName} · ${Math.floor(v.phaseFrac * 100)}%`, cx, y + 20, w - 20);
+      ctx.fillText(`${v.phaseName} · ${Math.floor(v.phaseFrac * 100)}%`, cx, y + 30, w - 24);
       ctx.fillStyle = C.track;
       ctx.beginPath();
-      ctx.roundRect(x + 14, y + 38, w - 28, 14, 7);
+      ctx.roundRect(x + 16, y + 60, w - 32, 16, 8);
       ctx.fill();
       ctx.fillStyle = C.action;
       ctx.beginPath();
-      ctx.roundRect(x + 14, y + 38, Math.max(14, (w - 28) * v.totalFrac), 14, 7);
+      ctx.roundRect(x + 16, y + 60, Math.max(16, (w - 32) * v.totalFrac), 16, 8);
       ctx.fill();
-    }
-    for (const p of pops) {
-      const k = p.t / POP_SEC;
-      ctx.globalAlpha = Math.min(1, (1 - k) * 2);
-      ctx.font = font(30, true);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = C.textOnDark;
-      const py = y - 30 - k * 90;
-      ctx.strokeText(p.text, cx, py);
-      ctx.fillStyle = p.color;
-      ctx.fillText(p.text, cx, py);
-      ctx.globalAlpha = 1;
-    }
+    });
   }
 
   function drawBuildBanner(ctx) {

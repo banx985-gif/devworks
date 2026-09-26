@@ -118,14 +118,14 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
 
     // Scope, audio, budget.
     heading('Scope', scope().line);
-    SCOPES.forEach((s, i) => chip({ x: PAD + i * 260, y, w: 240, h: 100 }, s.name, setup.scope === s.id, () => (setup.scope = s.id), { id: `scope:${s.id}` }));
-    y += 140;
+    SCOPES.forEach((s, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, s.name, setup.scope === s.id, () => (setup.scope = s.id), { id: `scope:${s.id}` }));
+    y += 150; // chips are button height (110)
     heading('Audio package', AUDIO_PACKAGES.find((a) => a.id === setup.audio).line);
-    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + i * 260, y, w: 240, h: 100 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
-    y += 140;
+    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
+    y += 150; // chips are button height (110)
     heading('Budget focus', BUDGET_FOCUS.find((b) => b.id === setup.budget).line);
-    BUDGET_FOCUS.forEach((b, i) => chip({ x: PAD + i * 260, y, w: 240, h: 100 }, b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
-    y += 140;
+    BUDGET_FOCUS.forEach((b, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
+    y += 150; // chips are button height (110)
 
     // Core team: one lead slot per role.
     const { min, max } = scope().team;

@@ -2,6 +2,9 @@
 // Starts the shared series engine from core/, loads the save (or starts a new studio) and opens the studio.
 // Milestone 3: game projects (New Game Project, the active project view, "Game finished!").
 // Milestone 4: Credits, releasing, reviews, sales, Fame / rank, the Ledger and the Catalogue, speed unlocks.
+// Milestone 5: real art in the studio (props, the Showcase Shelf with the released covers), workers that move, the
+// art pops while a game is made, a medium beat when a milestone is done, the big cover at "Game finished!", a launch
+// rocket and confetti on release, and a money burst on big sales days.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -26,13 +29,15 @@ import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { createTopBar } from '../../../core/ui/TopBar.js';
 import { createBottomBar } from '../../../core/ui/BottomBar.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
+import { drawToasts } from '../../../core/ui/Toast.js';
 import { ASSETS } from '../data/assets.js';
 import { CALENDAR } from '../data/balance.js';
 import { BOTTOM_SLOTS, TOP_ICONS, BADGES } from '../data/home.js';
 import { SAVE } from '../data/save.js';
 import { STARTING_UNLOCKED, FAMILIES, elementById } from '../data/elements.js';
 import { SCOPES } from '../data/projects.js';
-import { STATIONS } from '../data/studio.js';
+import { STATIONS, DEV_POPS, BIG_SALES } from '../data/studio.js';
+import { createDevPops } from './ui/devPops.js';
 import { createStudioWorld } from './systems/studioWorld.js';
 import { createGameProjects } from './systems/gameProject.js';
 import { createBusiness } from './systems/business.js';
@@ -112,7 +117,11 @@ const loop = new FixedStepLoop({
     floatFeed.update(dt, { hold: router.currentName !== 'studio' || sheet.active || feedback.active || studio.buildMode });
     vfx.height = renderer.height;
     vfx.update(dt);
+    celebrate.height = renderer.height;
+    celebrate.update(dt);
+    if (started) devPops.update(dt, !clock.paused);
     if (tip && (tip.t += dt) > TIP_SEC) tip = null;
+    if (beat && !feedback.active && (beat.age += dt) > DEV_POPS.phaseBannerSec) beat = null;
   },
   render: (alpha) => {
     const ctx = renderer.begin(COL.bg);
@@ -120,7 +129,9 @@ const loop = new FixedStepLoop({
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
     if (tip) drawTip(ctx);
+    if (beat && !feedback.active && router.currentName === 'studio' && !studio.buildMode) drawBeat(ctx);
     feedback.render(ctx);
+    celebrate.render(ctx, 'screen'); // confetti over the big moments
     if (onTestScreen()) drawButton(ctx, pauseButton(), loop.paused ? 'RESUME' : 'PAUSE', { selected: loop.paused });
     if (loop.paused) drawPaused(ctx);
     // One FPS line at the top in the studio or under a sheet, so it hides nothing; the full box on the test screens.
@@ -214,9 +225,15 @@ function openMenu(kind, target) {
   const build = menus.for(kind, target);
   if (build) sheet.open(build);
 }
+const shelfId = STATIONS.find((s) => s.showcase).id;
 const openStaff = (id) => router.go('staff', { id });
-// Tapping a station: the Starter Desks open the game in the works when there is one; otherwise the station's sheet.
-const openStation = (id) => (id === makerId && projects.active ? router.go('project') : openMenu(id));
+// Tapping a station: the Starter Desks open the game in the works when there is one, the Showcase Shelf opens the
+// Catalogue; otherwise the station's sheet.
+const openStation = (id) => {
+  if (id === makerId && projects.active) router.go('project');
+  else if (id === shelfId) router.go('catalogue');
+  else openMenu(id);
+};
 const textPrompt = new TextPrompt({ renderer });
 bus.on('screen:change', () => textPrompt.close());
 bus.on('renderer:resize', () => textPrompt.close());
@@ -356,7 +373,63 @@ const bootScreen = {
   },
 };
 
-const studio = createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView: () => projects.view(), topBar, bottomBar, debug: log });
+// Effects (core/VfxSystem, pooled): the studio's art pops ('world', under its camera) and floating +Credits
+// ('screen'); celebrate = the confetti drawn over the big moments.
+const vfx = new VfxSystem({ assets, width: W, height: renderer.height, font: THEME.family });
+const celebrate = new VfxSystem({ assets, width: W, height: renderer.height, font: THEME.family, maxTexts: 2, maxEffects: 8 });
+// The Showcase Shelf shows the released games, newest first.
+const shipped = () => projects.catalogue.list().filter((r) => r.release).reverse();
+const studio = createStudioScreen({
+  renderer,
+  layout,
+  assets,
+  bus,
+  world,
+  sheet,
+  openStation,
+  openStaff,
+  projectView: () => projects.view(),
+  showcase: shipped,
+  vfx,
+  isRunning: () => started && !clock.paused && !loop.paused,
+  topBar,
+  bottomBar,
+  debug: log,
+});
+// Development made visible: the art pops while a game is made (only while the studio is on screen, nothing on top).
+const devPops = createDevPops({
+  bus,
+  world,
+  projects,
+  vfx,
+  studio,
+  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused,
+});
+
+// A milestone done (medium feedback, style guide §7): a short banner under the top bar that goes by itself, and a
+// sparkle over the Starter Desks. The last one is "Game finished!" (big), so it has no banner.
+let beat = null; // { entry: { title, body }, age }
+bus.on('project:phase', ({ job, phase }) => {
+  const next = projects.phases[job.phaseIndex + 1];
+  if (!next) return;
+  beat = { entry: { title: `${phase.name} done!`, body: `${job.name} · next: ${next.name}` }, age: 0 };
+  if (router.currentName !== 'studio') return;
+  const at = studio.popPoint(world.stationById(makerId));
+  vfx.sparks('world', at.x, at.y, { count: 14, speedMin: 160, speedMax: 380, spread: 3.2 });
+  vfx.pulse('world', at.x, at.y + 40, { rx: 120, ry: 60, color: COL.good, life: 0.8, grow: 1.8, width: 8 });
+});
+function drawBeat(ctx) {
+  const t = topBar.rect();
+  const sr = layout.safeRect;
+  drawToasts(ctx, [beat], {
+    x: sr.x + 24,
+    y: t.y + t.h + (tip ? 120 : 20),
+    w: sr.w - 48,
+    life: DEV_POPS.phaseBannerSec,
+    accent: () => COL.good,
+    drawIcon: (c, e, r) => assets.drawContained(c, 'dev_ui_07', r),
+  });
+}
 const newProject = createNewProjectScreen({
   layout,
   assets,
@@ -375,6 +448,7 @@ const projectScreen = createProjectScreen({ layout, assets, world, projects, top
 // A finished game: the big result (pauses until tapped); the game itself is already in the catalogue.
 bus.on('project:complete', ({ record }) => {
   const g = record.result;
+  beat = null; // the big moment takes over from any milestone banner
   debug.log(`game finished: ${g.title}`);
   const scope = SCOPES.find((x) => x.id === g.scope)?.name ?? '';
   feedback.show({
@@ -390,8 +464,10 @@ bus.on('project:complete', ({ record }) => {
   });
 });
 
-// Released: the four reviews come in one by one (big feedback: waits until they are all shown, then a tap).
-const REVEAL = { first: 0.5, each: 0.6 };
+// Released: the launch rocket takes off through confetti, then the four reviews come in one by one (big feedback:
+// waits until they are all shown, then a tap).
+const REVEAL = { first: 1.4, each: 0.6 };
+const LAUNCH_SEC = 1.3; // the rocket's flight
 bus.on('game:released', ({ record }) => {
   const r = record.release;
   feedback.show({
@@ -399,10 +475,40 @@ bus.on('game:released', ({ record }) => {
     subtitle: `${record.result.title} · review score ${r.score} · on sale now on OpenDesk PC`,
     accent: COL.gold,
     minShowSec: REVEAL.first + REVEAL.each * r.reviews.length + 0.3,
-    drawFn: (ctx, t) => drawReviews(ctx, t, record),
+    onShow: () => {
+      const H = renderer.height;
+      celebrate.confetti('screen', W / 2, H * 0.72, { count: 40, speed: 900, spreadX: 120 });
+      celebrate.confetti('screen', W * 0.15, H * 0.8, { count: 22, speed: 760 });
+      celebrate.confetti('screen', W * 0.85, H * 0.8, { count: 22, speed: 760 });
+    },
+    drawFn: (ctx, t) => {
+      drawReviews(ctx, t, record);
+      if (t < LAUNCH_SEC) drawRocket(ctx, t / LAUNCH_SEC);
+    },
     onAck: afterFeedback,
   });
 });
+
+// The launch rocket (dev_vfx_08) rises from the bottom through the card, with a puffy trail.
+function drawRocket(ctx, k) {
+  const H = renderer.height;
+  const e = k * k * (3 - 2 * k); // ease in-out
+  const w = 200;
+  const h = w / assets.aspect('dev_vfx_08');
+  const x = W / 2 + Math.sin(k * Math.PI) * 60;
+  const y = H + h - e * (H + h * 2.2);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (1 - k) / 0.15);
+  for (let i = 1; i <= 6; i++) {
+    const r = 26 + i * 9;
+    ctx.fillStyle = `rgba(214,200,178,${0.85 - i * 0.11})`; // warm grey smoke, visible on the cream card
+    ctx.beginPath();
+    ctx.arc(x - Math.sin(k * Math.PI) * i * 8, y + h * 0.42 + i * 46, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  assets.draw(ctx, 'dev_vfx_08', x - w / 2, y - h / 2, w, h);
+  ctx.restore();
+}
 // A new rank (big feedback).
 bus.on('reputation:rankUp', ({ rank }) => {
   debug.log(`rank up: ${rank.id}`);
@@ -416,18 +522,29 @@ bus.on('reputation:rankUp', ({ rank }) => {
 });
 
 // Daily sales float up over the Starter Desks as +Credits (small feedback, never piled up: core FloatFeed).
-const vfx = new VfxSystem({ assets, width: W, height: renderer.height, font: THEME.family });
 const floatFeed = new FloatFeed({
   vfx,
   where: (source, lane) => {
     const p = studio.screenPointOf(makerId);
-    return { x: p.x, y: p.y - 250 - lane * 60 };
+    return { x: p.x, y: p.y - 330 * studio.camera.zoom - lane * 60 }; // over the progress card
   },
   fallback: (lane) => ({ x: W / 2, y: layout.safeRect.y + 420 + lane * 60 }),
 });
-bus.on('sales:day', ({ revenue }) =>
-  floatFeed.push({ key: 'credits', amount: revenue, label: (a) => `+${a.toLocaleString('en-GB')}`, icon: TOP_ICONS.credits, color: '#B87A00', size: 40 }),
-);
+// Big sales days (data/studio.js BIG_SALES) also get the money burst over the desks, when the studio is in view.
+const bestDay = new Map(); // catalogue number → best day's Credits so far (this session)
+let burstAgo = -Infinity; // vfx time of the last burst
+bus.on('sales:day', ({ record, revenue }) => {
+  floatFeed.push({ key: 'credits', amount: revenue, label: (a) => `+${a.toLocaleString('en-GB')}`, icon: TOP_ICONS.credits, color: '#B87A00', size: 40 });
+  const best = Math.max(bestDay.get(record.number) ?? 0, revenue);
+  bestDay.set(record.number, best);
+  const big = revenue >= BIG_SALES.minCredits && revenue >= best * BIG_SALES.shareOfBest;
+  const seen = router.currentName === 'studio' && !sheet.active && !feedback.active && !studio.buildMode;
+  if (!big || !seen || vfx.time - burstAgo < BIG_SALES.gap) return;
+  burstAgo = vfx.time;
+  const p = studio.screenPointOf(makerId);
+  vfx.sprite('screen', 'dev_vfx_06', p.x, p.y - 120, { size: BIG_SALES.size, life: BIG_SALES.life, from: 0.3, to: 1, rise: 70, hold: 0.4 });
+  debug.log(`big sales day: ${record.result.title} +${revenue}`);
+});
 
 // A short line under the top bar (why a speed is locked).
 const TIP_SEC = 2.8;
@@ -535,46 +652,60 @@ function drawRankBadge(ctx, t, id) {
   ctx.restore();
 }
 
-// The result card over the dimmed game: the cover with the title, the six recipe icons, output stats and bugs.
+// The result card over the dimmed game (Milestone 5): the cover big, popping in on a glow, with the title drawn by
+// code; under it the six recipe icons, then the output stats and bugs. The cover takes the height that is left
+// above the banner, so it fits every screen shape.
+const FIN = { pad: 32, iconMax: 130, rowH: 50, bannerRoom: 400 };
 function drawFinished(ctx, t, g) {
   const sr = layout.safeRect;
   const w = Math.min(sr.w - 48, 1000);
   const x = sr.x + (sr.w - w) / 2;
-  const y = sr.y + 40 - Math.max(0, 1 - t / 0.3) ** 2 * 60;
+  const y = sr.y + 24 - Math.max(0, 1 - t / 0.3) ** 2 * 60;
+  const icon = Math.min(FIN.iconMax, (w - FIN.pad * 2 - 5 * 12) / 6);
+  const outputsH = 8 * FIN.rowH;
+  const fixed = FIN.pad + 24 + 56 + icon + 24 + outputsH + FIN.pad;
+  const cardH = sr.y + sr.h - FIN.bannerRoom - y;
+  const coverH = Math.max(320, Math.min(700, cardH - fixed));
+  const coverW = coverH * (336 / 483);
   ctx.save();
   ctx.globalAlpha = Math.min(1, t / 0.25);
   ctx.fillStyle = COL.panel;
   ctx.strokeStyle = COL.good;
   ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.roundRect(x, y, w, 1010, 32);
+  ctx.roundRect(x, y, w, fixed + coverH, 32);
   ctx.fill();
   ctx.stroke();
-  const cover = { x: x + 32, y: y + 32, w: 336, h: 483 };
-  drawCover(ctx, assets, g.cover, g.title, cover);
-  const cx = cover.x + cover.w + 36;
-  const cw = x + w - 32 - cx;
+  // The cover: a soft gold glow behind, then a pop (overshoot) from small to full size.
+  const cx = x + w / 2;
+  const cy = y + FIN.pad + coverH / 2;
+  const glow = ctx.createRadialGradient(cx, cy, coverH * 0.2, cx, cy, coverH * 0.75);
+  glow.addColorStop(0, 'rgba(255,209,102,0.55)');
+  glow.addColorStop(1, 'rgba(255,209,102,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(x + 6, y + 6, w - 12, coverH + FIN.pad * 2);
+  const k = Math.min(1, t / 0.4);
+  const s = 0.6 + 0.4 * (1 + 2.7 * (k - 1) ** 3 + 1.7 * (k - 1) ** 2);
+  drawCover(ctx, assets, g.cover, g.title, { x: cx - (coverW * s) / 2, y: cy - (coverH * s) / 2, w: coverW * s, h: coverH * s });
+  let yy = y + FIN.pad + coverH + 24;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = COL.text;
   ctx.font = font(THEME.size.heading, true);
-  ctx.fillText('Recipe', cx, cover.y);
-  const icon = Math.min(150, (cw - 24) / 3);
+  ctx.fillText('Recipe', x + 40, yy);
+  yy += 56;
+  const rowW = 6 * icon + 5 * 12;
   FAMILIES.forEach((f, i) => {
     const el = elementById(g.recipe[f.id]);
-    const r = { x: cx + (i % 3) * (icon + 12), y: cover.y + 64 + Math.floor(i / 3) * (icon + 50), w: icon, h: icon };
+    const r = { x: cx - rowW / 2 + i * (icon + 12), y: yy, w: icon, h: icon };
     ctx.fillStyle = COL.panelAlt;
     ctx.beginPath();
     ctx.roundRect(r.x, r.y, r.w, r.h, 20);
     ctx.fill();
     if (el) assets.drawContained(ctx, el.art, { x: r.x + 8, y: r.y + 8, w: r.w - 16, h: r.h - 16 });
-    ctx.fillStyle = COL.textMuted;
-    ctx.font = font(22, true);
-    ctx.textAlign = 'center';
-    ctx.fillText(el?.name ?? '', r.x + r.w / 2, r.y + r.h + 8, r.w + 8);
-    ctx.textAlign = 'left';
   });
-  drawOutputs(ctx, g.outputs, g.bugs, x + 40, cover.y + cover.h + 30, w - 80, { rowH: 54 });
+  yy += icon + 24;
+  drawOutputs(ctx, g.outputs, g.bugs, x + 40, yy, w - 80, { rowH: FIN.rowH });
   ctx.restore();
 }
 const roster = createRosterScreen({ renderer, layout, assets, world, topBar: subTopBar, openStaff });
@@ -595,7 +726,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [] };
+  window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [] };
 }
 
 router
