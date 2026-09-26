@@ -1,9 +1,10 @@
-// The studio (Milestones 1–2): the home screen. S1 Rented Office — one cramped room on a hidden grid, seen in the
+// The studio (Milestones 1–3): the home screen. S1 Rented Office — one cramped room on a hidden grid, seen in the
 // 3/4 "dollhouse" view, drawn by code — between the shared top bar and five-button bottom bar (core/ui).
 // The four starting stations and the three starters walking their loop (studioWorld). Drag pans, pinch/wheel zooms
 // (clamped to the room, in the space between the bars), tapping a station opens its sheet, tapping a worker opens
 // their staff card, and a long press on empty floor enters Build Mode, where any station can be dragged to a new
-// grid spot (invalid spots show red and are refused; the staff re-path).
+// grid spot (invalid spots show red and are refused; the staff re-path). While a game is in the works a small
+// progress bar floats over the Starter Desks, and bugs / breakthroughs pop up there (placeholders until Milestone 5).
 //
 // Plan space lives in the world (studioWorld); only drawing and tapping go through the IsoProjection here.
 import { THEME, font } from '../../../../core/Theme.js';
@@ -22,8 +23,9 @@ const S = THEME.size;
 const L = STUDIO_LOOK;
 const REFUSED_SEC = 2.5; // how long a refused move's reason stays in the banner
 const STATE_COLOR = { Walking: C.progress, Working: C.action, Resting: C.good };
+const POP_SEC = 1.6; // how long a bug / breakthrough pop floats
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openMenu, openStaff, topBar, bottomBar, debug }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, topBar, bottomBar, debug }) {
   const W = renderer.width;
   const { cols, rows, cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -141,6 +143,16 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     if (reason) debug?.log(`${m.station.def.name} refused at ${m.col},${m.row}: ${BUILD_TEXT[reason]}`);
   }
 
+  // Placeholder pops over the Starter Desks: "+1 bug" (red) and "Breakthrough! +4 GAMEPLAY" (gold). Real effects: M5.
+  const pops = []; // { text, color, t }
+  const maker = stations.find((s) => s.def.role === 'Maker');
+  const pushPop = (text, color) => {
+    pops.push({ text, color, t: 0 });
+    if (pops.length > 4) pops.shift();
+  };
+  bus.on('project:bug', ({ count }) => pushPop(`+${count} bug${count > 1 ? 's' : ''}`, C.bad));
+  bus.on('project:breakthrough', ({ key, points }) => pushPop(`Breakthrough! +${points} ${key === 'audienceFit' ? 'AUDIENCE FIT' : key.toUpperCase()}`, C.gold));
+
   // ?debug=1: a small button that lights / clears every attention badge.
   let debugBadge = null; // set by main: { rect(), onTap(), label() }
   const debugBadgeHit = (p) => !!debugBadge && hitRect(p, debugBadge.rect());
@@ -228,7 +240,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     update(dt) {
       if (refused && (refused.t += dt) > REFUSED_SEC) refused = null;
+      for (const p of pops) p.t += dt;
+      while (pops.length && pops[0].t > POP_SEC) pops.shift();
     },
+    pops,
 
     onDown(p) {
       if (overSheet(p) || onUi(p)) return; // the bars, the banner and the sheet never pan or pinch the studio
@@ -305,7 +320,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       const picked = pickAt(p.x, p.y);
       selection.select(picked);
       if (picked?.kind === 'worker') openStaff(picked.id);
-      else if (picked) openMenu(picked.id);
+      else if (picked) openStation(picked.id);
       taps.push({ x: p.x, y: p.y, picked: picked?.id ?? null });
       if (taps.length > 50) taps.shift();
     },
@@ -317,7 +332,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (picked?.kind === 'worker') openStaff(picked.id);
       else if (picked) {
         selection.select(picked);
-        openMenu(picked.id);
+        openStation(picked.id);
       } else if (screen.cellAt(p.x, p.y)) screen.setBuildMode(true);
     },
 
@@ -341,6 +356,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (moving) drawMovingStation(ctx);
       assets.detail = 1;
       for (const w of workers) drawNameTag(ctx, w);
+      drawProjectBar(ctx);
       camera.restore(ctx);
 
       // Build Mode's banner takes the top bar's place; the bottom bar steps aside until Done.
@@ -492,6 +508,55 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + tagW / 2, y + h / 2 + 1);
     icons.forEach((key, i) => assets.draw(ctx, key, x + tagW + 6 + i * (iconS + 6), y + h / 2 - iconS / 2, iconS, iconS));
+  }
+
+  // The game in the works: a small bar over the Starter Desks (milestone name + progress through the whole game),
+  // with the pops rising above it.
+  function drawProjectBar(ctx) {
+    const v = projectView();
+    const r = stationRect(maker, moving?.station === maker ? { ...maker.fp, col: moving.col, row: moving.row } : maker.fp);
+    const cx = r.x + r.w / 2;
+    let y = r.y - 20;
+    if (v) {
+      const w = 300;
+      const h = 64;
+      const x = cx - w / 2;
+      y = r.y - h - 12;
+      ctx.fillStyle = C.sheet;
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = font(22, true);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = C.text;
+      ctx.fillText(`${v.phaseName} · ${Math.floor(v.phaseFrac * 100)}%`, cx, y + 20, w - 20);
+      ctx.fillStyle = C.track;
+      ctx.beginPath();
+      ctx.roundRect(x + 14, y + 38, w - 28, 14, 7);
+      ctx.fill();
+      ctx.fillStyle = C.action;
+      ctx.beginPath();
+      ctx.roundRect(x + 14, y + 38, Math.max(14, (w - 28) * v.totalFrac), 14, 7);
+      ctx.fill();
+    }
+    for (const p of pops) {
+      const k = p.t / POP_SEC;
+      ctx.globalAlpha = Math.min(1, (1 - k) * 2);
+      ctx.font = font(30, true);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = C.textOnDark;
+      const py = y - 30 - k * 90;
+      ctx.strokeText(p.text, cx, py);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, cx, py);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function drawBuildBanner(ctx) {

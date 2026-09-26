@@ -7,6 +7,8 @@ import { THEME, font } from '../../../../core/Theme.js';
 import { STATIONS, STUDIO } from '../../data/studio.js';
 import { STARTERS } from '../../data/staff.js';
 import { TOP_ICONS, STATUS_ICONS } from '../../data/home.js';
+import { ELEMENTS } from '../../data/elements.js';
+import { COVER_BY_GENRE, DEFAULT_COVER } from '../../data/covers.js';
 
 const C = THEME.color;
 const DESK_H = 80 / STUDIO.view.halfW; // block height, in cell half-widths
@@ -21,6 +23,39 @@ export function registerPlaceholders(assets) {
   assets.setFallback(TOP_ICONS.tokens, drawGem);
   assets.setFallback(STATUS_ICONS.tired, drawTired);
   assets.setFallback(STATUS_ICONS.stressed, drawStressed);
+  // Element icons (two are held back for a redraw, and research may add art later): a lettered tile per family.
+  for (const e of ELEMENTS) assets.setFallback(e.art, (ctx, x, y, w, h) => drawElementTile(ctx, x, y, w, h, e));
+  // Covers: a plain gradient card (the title is drawn over any cover in code anyway).
+  for (const key of new Set([...Object.values(COVER_BY_GENRE), DEFAULT_COVER])) assets.setFallback(key, drawCoverCard, { aspect: 336 / 483 });
+}
+
+const FAMILY_COLOR = { genre: '#F2862B', theme: '#7650C4', gameplay: '#1597BF', technology: '#3B4150', artDirection: '#D8352A', feature: '#2E8B57' };
+
+// Element stand-in: a rounded tile in its family's colour with the element's initials.
+function drawElementTile(ctx, x, y, w, h, e) {
+  const { cx, cy, s } = square(x, y, w, h);
+  const r = s * 0.44;
+  ctx.fillStyle = FAMILY_COLOR[e.family] ?? C.progress;
+  ctx.strokeStyle = C.outline;
+  ctx.lineWidth = s * 0.05;
+  ctx.beginPath();
+  ctx.roundRect(cx - r, cy - r, r * 2, r * 2, r * 0.35);
+  ctx.fill();
+  ctx.stroke();
+  const initials = e.name.split(/[s-]+/).map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = font(s * 0.36, true);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(initials, cx, cy + s * 0.02);
+}
+
+function drawCoverCard(ctx, x, y, w, h) {
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, '#7650C4');
+  g.addColorStop(1, '#1597BF');
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
 }
 
 // --- small icons (square box; each draws inside the largest centred square) --------------------------------

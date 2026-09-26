@@ -90,16 +90,19 @@ export function createStudioWorld({ bus, rng, debug }) {
     tiers: TIERS,
     traits: TRAITS,
     rules: STAFF_BALANCE,
-    // The day's activity follows where they are: at their station working, in the Break Area resting.
-    planActivity: (s) => {
-      const w = workerById(s.id);
-      return w?.phase === 'working' ? 'working' : w?.phase === 'resting' ? 'resting' : 'walking';
-    },
+    // The day's activity follows their duty, not the exact walk: on duty (at or heading to their station) is a
+    // working day, on a break (at or heading to the Break Area) a resting one. Days then come out the same at any
+    // speed, so the same save and choices always give the same results (Milestone 3).
+    planActivity: (s) => (onDuty(s.id) ? 'working' : 'resting'),
     restModifier: () => ({ energyMult: 1 + (breakArea?.def.effects?.restEnergyPct ?? 0) / 100 }),
   });
 
   const workers = []; // { kind: 'worker', id, staff, def, agent, station, breakSeat, phase }
   const workerById = (id) => workers.find((w) => w.id === id) ?? null;
+  const onDuty = (id) => {
+    const p = workerById(id)?.phase;
+    return p === 'toWork' || p === 'working';
+  };
   const phaseLog = []; // recent phase changes (tests / debug)
   let simTime = 0;
 
@@ -138,9 +141,10 @@ export function createStudioWorld({ bus, rng, debug }) {
   // After each day's Energy change: tired workers go to rest, rested ones go back to work.
   bus.on('clock:day', () => {
     staffSystem.dailyTick();
+    // Decided by duty, never by where the walk has got to, so the day comes out the same at any speed.
     for (const w of workers) {
-      if (w.phase === 'working' && w.staff.status.tired) goToBreak(w);
-      else if (w.phase === 'resting' && w.staff.energy >= STAFF_BALANCE.backToWorkAt) goToWork(w);
+      if (onDuty(w.id) && w.staff.status.tired) goToBreak(w);
+      else if (!onDuty(w.id) && w.staff.energy >= STAFF_BALANCE.backToWorkAt) goToWork(w);
     }
   });
   bus.on('clock:month', () => staffSystem.monthlyTick());
@@ -206,6 +210,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     breakArea,
     stationById,
     workerById,
+    onDuty,
     seatsOf,
     whyNot,
     moveStation,
