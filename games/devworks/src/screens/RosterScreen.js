@@ -21,11 +21,11 @@ export function staffCardView(world, w) {
     xp: { value: s.xp, max: world.staffSystem.xpNeeded(s.level) },
     stats: STATS.map((st) => ({ label: st.label, value: s.stats[st.key] })),
     bars: [
-      { label: 'Energy', value: s.energy, max: 100, color: s.status.tired ? C.warn : C.progress },
+      { label: 'Energy', value: s.energy, max: 100, color: w.tiredIcon ? C.warn : C.progress },
       { label: 'Morale', value: s.morale, max: 100, color: s.status.stressed ? C.warn : C.good },
     ],
     chips: s.traits.map((t) => ({ label: TRAITS[t]?.name ?? t })),
-    icons: [s.status.tired && STATUS_ICONS.tired, s.status.stressed && STATUS_ICONS.stressed].filter(Boolean),
+    icons: [w.tiredIcon && STATUS_ICONS.tired, s.status.stressed && STATUS_ICONS.stressed].filter(Boolean),
     footer: `Now: ${world.stateLine(w, WORK_STATE[w.phase].line)}`,
   };
 }

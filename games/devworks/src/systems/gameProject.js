@@ -1,10 +1,11 @@
-// Game projects (Milestone 3): one Tiny game at a time, made in five phases (on screen: milestones) on core
+// Game projects (Milestones 3–4): one Tiny game at a time, made in five phases (on screen: milestones) on core
 // ProjectSystem, with DEVWORKS rules plugged in through its hooks. Every number is in data/balance.js
 // (PROJECT_BALANCE), where the formulas are also written out in words.
 //
 // Determinism: a project carries its own seeded random state (job.data.rng), taken from the studio's seeded Rng
 // when it starts and saved with it, and everything runs on whole days. The same save and choices give the same
-// progress, bugs, breakthroughs and outputs.
+// progress, bugs, breakthroughs and outputs. The state at Gold Master becomes the game's review seed (bible §14).
+// Money (Milestone 4): charge(amount, reason) pays the audio package at the start and production every day.
 //
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count } and 'project:breakthrough' { key, points }.
@@ -73,7 +74,7 @@ export function fixesForDay({ phaseIndex, bestCode, bugFixPct = 0 }, B = PROJECT
 const rollCount = (x, rng) => Math.floor(x) + (rng.next() < x - Math.floor(x) ? 1 : 0);
 
 // --- the system ---------------------------------------------------------------------------------------
-export function createGameProjects({ bus, world, clock = null, daysPerMonth = 28, B = PROJECT_BALANCE }) {
+export function createGameProjects({ bus, world, clock = null, charge = null, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
   const catalogue = new JobHistory({ bus }); // finished games (data only for now)
   const phases = B.phases.map((p) => ({ id: p.id, name: PHASE_NAMES[p.id], weights: p.weights }));
@@ -108,7 +109,9 @@ export function createGameProjects({ bus, world, clock = null, daysPerMonth = 28
       onDay: (job) => {
         const team = onDutyTeam(job);
         const d = job.data;
-        d.cost += staff.staff.filter((s) => job.slots.includes(s.id)).reduce((t, s) => t + s.salary / daysPerMonth, 0) + B.scopes[d.scope].baseCostPerDay;
+        const today = B.scopes[d.scope].baseCostPerDay;
+        d.cost += today;
+        charge?.(today, `Production: ${job.name}`);
         if (!team.length) return; // everyone on a break: no work, no bugs, no ideas
         const members = team.map((s) => ({ stats: s.stats, mult: staff.workMultiplier(s) }));
         const str = outputStrengths(members, B);
@@ -158,6 +161,7 @@ export function createGameProjects({ bus, world, clock = null, daysPerMonth = 28
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),
           cover: coverFor(d.recipe),
+          reviewSeed: d.rng, // locked at Gold Master: reviews come from this, so a reload never changes them
         };
       },
       now: () => (clock ? clock.now() : null),
@@ -195,6 +199,7 @@ export function createGameProjects({ bus, world, clock = null, daysPerMonth = 28
         const s = staff.get(id);
         if (s) s.assigned = true;
       }
+      if (job.data.cost) charge?.(job.data.cost, `Audio package: ${setup.title}`);
       return system.start(job);
     },
 

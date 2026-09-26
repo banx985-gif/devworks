@@ -10,8 +10,8 @@ export const BOTTOM_SLOTS = [
   { id: 'business', label: 'Business', icon: 'dev_ui_05', line: 'Finance, sponsors, publishers, contracts and saving.' },
 ];
 
-// Top bar icons. Not drawn yet (Batch 6): code-drawn stand-ins show until files with these keys exist.
-export const TOP_ICONS = { credits: 'dev_icon_credits', tokens: 'dev_icon_tokens' };
+// Top bar icons (Batch 6 art, Milestone 4). The code-drawn coin and gem stay as stand-ins if a file is missing.
+export const TOP_ICONS = { credits: 'dev_reward_01', tokens: 'dev_reward_02' };
 
 // Inbox and Help placeholder sheets.
 export const TOP_SHEETS = {

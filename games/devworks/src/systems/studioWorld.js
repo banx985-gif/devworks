@@ -108,7 +108,8 @@ export function createStudioWorld({ bus, rng, debug }) {
 
   function makeWorker(staff, def, i) {
     const agent = new Agent({ id: staff.id, name: staff.name, speed: WALKER.speed });
-    const w = { kind: 'worker', id: staff.id, staff, def, agent, station: stationById(def.station), breakSeat: i, phase: 'toWork' };
+    // tiredIcon: shown from "tired" until Energy is back above tiredIconUntil (Milestone 4), not only on the walk.
+    const w = { kind: 'worker', id: staff.id, staff, def, agent, station: stationById(def.station), breakSeat: i, phase: 'toWork', tiredIcon: false };
     workers.push(w);
     return w;
   }
@@ -143,6 +144,8 @@ export function createStudioWorld({ bus, rng, debug }) {
     staffSystem.dailyTick();
     // Decided by duty, never by where the walk has got to, so the day comes out the same at any speed.
     for (const w of workers) {
+      if (w.staff.status.tired) w.tiredIcon = true;
+      else if (w.staff.energy >= STAFF_BALANCE.tiredIconUntil) w.tiredIcon = false;
       if (onDuty(w.id) && w.staff.status.tired) goToBreak(w);
       else if (!onDuty(w.id) && w.staff.energy >= STAFF_BALANCE.backToWorkAt) goToWork(w);
     }
@@ -165,7 +168,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     return {
       stations: stations.map((s) => ({ id: s.id, fp: { ...s.fp } })),
       staff: staffSystem.serialize(),
-      workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing })),
+      workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing, tiredIcon: w.tiredIcon })),
       rng: rng.getState(),
     };
   }
@@ -192,6 +195,7 @@ export function createStudioWorld({ bus, rng, debug }) {
       w.agent.x = saved.x;
       w.agent.y = saved.y;
       w.agent.facing = saved.facing ?? 1;
+      w.tiredIcon = saved.tiredIcon ?? staff.status.tired;
       if (saved.phase === 'working' || saved.phase === 'resting') {
         w.phase = saved.phase;
         w.agent.setState(saved.phase);

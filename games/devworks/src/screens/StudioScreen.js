@@ -490,7 +490,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const tagW = tw + 36;
     const h = 44;
     const icons = [];
-    if (w.staff.status.tired) icons.push(STATUS_ICONS.tired);
+    if (w.tiredIcon) icons.push(STATUS_ICONS.tired);
     if (w.staff.status.stressed) icons.push(STATUS_ICONS.stressed);
     const iconS = 52;
     const total = tagW + icons.length * (iconS + 6);

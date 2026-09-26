@@ -81,7 +81,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar }) {
     // Condition.
     y = heading(ctx, 'Condition', x, y);
     for (const [label, value, low, icon, color] of [
-      ['Energy', s.energy, s.status.tired, STATUS_ICONS.tired, C.progress],
+      ['Energy', s.energy, w.tiredIcon, STATUS_ICONS.tired, C.progress],
       ['Morale', s.morale, s.status.stressed, STATUS_ICONS.stressed, C.good],
     ]) {
       text(ctx, label, x, y, { bold: true });

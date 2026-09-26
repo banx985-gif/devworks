@@ -7,5 +7,5 @@ export const SAVE = {
   rolling: 3, // keep the last 3 saves; a damaged newest copy falls back to the one before
   version: 1,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)
-  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete'],
+  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp'],
 };
