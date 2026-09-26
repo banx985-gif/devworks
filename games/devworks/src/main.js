@@ -1,6 +1,6 @@
 // DEVWORKS — boot.
-// Starts the shared series engine from core/ and opens the Milestone 0 test screen. Add ?debug=1 for the
-// FPS/state overlay.
+// Starts the shared series engine from core/ and opens the studio. Add ?debug=1 for the FPS/state overlay,
+// ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
 import { Rng } from '../../../core/Rng.js';
@@ -15,13 +15,18 @@ import { SystemBack } from '../../../core/SystemBack.js';
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
 import { ASSETS } from '../data/assets.js';
+import { createStudioScreen } from './screens/StudioScreen.js';
 import { createTestScreen } from './screens/TestScreen.js';
 import { createRouteTestScreen } from './screens/RouteTestScreen.js';
+import { createStudioMenus } from './ui/studioMenus.js';
+import { registerPlaceholders } from './ui/placeholders.js';
 const COL = THEME.color;
 
 const W = 1080;
 const BASE_H = 1920; // 9:16; taller phones grow the height (see Renderer)
 const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bars top and bottom
+const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'studio';
+const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -31,13 +36,15 @@ bus.on('renderer:resize', () => layout.refresh());
 const input = new Input(renderer, bus);
 const assets = new AssetManager({ bus });
 const router = new ScreenRouter(bus);
-const sheet = new BottomSheet({ layout, assets });
+const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
+registerPlaceholders(assets); // stand-ins for art not drawn yet
 
 // Sprites are cached at the screen's real pixel size: remake them when that changes.
 assets.setPixelScale(renderer.pixelScale);
 bus.on('renderer:resize', () => {
   assets.setPixelScale(renderer.pixelScale);
   debug.top = debugTop();
+  if (router.currentName === 'studio') studio.resize();
 });
 
 // Pressed button look: any button under a finger that is down.
@@ -45,6 +52,7 @@ bus.on('input:down', (p) => setPressPoint(p, renderer.pixelScale));
 bus.on('input:up', () => clearPress());
 bus.on('input:dragstart', () => clearPress());
 
+const onTestScreen = () => TEST_SCREENS.includes(router.currentName);
 const loop = new FixedStepLoop({
   stepHz: 60,
   bus,
@@ -56,22 +64,22 @@ const loop = new FixedStepLoop({
     const ctx = renderer.begin(COL.bg);
     router.render(ctx, alpha);
     sheet.render(ctx);
-    if (router.currentName !== 'boot') drawButton(ctx, pauseButton(), loop.paused ? 'RESUME' : 'PAUSE', { selected: loop.paused });
+    if (onTestScreen()) drawButton(ctx, pauseButton(), loop.paused ? 'RESUME' : 'PAUSE', { selected: loop.paused });
     if (loop.paused) drawPaused(ctx);
-    // One FPS line at the top under a sheet, so it hides nothing; the full box otherwise.
-    debug.compact = sheet.active;
+    // One FPS line at the top in the studio or under a sheet, so it hides nothing; the full box on the test screens.
+    debug.compact = sheet.active || !onTestScreen();
     debug.render(ctx);
   },
 });
-// The debug box sits between the asset test and the sheet button, whatever the height.
+// On the test screen the debug box sits between the asset test and the sheet button, whatever the height.
 const debugTop = () => layout.safeRect.h - 600;
 const debug = new DebugOverlay({ loop, renderer, layout, input, bus, top: debugTop(), maxLines: 3 });
 bus.on('loop:pause', () => input.reset());
 debug.log(`seeded rng check: ${rng.int(0, 9999)} (same every reload)`);
 
 // ---------------------------------------------------------------------------
-// Pause: the top-right button pauses/resumes the fixed-step loop; P / Space anywhere; while paused any tap
-// resumes. Hiding the app pauses too (core).
+// Pause: the test screen's button pauses/resumes the fixed-step loop; P / Space anywhere; while paused any tap
+// resumes. Hiding the app pauses too (core). The real Pause / 1× / 2× / 4× buttons come with the top bar.
 const pauseButton = () => layout.anchor('top-right', 240, THEME.button.minH, 80);
 router.modal = {
   get active() {
@@ -83,7 +91,7 @@ router.modal = {
 router.layers.push(
   {
     get active() {
-      return router.currentName !== 'boot';
+      return onTestScreen();
     },
     handleInput: (hook, p) => {
       if (hook !== 'onTap' || !hitRect(p, pauseButton())) return false;
@@ -115,7 +123,12 @@ function drawPaused(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// The placeholder bottom sheet (proves routing + sheet + back).
+// Sheets. The studio's desks and Alex (one registry for world taps and the shortcut), and the M0 test sheet.
+const menus = createStudioMenus({ studio: () => studio });
+const openMenu = (kind) => {
+  const build = menus.for(kind);
+  if (build) sheet.open(build);
+};
 const testSheet = () => ({
   title: 'Test sheet',
   subtitle: 'Placeholder bottom sheet for Milestone 0.',
@@ -132,12 +145,13 @@ const testSheet = () => ({
 });
 bus.on('screen:change', () => sheet.close());
 
-// Back one level (phone/browser Back, Esc, the second screen's Back button): close the sheet, or leave the
-// second screen. Returns false at the test screen with nothing open, so the next Back leaves the app.
+// Back one level (phone/browser Back, Esc, the second screen's Back button): close the sheet, leave Build Mode,
+// or leave the second screen. Returns false with nothing open, so the next Back leaves the app.
 let systemBack = null;
 function back() {
   if (loop.paused) loop.resume('back');
   else if (sheet.active) sheet.close();
+  else if (router.currentName === 'studio' && studio.buildMode) studio.setBuildMode(false);
   else if (router.currentName === 'route') router.go('test');
   else return false;
   return true;
@@ -151,7 +165,7 @@ systemBack = new SystemBack({ onBack: back });
 bus.on('input:up', () => systemBack.rearm());
 
 // ---------------------------------------------------------------------------
-// Boot screen: shows while the images load, then hands over to the test screen.
+// Boot screen: shows while the images load, then hands over to the studio (or the test screen).
 const bootScreen = {
   progress: 0,
   enter() {
@@ -160,7 +174,7 @@ const bootScreen = {
       .loadImages(ASSETS, (done, total) => (this.progress = done / total))
       .then((r) => {
         debug.log(`assets: ${r.loaded} loaded, ${r.missing.length} missing`);
-        router.go('test');
+        router.go(START_SCREEN);
       });
   },
   render(ctx) {
@@ -177,11 +191,14 @@ const bootScreen = {
   },
 };
 
+const studio = createStudioScreen({ renderer, layout, assets, bus, sheet, openMenu, debug });
+
 // Test hook for automated checks (debug builds only).
-if (debug.enabled) window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, taps: [] };
+if (debug.enabled) window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, studio, taps: [] };
 
 router
   .register('boot', bootScreen)
+  .register('studio', studio)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: backButton }));
 router.go('boot');
