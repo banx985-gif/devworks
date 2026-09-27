@@ -8,7 +8,7 @@ import { STATIONS, STUDIO } from '../../data/studio.js';
 import { START_STAFF } from '../../data/staff.js';
 import { TOP_ICONS, STATUS_ICONS } from '../../data/home.js';
 import { ELEMENTS } from '../../data/elements.js';
-import { COVER_BY_GENRE, DEFAULT_COVER } from '../../data/covers.js';
+import { COVER_FAMILIES } from '../../data/covers.js';
 
 const C = THEME.color;
 const DESK_H = 80 / STUDIO.view.halfW; // block height, in cell half-widths
@@ -26,7 +26,7 @@ export function registerPlaceholders(assets) {
   // Element icons (two are held back for a redraw, and research may add art later): a lettered tile per family.
   for (const e of ELEMENTS) assets.setFallback(e.art, (ctx, x, y, w, h) => drawElementTile(ctx, x, y, w, h, e));
   // Covers: a plain gradient card (the title is drawn over any cover in code anyway).
-  for (const key of new Set([...Object.values(COVER_BY_GENRE), DEFAULT_COVER])) assets.setFallback(key, drawCoverCard, { aspect: 336 / 483 });
+  for (const key of COVER_FAMILIES.map((f) => f.id)) assets.setFallback(key, drawCoverCard, { aspect: 336 / 483 });
 }
 
 const FAMILY_COLOR = { genre: '#F2862B', theme: '#7650C4', gameplay: '#1597BF', technology: '#3B4150', artDirection: '#D8352A', feature: '#2E8B57' };

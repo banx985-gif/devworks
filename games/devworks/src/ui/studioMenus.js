@@ -4,7 +4,8 @@
 //   station sheets: header (picture, name, what it's for) + who uses it now
 //   bar sheets (Create, Research, Compete, Business) and Inbox / Help: one line on what will live there;
 //     Create: "New Game" (or "Current project" while one is running) and the Starter Desks
-//   pick:<family>: the element list for one recipe slot (open ones pick; locked ones greyed with a padlock)
+//   pick:<family>: the element list for one recipe slot (open ones pick; locked ones greyed with a padlock and the
+//     reason, Milestone 6; an open one that clashes with the recipe so far says what it needs)
 //   release (target = catalogue number): platform (OpenDesk PC only), price, release model, the Release button
 //   business: Ledger and Catalogue, with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
@@ -12,13 +13,13 @@ import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
 import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
 import { ROLES } from '../../data/staff.js';
-import { FAMILIES, elementsOf } from '../../data/elements.js';
+import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
 import { RELEASE, ECONOMY } from '../../data/balance.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ world, open, projects, business, newGame, openProject, isUnlocked, onPick, picked, doRelease, openScreen, toTitle = null }) {
+export function createStudioMenus({ world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -60,6 +61,7 @@ export function createStudioMenus({ world, open, projects, business, newGame, op
                     ? { id: 'current', label: 'Current project', sub: projectLine(), icon: 'dev_ui_07', onTap: openProject }
                     : { id: 'newGame', label: 'New Game', sub: 'Tiny · about 2 months', icon: slot.icon, onTap: newGame },
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
+                  ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
               },
             ]
@@ -114,14 +116,16 @@ export function createStudioMenus({ world, open, projects, business, newGame, op
   for (const f of FAMILIES) {
     menus.register(`pick:${f.id}`, () => ({
       title: f.name,
-      subtitle: 'Pick one for this game. More open up with research.',
+      subtitle: `Pick one for this game. ${elementsOf(f.id).filter((e) => isUnlocked(e.id)).length} of ${elementsOf(f.id).length} open; rank, years and research open more.`,
       accent: C.progress,
       sections: [
         {
           columns: 2,
-          buttons: elementsOf(f.id).map((e) => {
+          buttons: [...elementsOf(f.id)].sort((a, b) => isUnlocked(b.id) - isUnlocked(a.id)).map((e) => {
             const unlocked = isUnlocked(e.id);
-            return { id: e.id, label: e.name, icon: e.art, locked: !unlocked, sub: unlocked ? (picked(f.id) === e.id ? '✓ Chosen' : 'Open') : 'Locked', onTap: () => onPick(f.id, e.id) };
+            const clash = unlocked ? needsProblem(e, { ...recipe(), [f.id]: e.id }) : null;
+            const sub = !unlocked ? lockReason(e.id) : picked(f.id) === e.id ? '✓ Chosen' : clash ? `Needs ${clash.split(' needs ')[1]}` : 'Open';
+            return { id: e.id, label: e.name, icon: e.art, locked: !unlocked, sub, onTap: () => onPick(f.id, e.id) };
           }),
         },
       ],

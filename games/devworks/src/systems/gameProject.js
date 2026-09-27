@@ -18,7 +18,7 @@ import { Rng } from '../../../../core/Rng.js';
 import { PROJECT_BALANCE } from '../../data/balance.js';
 import { PHASE_NAMES, OUTPUTS } from '../../data/projects.js';
 import { STAT_KEYS } from '../../data/staff.js';
-import { coverFor } from '../../data/covers.js';
+import { coverFor, coverFamilyFor } from '../../data/covers.js';
 
 // --- the formulas (pure, tested in tests/devworks) -----------------------------------------------------
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -185,7 +185,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),
-          cover: coverFor(d.recipe),
+          cover: coverFor(d.recipe), // the art key (a parked family shows its fallback's picture)
+          coverFamily: coverFamilyFor(d.recipe), // Milestone 6: one of the 30 families
           reviewSeed: d.rng, // locked at Gold Master: reviews come from this, so a reload never changes them
         };
       },

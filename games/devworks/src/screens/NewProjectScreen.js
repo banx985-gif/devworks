@@ -2,12 +2,14 @@
 // suggestion), the six recipe slots (tap one to pick from its family; locked elements show greyed with a lock),
 // scope (Tiny), audio package (None / Basic), budget focus (Balanced), and the core team — one lead slot per role,
 // Tiny uses 2–3. The Start button stays at the bottom, greyed until everything is filled in.
+// Milestone 6: a recipe must be legal — an element that needs another (a 3D look needs 3D technology) marks its slot
+// red, and Start says what to fix.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
-import { FAMILIES, elementById } from '../../data/elements.js';
+import { FAMILIES, elementById, needsProblem, recipeProblems } from '../../data/elements.js';
 import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '../../data/projects.js';
 import { ROLES, STATS } from '../../data/staff.js';
 
@@ -32,6 +34,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const out = [];
     const empty = FAMILIES.filter((f) => !setup.recipe[f.id]).length;
     if (empty) out.push(`${empty} recipe slot${empty > 1 ? 's' : ''}`);
+    else if (recipeProblems(setup.recipe).length) out.push('a recipe fix (see the red slot)');
     if (!setup.title.trim()) out.push('a title');
     const n = setup.team.length;
     const { min, max } = scope().team;
@@ -96,10 +99,12 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     FAMILIES.forEach((f, i) => {
       const r = { x: PAD + (i % 2) * (colW + 20), y: y + Math.floor(i / 2) * 170, w: colW, h: 150 };
       const el = setup.recipe[f.id] ? elementById(setup.recipe[f.id]) : null;
+      const clash = el ? needsProblem(el, setup.recipe) : null;
+      if (rects && clash) rects[`clash:${f.id}`] = r;
       if (ctx) {
         ctx.fillStyle = el ? C.panel : C.panelAlt;
-        ctx.strokeStyle = el ? C.outline : C.action;
-        ctx.lineWidth = el ? 3 : 4;
+        ctx.strokeStyle = clash ? C.bad : el ? C.outline : C.action;
+        ctx.lineWidth = clash ? 6 : el ? 3 : 4;
         ctx.setLineDash(el ? [] : [14, 10]);
         ctx.beginPath();
         ctx.roundRect(r.x, r.y, r.w, r.h, 22);
@@ -111,6 +116,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         else text(ctx, '+', ir.x + ir.w / 2, ir.y + ir.h / 2, { size: 90, bold: true, color: C.action, align: 'center', baseline: 'middle' });
         text(ctx, f.name, r.x + 150, r.y + 26, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
         text(ctx, el ? el.name : 'Choose…', r.x + 150, r.y + 66, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
+        if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, r.y + 108, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
       }
       box(r, () => openPicker(f.id), f.id);
     });

@@ -135,9 +135,19 @@ export const RELEASE = { price: 12, storeCutPct: 30, platform: 'P01' };
 //   outlet score = clamp(0–100, genre score + innovation bonus − bug penalty − expectation penalty + bias ± jitter)
 // The jitter comes from the game's review seed, locked at Gold Master: a reload never changes a review.
 export const REVIEW_BALANCE = {
+  // Genre stat weights (Milestone 6): what each genre's players care about among the seven outputs. 1 = normal.
   genreWeights: {
     default: { gameplay: 1, graphics: 1, story: 1, audio: 0.6, innovation: 0.8, polish: 1, audienceFit: 1 },
+    GEN01: { gameplay: 1.5, graphics: 1, story: 0.4, audio: 0.8, innovation: 0.8, polish: 1.3, audienceFit: 1 }, // Platformer
+    GEN02: { gameplay: 1.1, graphics: 0.9, story: 1.5, audio: 0.8, innovation: 0.7, polish: 0.8, audienceFit: 1 }, // RPG
+    GEN03: { gameplay: 1.5, graphics: 0.6, story: 0.6, audio: 0.5, innovation: 1.1, polish: 1, audienceFit: 1 }, // Strategy
+    GEN04: { gameplay: 1.3, graphics: 0.7, story: 0.4, audio: 0.5, innovation: 1.2, polish: 1, audienceFit: 1.2 }, // Simulation
+    GEN05: { gameplay: 1.3, graphics: 1.4, story: 0.3, audio: 0.9, innovation: 0.7, polish: 1.2, audienceFit: 1 }, // Racing
+    GEN06: { gameplay: 1.5, graphics: 1.2, story: 0.6, audio: 0.9, innovation: 0.7, polish: 1.1, audienceFit: 1 }, // Action
+    GEN07: { gameplay: 0.9, graphics: 1.1, story: 1.5, audio: 0.9, innovation: 0.9, polish: 0.8, audienceFit: 1 }, // Adventure
     GEN08: { gameplay: 1.4, graphics: 0.8, story: 0.5, audio: 0.7, innovation: 1.1, polish: 1.2, audienceFit: 1 }, // Puzzle
+    GEN09: { gameplay: 1.4, graphics: 1.2, story: 0.2, audio: 0.8, innovation: 0.6, polish: 1.2, audienceFit: 1.3 }, // Sports
+    GEN10: { gameplay: 1, graphics: 1.1, story: 1.2, audio: 1.4, innovation: 1, polish: 0.8, audienceFit: 0.9 }, // Horror
   },
   // Each outlet's taste: multipliers on the genre weights, and a small bias.
   outlets: {

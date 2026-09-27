@@ -4,7 +4,7 @@ import { STATIONS, PROPS, DEV_POPS } from './studio.js';
 import { START_STAFF } from './staff.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
-import { COVER_BY_GENRE, DEFAULT_COVER } from './covers.js';
+import { FILED_COVERS } from './covers.js';
 import { PLATFORMS } from './platforms.js';
 import { TOP_ICONS } from './home.js';
 
@@ -17,9 +17,10 @@ export const ASSETS = {
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),
-  // Game projects (Milestone 3): all 50 element icons and the covers the stub resolver can pick.
+  // Game projects (Milestone 3): all 50 element icons; every filed cover family (Milestone 6: 26 of 30, parked ones
+  // are never asked for — they show a fallback family's picture).
   ...Object.fromEntries(ELEMENTS.map((e) => art('elements', e.art))),
-  ...Object.fromEntries([...new Set([...Object.values(COVER_BY_GENRE), DEFAULT_COVER])].map((k) => art('covers', k))),
+  ...Object.fromEntries(FILED_COVERS.map((k) => art('covers', k))),
   // Money and release (Milestone 4): Credits / Studio Tokens, the review stars, the platforms that are open.
   ...Object.fromEntries([art('rewards', TOP_ICONS.credits), art('rewards', TOP_ICONS.tokens), art('vfx', 'dev_vfx_07')]),
   ...Object.fromEntries(PLATFORMS.map((p) => art('platforms', p.art))),

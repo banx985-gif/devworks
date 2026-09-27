@@ -8,6 +8,8 @@
 // Milestone 5b: a title screen on launch (Continue, Load / Slots, New Game, Settings), four save slots (core/SaveSlots),
 // New Game setup (studio name, Studio Director, colour, Founding Developer) and founder perks. Slot 1 is the old save.
 // Switching to another slot after one has been played reloads the page first, so no state crosses between studios.
+// Milestone 6: all 50 recipe elements, opened by rank / year / research (src/systems/elementUnlocks.js); the pickers
+// show why a locked one is locked; covers come from the recipe (30 families, data/covers.js).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -38,7 +40,7 @@ import { ASSETS } from '../data/assets.js';
 import { CALENDAR } from '../data/balance.js';
 import { BOTTOM_SLOTS, TOP_ICONS, BADGES } from '../data/home.js';
 import { SAVE } from '../data/save.js';
-import { STARTING_UNLOCKED, FAMILIES, elementById } from '../data/elements.js';
+import { FAMILIES, elementById } from '../data/elements.js';
 import { SCOPES } from '../data/projects.js';
 import { STATIONS, DEV_POPS, BIG_SALES } from '../data/studio.js';
 import { founderById } from '../data/setup.js';
@@ -49,6 +51,8 @@ import { createSetupScreen } from './screens/SetupScreen.js';
 import { createDevPops } from './ui/devPops.js';
 import { createStudioWorld } from './systems/studioWorld.js';
 import { createGameProjects } from './systems/gameProject.js';
+import { createElementUnlocks } from './systems/elementUnlocks.js';
+import { checkGameData } from './systems/dataCheck.js';
 import { createBusiness } from './systems/business.js';
 import { createStudioScreen } from './screens/StudioScreen.js';
 import { createRosterScreen } from './screens/RosterScreen.js';
@@ -95,7 +99,10 @@ const profile = createStudioProfile({ bus, clock }); // studio name, director, c
 const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder() });
 const business = createBusiness({ bus, clock, world, projects });
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
-let unlocked = new Set(STARTING_UNLOCKED); // open recipe elements (research opens more from Milestone 6)
+// Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
+const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set() }) });
+bus.on('clock:month', () => started && elements.check());
+bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
 
 // Sprites are cached at the screen's real pixel size: remake them when that changes.
@@ -232,7 +239,10 @@ const menus = createStudioMenus({
   toTitle: () => toTitle(),
   newGame: () => router.go('newProject'),
   openProject: () => router.go('project'),
-  isUnlocked: (id) => unlocked.has(id),
+  isUnlocked: (id) => elements.isOpen(id),
+  lockReason: (id) => elements.reason(id),
+  recipe: () => newProject.setup?.recipe ?? {},
+  debugUnlockAll: new URLSearchParams(window.location.search).has('debug') ? () => elements.unlockAll() : null,
   picked: (family) => newProject.setup?.recipe[family] ?? null,
   onPick: (family, id) => {
     newProject.choose(family, id);
@@ -335,7 +345,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), unlocked: [...unlocked], studio: profile.serialize() });
+const saveData = () => ({ clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -399,9 +409,9 @@ async function playSlot(i) {
   world.load(data.world);
   projects.load(data.games); // a Milestone 2 save has none: nothing in the works, an empty catalogue
   business.load(data.business); // a Milestone 3 save has none: the books start now (starting Credits)
-  if (data.unlocked) unlocked = new Set(data.unlocked);
   profile.load(data.studio);
-  clock.load(data.clock); // last: the saved speed is checked against the unlocks just loaded
+  clock.load(data.clock); // the saved speed is checked against the unlocks just loaded
+  elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
   slot = s;
   slotIndex = i;
   sessionUsed = true;
@@ -416,6 +426,7 @@ async function startStudio(i, setup) {
   const founder = founderById(setup.founder);
   world.newGame(founder.team.map(startStaffById));
   business.newGame();
+  elements.newGame();
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -563,6 +574,13 @@ bus.on('project:phase', ({ job, phase }) => {
   const at = studio.popPoint(world.stationById(makerId));
   vfx.sparks('world', at.x, at.y, { count: 14, speedMin: 160, speedMax: 380, spread: 3.2 });
   vfx.pulse('world', at.x, at.y + 40, { rx: 120, ry: 60, color: COL.good, life: 0.8, grow: 1.8, width: 8 });
+});
+// New elements opened (rank-up, a new year…): the same short banner.
+bus.on('elements:unlocked', ({ ids }) => {
+  const names = ids.map((id) => elementById(id)?.name).filter(Boolean);
+  const body = names.length > 4 ? `${names.slice(0, 4).join(', ')} and ${names.length - 4} more` : names.join(', ');
+  beat = { entry: { title: names.length === 1 ? 'New game element!' : 'New game elements!', body }, age: 0 };
+  debug.log(`elements opened: ${ids.join(' ')}`);
 });
 function drawBeat(ctx) {
   const t = topBar.rect();
@@ -870,6 +888,13 @@ const catalogueScreen = createCatalogueScreen({ layout, assets, business, projec
 
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
+  // Milestone 6: check the content (elements, unlocks, weights, covers, their images) and log any problem.
+  const check = checkGameData();
+  check.checkArt().then(() => {
+    const r = check.report();
+    debug.log(`data check: ${r.errors.length} errors, ${r.warnings.length} warnings`);
+    for (const e of r.errors) console.warn('[DEVWORKS data]', e);
+  });
   studio.setDebugBadge({
     rect: () => {
       const b = bottomBar.rect();
@@ -881,7 +906,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
