@@ -6,6 +6,9 @@
 // red, and Start says what to fix.
 // Milestone 7: six scopes (locked ones greyed, the reason under them), five budget focuses, and a line with how long
 // this team should take, the deadline and the daily cost. Fewer leads than a scope usually has still works (slower).
+// Milestone 10: the project type first — Original, Sequel, Spin-off, Remake, Remaster (locked ones greyed with why).
+// A Sequel / Spin-off picks a franchise, a Remake / Remaster picks an old game; the slots they fix are locked (a
+// Spin-off must change the genre; a Remaster keeps the scope too).
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -14,6 +17,7 @@ import { text } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementById, needsProblem, recipeProblems } from '../../data/elements.js';
 import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '../../data/projects.js';
 import { ROLES, STATS } from '../../data/staff.js';
+import { PROJECT_TYPES, projectTypeById } from '../../data/franchises.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -21,7 +25,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0 }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -33,8 +37,45 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
   const scroll = new ScrollPanel({ getRect: panelRect });
 
   const scope = () => SCOPES.find((s) => s.id === setup.scope);
+  // Milestone 10: project types.
+  const ptype = () => projectTypeById(setup.type);
+  const ip = () => (setup.ipId ? franchises?.byId(setup.ipId) : null);
+  const withReleased = () => (franchises?.list() ?? []).filter((x) => franchises.stats(x).released > 0);
+  const typeWhy = (t) => {
+    if (t.needs === 'ip' && !withReleased().length) return 'Needs a released game';
+    if (t.needs === 'entry' && !(franchises?.eligible(t.id).length)) return `Needs a game out ${t.id === 'remake' ? '2 years' : '1 year'}`;
+    return null;
+  };
+  const locked = (family) => setup.type !== 'original' && ptype().locks.includes(family) && (setup.ipId || setup.source != null);
+  const trimTitle = (s) => s.slice(0, TITLE_MAX);
+  function setType(id) {
+    if (typeWhy(projectTypeById(id))) return;
+    setup.type = id;
+    setup.ipId = null;
+    setup.source = null;
+  }
+  function pickIp(x) {
+    setup.ipId = x.id;
+    if (setup.type === 'sequel') {
+      setup.recipe.genre = x.genre;
+      setup.title = trimTitle(`${x.name} ${x.entries.length + 1}`);
+    } else if (setup.type === 'spinoff') {
+      setup.recipe.theme = x.theme;
+      if (setup.recipe.genre === x.genre) delete setup.recipe.genre;
+    }
+  }
+  function pickEntry({ ip: x, record }) {
+    setup.ipId = x.id;
+    setup.source = record.number;
+    for (const f of ptype().locks) setup.recipe[f] = record.result.recipe[f];
+    if (setup.type === 'remaster') setup.scope = record.result.scope;
+    setup.title = trimTitle(`${record.result.title} ${setup.type === 'remaster' ? 'Remastered' : 'Reborn'}`);
+  }
   const missing = () => {
     const out = [];
+    if (ptype().needs === 'ip' && !setup.ipId) out.push('a franchise');
+    if (ptype().needs === 'entry' && setup.source == null) out.push('a game to redo');
+    if (setup.type === 'spinoff' && ip() && setup.recipe.genre === ip().genre) out.push('a new genre for the spin-off');
     const empty = FAMILIES.filter((f) => !setup.recipe[f.id]).length;
     if (empty) out.push(`${empty} recipe slot${empty > 1 ? 's' : ''}`);
     else if (recipeProblems(setup.recipe).length) out.push('a recipe fix (see the red slot)');
@@ -77,6 +118,49 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       if (ctx) drawButton(ctx, r, on ? `✓ ${label}` : label, { selected: on, accent: opts.accent ?? C.progress, font: font(S.body, true), locked: opts.locked });
       if (!opts.locked) box(r, onTap, opts.id);
     };
+
+    // Project type (Milestone 10).
+    const third0 = (cw - 40) / 3;
+    const grid0 = (i) => ({ x: PAD + (i % 3) * (third0 + 20), y: y + Math.floor(i / 3) * 130, w: third0, h: 110 });
+    heading('Project type', ptype().name);
+    PROJECT_TYPES.forEach((t, i) => chip(grid0(i), t.name, setup.type === t.id, () => setType(t.id), { id: `type:${t.id}`, locked: !!typeWhy(t) }));
+    y += Math.ceil(PROJECT_TYPES.length / 3) * 130 + 10;
+    const whyLine = PROJECT_TYPES.filter((t) => typeWhy(t)).map((t) => `${t.name}: ${typeWhy(t).toLowerCase()}`).join(' · ');
+    if (ctx) text(ctx, ptype().line, PAD, y, { size: S.small, color: C.text, maxWidth: cw });
+    y += 48;
+    if (whyLine) {
+      if (ctx) text(ctx, whyLine, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+      y += 48;
+    }
+    y += 16;
+    const row = (label, sub, on, onTap, id) => {
+      const r = { x: PAD, y, w: cw, h: 120 };
+      if (ctx) {
+        ctx.fillStyle = on ? C.panelInfo : C.panelAlt;
+        ctx.strokeStyle = on ? C.progress : C.line;
+        ctx.lineWidth = on ? 5 : 3;
+        ctx.beginPath();
+        ctx.roundRect(r.x, r.y, r.w, r.h, 22);
+        ctx.fill();
+        ctx.stroke();
+        text(ctx, (on ? '✓ ' : '') + label, r.x + 24, r.y + 18, { size: S.body, bold: true, maxWidth: r.w - 48 });
+        text(ctx, sub, r.x + 24, r.y + 70, { size: S.small, color: C.textMuted, maxWidth: r.w - 48 });
+      }
+      box(r, onTap, id);
+      y += 136;
+    };
+    if (ptype().needs === 'ip') {
+      heading('Franchise', 'tap to choose');
+      for (const x of withReleased()) {
+        const st = franchises.stats(x);
+        row(x.name, `${st.status.name} · ${st.released} game${st.released === 1 ? '' : 's'} · fans ${Math.round(st.fanbase)} · fatigue ${Math.round(st.fatigue)}`, setup.ipId === x.id, () => pickIp(x), `ip:${x.id}`);
+      }
+      y += 20;
+    } else if (ptype().needs === 'entry') {
+      heading(setup.type === 'remake' ? 'Game to remake' : 'Game to remaster', 'tap to choose');
+      for (const e of franchises.eligible(setup.type)) row(e.record.result.title, `${e.ip.name} · review ${e.record.release.score} · ${SCOPES.find((s) => s.id === e.record.result.scope)?.name ?? ''}`, setup.source === e.record.number, () => pickEntry(e), `entry:${e.record.number}`);
+      y += 20;
+    }
 
     // Title.
     heading('Title');
@@ -121,8 +205,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         text(ctx, f.name, r.x + 150, r.y + 26, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
         text(ctx, el ? el.name : 'Choose…', r.x + 150, r.y + 66, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
         if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, r.y + 108, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
+        else if (locked(f.id)) text(ctx, `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, r.y + 108, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
       }
-      box(r, () => openPicker(f.id), f.id);
+      if (!locked(f.id)) box(r, () => openPicker(f.id), f.id);
     });
     y += 3 * 170 + 30;
 
@@ -131,13 +216,13 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const third = (cw - 40) / 3;
     const grid = (i) => ({ x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
     heading('Scope');
-    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, locked: !scopeOpen(sc.id) }));
+    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
     y += Math.ceil(SCOPES.length / 3) * 130 + 10;
     const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
     const lines = [{ t: scope().line, c: C.text }];
     if (estimate && setup.team.length) {
-      const e = estimate(setup.team, setup.scope);
-      lines.push({ t: `This team: about ${Math.round(e.days)} days · due ${dateLabel(today() + e.deadlineDays)} · ${costPerDay(setup.scope, setup.budget)} Credits a day`, c: C.actionDark });
+      const e = estimate(setup.team, setup.scope, setup.type);
+      lines.push({ t: `This team: about ${Math.round(e.days)} days · due ${dateLabel(today() + e.deadlineDays)} · ${costPerDay(setup.scope, setup.budget, setup.type)} Credits a day`, c: C.actionDark });
     }
     if (setup.team.length < scope().team.min) lines.push({ t: `Short-staffed: ${scope().name} usually has ${scope().team.min}–${scope().team.max} people. It still works, just slower.`, c: C.bad });
     if (firstLocked) lines.push({ t: `${firstLocked.name} and up: ${scopeReason(firstLocked.id)?.replace('Needs', 'need') ?? 'locked'} and later stages.`, c: C.textMuted });
@@ -195,18 +280,22 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     get setup() {
       return setup;
     },
+    setType,
+    pickIp,
+    pickEntry,
     get ready() {
       return missing().length === 0;
     },
     startRect,
     enter() {
-      setup = { title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: world.staffSystem.staff.map((s) => s.id).slice(0, SCOPES[0].team.max) };
+      setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: world.staffSystem.staff.map((s) => s.id).slice(0, SCOPES[0].team.max) };
       scroll.scrollY = 0;
     },
     exit() {
       textPrompt.close();
     },
     choose(family, id) {
+      if (locked(family)) return;
       setup.recipe[family] = id;
     },
     onDragStart(p) {

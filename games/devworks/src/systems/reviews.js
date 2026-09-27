@@ -40,19 +40,20 @@ export function innovationBonus(innovation, R = REVIEW_BALANCE) {
 }
 
 // One outlet's score before jitter (not rounded).
-export function outletScore({ outputs, bugs, scope, genre, fanExpectation }, outletId, R = REVIEW_BALANCE) {
+// Milestone 10: fatiguePenalty (points) from a tired franchise.
+export function outletScore({ outputs, bugs, scope, genre, fanExpectation, fatiguePenalty = 0 }, outletId, R = REVIEW_BALANCE) {
   const o = R.outlets[outletId];
   const g = genreScore(outputs, genre, o.weights, R);
-  return g + innovationBonus(outputs.innovation, R) - bugPenalty(bugs, scope, R) - expectationPenalty(fanExpectation, genreScore(outputs, genre, {}, R), R) + o.bias;
+  return g + innovationBonus(outputs.innovation, R) - bugPenalty(bugs, scope, R) - expectationPenalty(fanExpectation, genreScore(outputs, genre, {}, R), R) - fatiguePenalty + o.bias;
 }
 
 // The whole review round for a finished game.
 // game: { title, outputs, bugs, scope, recipe: { genre }, reviewSeed }; fanExpectation from the studio.
 // Returns { outlets: [{ id, name, score, line }], score } — score = the rounded average of the four.
-export function reviewGame(game, { fanExpectation = REVIEW_BALANCE.start.fanExpectation } = {}, R = REVIEW_BALANCE) {
+export function reviewGame(game, { fanExpectation = REVIEW_BALANCE.start.fanExpectation, fatiguePenalty = 0 } = {}, R = REVIEW_BALANCE) {
   const rng = new Rng(1);
   rng.setState(game.reviewSeed >>> 0);
-  const facts = { outputs: game.outputs, bugs: game.bugs, scope: game.scope, genre: game.recipe?.genre, fanExpectation };
+  const facts = { outputs: game.outputs, bugs: game.bugs, scope: game.scope, genre: game.recipe?.genre, fanExpectation, fatiguePenalty };
   const used = new Set(); // no two outlets print the same line in one round
   const outlets = OUTLETS.map((o) => {
     const jitter = (rng.next() * 2 - 1) * R.jitter;

@@ -346,5 +346,40 @@ export const MARKETING_BALANCE = {
   clash: { days: 7, bigPct: 40, smallPct: 12 },
 };
 
+// --- Franchises and the back catalogue (Milestone 10, bible §12 / §18). All placeholders. ---
+// Project types: workMult on the work (so the days), costMult on the daily cost, priceMult on the price a copy.
+//   fanShare: how much of the franchise's fanbase a new entry gets (Original none). fatigueAdd: fatigue its launch
+//   adds to the franchise. Remake / Remaster: floor = the old game's outputs × floor are the least the new one gets
+//   (then + bonus), and the old game must have been out minAgeDays.
+// Franchise points = lifetime copies (all its games, back catalogue included) × review average ÷ 70; the status
+//   comes from the points (data/franchises.js). Fanbase (0–100) = 100 × (1 − e^(−points / fanScale)).
+// A new entry with a fanbase: starts with fanbase × startHype × fanShare Hype (the fans are waiting) and sells
+//   × (1 + fanbase / 100 × fanSalesPct / 100 × fanShare).
+// Fatigue (0–100) fades with time: now = stored × e^(−days since / fatigueDays). At a launch the fatigue is first cut
+//   by relief.tech (other Technology than the last game), relief.art (other Art Direction) and relief.genre (other
+//   genre), then costs fatigueSalesPct % × fatigue / 100 of sales and fatigueReview × fatigue review points; then the
+//   entry's fatigueAdd is added.
+// Back catalogue: every month a game that has been out catalogue.afterDays sells catalogue.monthlyPct % of its
+//   expected lifetime copies again, at catalogue.pricePct % of its price; when another game of its franchise launches
+//   it gets a spike of catalogue.spikePct % of its lifetime copies, sold at the next month's end.
+export const FRANCHISE_BALANCE = {
+  types: {
+    original: { workMult: 1, costMult: 1, priceMult: 1, fanShare: 0, fatigueAdd: 25 },
+    sequel: { workMult: 1, costMult: 1, priceMult: 1, fanShare: 1, fatigueAdd: 30 },
+    spinoff: { workMult: 1, costMult: 1, priceMult: 1, fanShare: 0.5, fatigueAdd: 15 },
+    remake: { workMult: 0.75, costMult: 0.85, priceMult: 1, fanShare: 0.7, fatigueAdd: 20, floor: 0.85, bonus: { graphics: 6, innovation: 3 }, minAgeDays: 672 },
+    remaster: { workMult: 0.35, costMult: 0.5, priceMult: 0.6, fanShare: 0.5, fatigueAdd: 10, floor: 1, bonus: { graphics: 8, polish: 6 }, minAgeDays: 336 },
+  },
+  pointsReviewRef: 70,
+  fanScale: 2500,
+  startHype: 0.5,
+  fanSalesPct: 80,
+  fatigueDays: 200,
+  fatigueSalesPct: 50,
+  fatigueReview: 0.12,
+  relief: { tech: 20, art: 10, genre: 15 },
+  catalogue: { afterDays: 336, monthlyPct: 0.4, pricePct: 60, spikePct: 8 },
+};
+
 // Speed unlocks (bible §4): 2× after the first shipped game; 4× at Rank C or Year 4.
 export const SPEED_UNLOCKS = { 2: { shipped: 1 }, 4: { rank: 'C', year: 4 } };

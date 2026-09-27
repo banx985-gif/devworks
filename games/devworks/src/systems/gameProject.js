@@ -17,13 +17,17 @@
 // pauses the clock and asks). Traits with outputBonus (Good Feel, Strong Shapes, Sharp Dialogue) add to the game.
 // Crunch days are kept per person (staffHistory) for their staff card.
 //
+// Milestone 10: project types (Original / Sequel / Spin-off / Remake / Remaster, FRANCHISE_BALANCE.types): the work and
+// daily cost scale with the type; a Remake / Remaster starts from the old game's outputs (floor, then its bonus). The
+// finished game carries its type, franchise (ipId) and the game it came from (source).
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
 import { ProjectSystem } from '../../../../core/ProjectSystem.js';
 import { JobHistory } from '../../../../core/JobHistory.js';
 import { Rng } from '../../../../core/Rng.js';
-import { PROJECT_BALANCE } from '../../data/balance.js';
+import { PROJECT_BALANCE, FRANCHISE_BALANCE } from '../../data/balance.js';
 import { PHASE_NAMES, OUTPUTS } from '../../data/projects.js';
 import { STAT_KEYS } from '../../data/staff.js';
 import { coverFor, coverFamilyFor } from '../../data/covers.js';
@@ -206,6 +210,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
     d.decision ??= null;
     d.decisions ??= [];
     d.hype ??= 0;
+    d.type ??= 'original'; // Milestone 10
+    d.costMult ??= 1;
     return job;
   }
   const decisionOpen = (job) => !!job?.data.decision;
@@ -232,7 +238,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       onDay: (job) => {
         const d = job.data;
         const focus = focusOf(d.focus, B);
-        const cost = Math.round(B.scopes[d.scope].baseCostPerDay * (1 + (focus.costPct ?? 0) / 100));
+        const cost = Math.round(B.scopes[d.scope].baseCostPerDay * (1 + (focus.costPct ?? 0) / 100) * d.costMult);
         d.cost += cost;
         charge?.(cost, `Production: ${job.name}`);
         if (decisionOpen(job)) return; // waiting for the player: no work, no bugs, no ideas
@@ -303,6 +309,13 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           if (s) s.assigned = false;
         }
         const finishedDay = today();
+        // Milestone 10: a Remake / Remaster keeps at least the old game's outputs × floor, then adds its bonus.
+        const outputs = outputsFrom({ phaseQuality: d.phaseQuality, audio: d.audio, bonus, phaseFocus: d.phaseFocus, scope: d.scope, polishCap: d.polishCap }, B);
+        const T = FRANCHISE_BALANCE.types[d.type] ?? FRANCHISE_BALANCE.types.original;
+        if (d.sourceOutputs && T.floor) {
+          for (const k of Object.keys(outputs)) if (k !== 'audio') outputs[k] = Math.round(clamp(Math.max(outputs[k], d.sourceOutputs[k] * T.floor) + (T.bonus?.[k] ?? 0), 0, 100));
+          if (d.polishCap != null) outputs.polish = Math.min(outputs.polish, d.polishCap);
+        }
         const hypePcts = d.phaseFocus.map((f) => focusOf(f, B).hypePct ?? 0);
         return {
           title: job.name,
@@ -311,7 +324,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           audio: d.audio,
           budget: d.budget,
           budgetByPhase: [...d.phaseFocus],
-          outputs: outputsFrom({ phaseQuality: d.phaseQuality, audio: d.audio, bonus, phaseFocus: d.phaseFocus, scope: d.scope, polishCap: d.polishCap }, B),
+          outputs,
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),
@@ -330,6 +343,9 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           crunchDays: d.crunchDays,
           hypeDelta: d.hype, // Milestone 9 reads these (Hype)
           hypePct: Math.round(hypePcts.reduce((a, b) => a + b, 0) / Math.max(1, hypePcts.length)),
+          type: d.type, // Milestone 10: the project type, its franchise and the game it came from
+          ipId: d.ipId ?? null,
+          source: d.source ?? null,
         };
       },
       now: () => (clock ? clock.now() : null),
@@ -428,14 +444,14 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       return staffHistory;
     },
 
-    // What a team would need for a scope: { days, deadlineDays } (the New Game screen shows it).
-    estimate(teamIds, scope) {
-      const days = estimateDays(teamIds.map((id) => staff.get(id)).filter(Boolean).map(statsOf), scope, B);
+    // What a team would need for a scope (and project type, Milestone 10): { days, deadlineDays } (the New Game screen).
+    estimate(teamIds, scope, type = 'original') {
+      const days = estimateDays(teamIds.map((id) => staff.get(id)).filter(Boolean).map(statsOf), scope, B) * (FRANCHISE_BALANCE.types[type]?.workMult ?? 1);
       return { days, deadlineDays: Math.round(days * (1 + B.schedule.buffer)) };
     },
 
     // Start a game. setup: { title, recipe: { genre, theme, gameplay, technology, artDirection, feature },
-    //   scope, audio, budget, team: [staffId] }. rng: the studio's seeded Rng (one number is taken from it).
+    //   scope, audio, budget, team: [staffId], type?, ipId?, source? (Milestone 10: catalogue number of the old game) }. rng: the studio's seeded Rng (one number is taken from it).
     start(setup, rng) {
       const job = system.createJob({ type: 'game', name: setup.title, phaseTarget: 1, slots: setup.team.length, data: {} });
       job.slots = [...setup.team];
@@ -444,7 +460,10 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       const variance = (founderIn(job.slots)?.perk.scheduleVariancePct ?? 0) + studioVariancePct() + (focusOf(setup.budget, B).variancePct ?? 0);
       const range = slipRange(variance, B);
       const slip = +(range.min + slipRng.next() * (range.max - range.min)).toFixed(4);
-      const est = api.estimate(job.slots, setup.scope);
+      const type = FRANCHISE_BALANCE.types[setup.type] ? setup.type : 'original';
+      const T = FRANCHISE_BALANCE.types[type];
+      const src = setup.source != null ? catalogue.get(setup.source) : null;
+      const est = api.estimate(job.slots, setup.scope, type);
       job.data = {
         scope: setup.scope,
         recipe: { ...setup.recipe },
@@ -456,7 +475,12 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         startedDay: today(),
         deadlineDay: today() + est.deadlineDays,
         slip,
-        workScale: 1 + slip,
+        workScale: (1 + slip) * T.workMult,
+        type,
+        costMult: T.costMult,
+        ipId: setup.ipId ?? null,
+        source: src ? src.number : null,
+        sourceOutputs: src && T.floor ? { ...src.result.outputs } : null,
         rng: new Rng(seed).getState(),
         cost: B.audio[setup.audio]?.cost ?? 0,
         bugs: 0,

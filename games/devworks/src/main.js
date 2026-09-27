@@ -17,6 +17,8 @@
 // Milestone 9: marketing (actions build each game's Hype; Hype sets Fan Expectation and sales; word of mouth; Fan
 // Trust in the top bar), the Marketing Planner (Business, Create, and the Marketing Wall placed at Rank D) and the
 // release calendar of competitor releases (on the planner and the release sheet).
+// Milestone 10: franchises — project types (Original / Sequel / Spin-off / Remake / Remaster) on New Game, fatigue and
+// fans at launch, the back catalogue each month, and the Franchise Archive (Catalogue → Franchises).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -44,7 +46,7 @@ import { createBottomBar } from '../../../core/ui/BottomBar.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
 import { drawToasts } from '../../../core/ui/Toast.js';
 import { ASSETS } from '../data/assets.js';
-import { CALENDAR, PROJECT_BALANCE } from '../data/balance.js';
+import { CALENDAR, PROJECT_BALANCE, FRANCHISE_BALANCE } from '../data/balance.js';
 import { BOTTOM_SLOTS, TOP_ICONS, BADGES } from '../data/home.js';
 import { SAVE } from '../data/save.js';
 import { FAMILIES, elementById } from '../data/elements.js';
@@ -70,6 +72,7 @@ import { createLedgerScreen } from './screens/LedgerScreen.js';
 import { createCatalogueScreen } from './screens/CatalogueScreen.js';
 import { createPlatformMarketScreen } from './screens/PlatformMarketScreen.js';
 import { createMarketingScreen } from './screens/MarketingScreen.js';
+import { createFranchiseArchiveScreen } from './screens/FranchiseArchiveScreen.js';
 import { openStations } from './systems/stationUnlocks.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
@@ -85,7 +88,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -644,10 +647,11 @@ const newProject = createNewProjectScreen({
   openPicker: (family) => openMenu(`pick:${family}`),
   scopeOpen: (id) => elements.scopeOpen(id),
   scopeReason: (id) => elements.scopeReason(id),
-  estimate: (team, scope) => projects.estimate(team, scope),
+  estimate: (team, scope, type) => projects.estimate(team, scope, type),
+  franchises: business.franchises, // Milestone 10: project types
   dateLabel: (d) => clock.shortLabel(d),
   today: () => clock.totalDays,
-  costPerDay: (scope, focus) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100)),
+  costPerDay: (scope, focus, type) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100) * (FRANCHISE_BALANCE.types[type]?.costMult ?? 1)),
   onStart: (setup) => {
     projects.start(setup, studioRng);
     debug.log(`project started: ${setup.title}`);
@@ -683,6 +687,24 @@ function checkStations() {
   }
 }
 bus.on('reputation:rankUp', () => started && checkStations());
+// A franchise reaches a higher status (Milestone 10): a short banner (Legendary gets the big moment).
+bus.on('franchise:status', ({ ip, status }) => {
+  if (status.id === 'legendary') return;
+  beat = { entry: { title: `${ip.name} is now ${status.name}!`, body: 'Your franchise is growing. See it in Catalogue → Franchises.' }, age: 0 };
+});
+bus.on('franchise:legendary', ({ ip }) => {
+  debug.log(`legendary franchise: ${ip.name}`);
+  feedback.show({ title: 'Legendary franchise!', subtitle: `${ip.name} has become Legendary.`, accent: COL.gold, drawFn: (ctx, t) => drawCrown(ctx, t), onAck: afterFeedback });
+});
+function drawCrown(ctx, t) {
+  const sr = layout.safeRect;
+  const s = Math.min(1, t / 0.35);
+  const size = 380 * (0.6 + 0.4 * s);
+  ctx.save();
+  ctx.globalAlpha = s;
+  assets.drawContained(ctx, 'dev_reward_08', { x: W / 2 - size / 2, y: sr.y + sr.h * 0.33 - size / 2, w: size, h: size });
+  ctx.restore();
+}
 // A marketing action starts: a short banner.
 bus.on('marketing:run', ({ action, gain, title }) => {
   beat = { entry: { title: `${action.name} started`, body: `${title}: +${Math.round(gain)} Hype over ${action.days} days` }, age: 0 };
@@ -958,7 +980,8 @@ function skipYear() {
 bus.on('game:certifying', ({ record }) => {
   beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
 });
-const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n) });
+const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive') });
+const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
 
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
@@ -980,7 +1003,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -996,6 +1019,7 @@ router
   .register('catalogue', catalogueScreen)
   .register('platforms', platformScreen)
   .register('marketing', marketingScreen)
+  .register('archive', archiveScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

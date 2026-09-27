@@ -161,6 +161,11 @@ export function createMarketing({ bus, clock, projects, economy, state, hasWall 
     daily,
     campaign: (key) => campaigns[key] ?? null,
     hypeOf: (key) => campaigns[key]?.hype ?? 0,
+    // Hype from elsewhere (Milestone 10: a new entry's waiting fans).
+    addHype(key, amount) {
+      const c = campaign(key);
+      c.hype = r4(clamp(c.hype + amount, 0, 100));
+    },
     // Frozen at launch: this game's Hype, from now on only read.
     launch(key) {
       const c = campaign(key);

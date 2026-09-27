@@ -15,6 +15,10 @@
 // same-genre competitor release that month cuts the launch week; Fan Trust moves with the review, bugs at launch,
 // overhype and delays.
 //
+// Milestone 10 (src/systems/franchises.js, saved here): every game belongs to a franchise; at launch the franchise's
+// fatigue lowers the review and sales and its fanbase adds players (Sequels most); a Remaster sells cheaper; each
+// month the back catalogue sells a little, with a spike after another game of the franchise launches.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -29,6 +33,7 @@ import { createPlatformMarket, releasable } from './platformMarket.js';
 import { reviewGame } from './reviews.js';
 import { startSales, sellDay, statusOn } from './sales.js';
 import { createMarketing, launchTrust, fanExpectationFor } from './marketing.js';
+import { createFranchises, typeOf } from './franchises.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -74,11 +79,13 @@ export function createBusiness({ bus, clock, world, projects }) {
   const platforms = createPlatformMarket(); // Milestone 8: the 12 platforms' committed curves
   // Milestone 9: campaigns, Hype and the release calendar.
   const marketing = createMarketing({ bus, clock, projects, economy, state, hasWall: () => !!world.stationById?.('F13'), rankIndex: () => reputation.highestRankIndex });
+  const franchises = createFranchises({ bus, clock, projects, marketing }); // Milestone 10
 
   // seed: the run's own seed for the platform market (committed, saved). Tests pass a fixed one.
   function newGame({ seed = 'devworks-run' } = {}) {
     platforms.newGame(seed);
     marketing.newGame(seed);
+    franchises.newGame();
     economy.reset();
     economy.add('credits', ECONOMY.startCredits, 'Starting funds', 'start');
     if (ECONOMY.startTokens) economy.add('tokens', ECONOMY.startTokens, 'Starting tokens', 'start');
@@ -161,8 +168,10 @@ export function createBusiness({ bus, clock, world, projects }) {
     const hype = marketing.launch(record.jobId);
     const fanExpectation = fanExpectationFor(hype);
     const clash = marketing.clashFor(g.recipe?.genre, clock.totalDays);
-    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation });
-    const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny; // Milestone 7: price and reach by scope
+    const fr = franchises.effectFor(record); // Milestone 10: fatigue and fans
+    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation, fatiguePenalty: fr?.reviewPenalty ?? 0 });
+    const sc0 = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny; // Milestone 7: price and reach by scope
+    const sc = { ...sc0, price: Math.round(sc0.price * typeOf(g.type).priceMult) }; // Milestone 10: a Remaster sells cheaper
     const ids = plan.platforms.map((x) => x.id);
     delete record.cert;
     record.release = {
@@ -175,6 +184,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       score: review.score,
       fanExpectation,
       hype,
+      franchise: fr ? { ipId: g.ipId, fatigue: fr.fatigue, fanbase: fr.fanbase, salesMult: fr.salesMult, reviewPenalty: fr.reviewPenalty, relief: fr.relief } : null,
       clash: clash ? { title: clash.competitor.title, studio: clash.competitor.studio, big: clash.competitor.big, pct: clash.pct } : null,
       qaBugs: plan.extraBugs,
       cost: plan.cost,
@@ -182,13 +192,14 @@ export function createBusiness({ bus, clock, world, projects }) {
     };
     const byPlatform = {};
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche, price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1), price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
     const trust = launchTrust({ score: review.score, fanExpectation, hype, bugs: g.bugs + plan.extraBugs });
     record.release.trust = trust;
     state.fanTrust = +clamp(state.fanTrust + trust.total, 0, 100).toFixed(2);
+    franchises.launched(record, fr);
     bus.emit('game:released', { record }); // first, so the reviews are shown before any rank-up they bring
     reputation.add(Math.max(0, review.score * FAME.release.perPoint - FAME.release.minus), `Released ${g.title}`);
     return record;
@@ -216,6 +227,17 @@ export function createBusiness({ bus, clock, world, projects }) {
     economy.monthEnd(); // Emergency Credit interest on anything owed
     const pay = world.staffSystem.staff.reduce((t, s) => t + s.salary, 0);
     if (pay) economy.spend('credits', pay, `Salaries (${world.staffSystem.staff.length} staff)`, 'salaries');
+    // Milestone 10: the back catalogue.
+    for (const { record, copies, revenue } of franchises.month()) {
+      if (revenue) economy.add('credits', revenue, `Back catalogue: ${record.result.title}`, 'catalogue');
+      state.fameCarry += copies / FAME.copiesPerFame;
+      bus.emit('catalogue:month', { record, copies, revenue });
+    }
+    const whole = Math.floor(state.fameCarry);
+    if (whole > 0) {
+      state.fameCarry = +(state.fameCarry - whole).toFixed(6);
+      reputation.add(whole, 'Copies sold', { quiet: true });
+    }
     market.rollMonth();
   });
 
@@ -262,6 +284,7 @@ export function createBusiness({ bus, clock, world, projects }) {
     },
     platforms,
     marketing,
+    franchises,
     releasePlan,
     unreleased: () => games().filter((r) => !r.release && !r.cert),
     certifying: () => games().filter((r) => r.cert),
@@ -284,10 +307,11 @@ export function createBusiness({ bus, clock, world, projects }) {
       return [...out.values()].sort((a, b) => b.index - a.index).map((e) => ({ ...e, net: e.income + e.costs, year: Math.floor(e.index / clock.monthsPerYear) + 1, month: (e.index % clock.monthsPerYear) + 1 }));
     },
 
-    serialize: () => ({ economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), marketing: marketing.serialize(), state: { ...state } }),
+    serialize: () => ({ economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), marketing: marketing.serialize(), franchises: franchises.serialize(), state: { ...state } }),
     load(data) {
       if (!data) {
         newGame(); // a save from before Milestone 4: start the books now
+        franchises.load(null); // and its games' franchises
         return;
       }
       economy.load(data.economy);
@@ -300,6 +324,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       }
       platforms.load(data.platforms);
       marketing.load(data.marketing);
+      franchises.load(data.franchises); // a save from before Milestone 10: rebuilt from the catalogue
       Object.assign(state, data.state);
     },
   };
