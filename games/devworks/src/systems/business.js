@@ -19,6 +19,9 @@
 // fatigue lowers the review and sales and its fanbase adds players (Sequels most); a Remaster sells cheaper; each
 // month the back catalogue sells a little, with a spike after another game of the franchise launches.
 //
+// Milestone 11: facility effects — fanTrustGainPct on Fan Trust gains, certFailPct on certification fail chances,
+// launchSalesPct on sales.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -78,7 +81,7 @@ export function createBusiness({ bus, clock, world, projects }) {
 
   const platforms = createPlatformMarket(); // Milestone 8: the 12 platforms' committed curves
   // Milestone 9: campaigns, Hype and the release calendar.
-  const marketing = createMarketing({ bus, clock, projects, economy, state, hasWall: () => !!world.stationById?.('F13'), rankIndex: () => reputation.highestRankIndex });
+  const marketing = createMarketing({ bus, clock, projects, economy, state, hypeEffect: () => world.effect?.('hypePct') ?? 0, rankIndex: () => reputation.highestRankIndex });
   const franchises = createFranchises({ bus, clock, projects, marketing }); // Milestone 10
 
   // seed: the run's own seed for the platform market (committed, saved). Tests pass a fixed one.
@@ -113,7 +116,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       const st = platforms.state(id, day);
       const f = P.friendliness[p.friendliness];
       const r = new Rng(`${g.reviewSeed}|cert|${id}`);
-      const failed = !p.open && r.next() < f.failChance;
+      const failed = !p.open && r.next() < f.failChance * (1 + (world.effect?.('certFailPct') ?? 0) / 100);
       const delay = failed ? P.failDelay.min + Math.floor(r.next() * (P.failDelay.max - P.failDelay.min + 1)) : 0;
       return {
         id,
@@ -192,13 +195,14 @@ export function createBusiness({ bus, clock, world, projects }) {
     };
     const byPlatform = {};
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1), price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100), price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
     const trust = launchTrust({ score: review.score, fanExpectation, hype, bugs: g.bugs + plan.extraBugs });
     record.release.trust = trust;
-    state.fanTrust = +clamp(state.fanTrust + trust.total, 0, 100).toFixed(2);
+    const gain = trust.total > 0 ? trust.total * (1 + (world.effect?.('fanTrustGainPct') ?? 0) / 100) : trust.total; // Community Room
+    state.fanTrust = +clamp(state.fanTrust + gain, 0, 100).toFixed(2);
     franchises.launched(record, fr);
     bus.emit('game:released', { record }); // first, so the reviews are shown before any rank-up they bring
     reputation.add(Math.max(0, review.score * FAME.release.perPoint - FAME.release.minus), `Released ${g.title}`);

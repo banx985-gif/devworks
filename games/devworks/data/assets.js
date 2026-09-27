@@ -1,6 +1,7 @@
 // DEVWORKS image list: key → path (relative to index.html), using the final art-list paths.
 // Art not drawn yet shows its stand-in (src/ui/placeholders.js) until the file is filed here.
 import { STATIONS, PROPS, DEV_POPS } from './studio.js';
+import { FACILITIES, STAGES } from './facilities.js';
 import { START_STAFF } from './staff.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
@@ -33,6 +34,9 @@ export const ASSETS = {
   // Milestone 10: franchises (Franchise, Sequel, Remake icons) and the Franchise Crown.
   ...Object.fromEntries(['dev_ui_12', 'dev_ui_13', 'dev_ui_14'].map((k) => art('ui', k))),
   ...Object.fromEntries([art('rewards', 'dev_reward_08')]),
+  // Milestone 11: every facility (the shop and Build Mode) and the stage pictures.
+  ...Object.fromEntries(FACILITIES.map((f) => art('facilities', f.art))),
+  ...Object.fromEntries(STAGES.filter((s) => s.shell).map((s) => art('shells', s.shell))),
   // Milestone 0 loader test (?screen=test): the placeholder PWA icon as the real image, and one deliberately missing file.
   m0Real: 'assets/branding/pwa/icon-192.png',
   m0Missing: 'assets/m0-missing-test.png',

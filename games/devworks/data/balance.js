@@ -315,7 +315,8 @@ export const FAN_TRUST = { start: 50, pivot: 55, perPoint: 0.3 }; // release: + 
 
 // --- Marketing, Hype, Fan Trust, the release calendar (Milestone 9, bible §21 / §30). All placeholders. ---
 // Hype (0–100) belongs to one game. Actions (data/marketing.js) add their Hype over their days, × (1 + boostPct %) for
-// the Marketing-Heavy focus (M7's hypePct) and the Marketing Wall (wallPct); Delay / Cut Feature take their M7 Hype
+// the Marketing-Heavy focus (M7's hypePct) and the facilities' hypePct (Marketing Wall +10%, Media Studio +10%,
+// data/facilities.js); Delay / Cut Feature take their M7 Hype
 // off at once. Before launch Hype fades by decayPct % a day (so a campaign just before launch counts most); at launch
 // it is frozen on the game.
 //   Fan Expectation = expectation.base + hype × expectation.perHype. The review contract's expectation penalty
@@ -336,7 +337,6 @@ export const FAN_TRUST = { start: 50, pivot: 55, perPoint: 0.3 }; // release: + 
 // clash.smallPct % (small) of its launch week (the first clash.days days).
 export const MARKETING_BALANCE = {
   decayPct: 0.8,
-  wallPct: 10,
   expectation: { base: 10, perHype: 0.8 },
   hypeSalesPct: 50,
   spikePerHype: 0.2,

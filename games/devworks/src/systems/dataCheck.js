@@ -10,6 +10,7 @@ import { RESEARCH } from '../../data/research.js';
 import { REVIEW_BALANCE, FAME, PLATFORM_BALANCE, SALES_BALANCE } from '../../data/balance.js';
 import { PLATFORMS } from '../../data/platforms.js';
 import { OUTPUTS } from '../../data/projects.js';
+import { FACILITIES, STAGES } from '../../data/facilities.js';
 
 // Element icons parked in assets/images/_spares (shown as placeholders on purpose). None since the 27 Sept redraws.
 export const PARKED_ELEMENTS = [];
@@ -118,5 +119,16 @@ export function checkGameData({ fetchFn } = {}) {
     const f = P.genreFit[g.id];
     if (v.check(!!f, `platform fit: none for ${g.id}`)) for (const k of groups) v.check(f[k] > 0 && f[k] <= 2, `platform fit ${g.id}.${k}`);
   }
+  // Facilities (Milestone 11): 35, unique ids, unlocks pointing at real ranks / research, their art, the stage pictures.
+  const facIds = v.uniqueIds('facilities', FACILITIES);
+  v.check(facIds.size === 35, `${facIds.size} facilities, the bible has 35`);
+  for (const fc of FACILITIES) {
+    const o = `facility ${fc.id}`;
+    if (fc.unlock.rank) v.ref(o, 'rank', fc.unlock.rank, rankIds);
+    for (const r of fc.unlock.research ?? []) v.ref(o, 'research', r, researchIds);
+    v.check(fc.size.w >= 1 && fc.size.h >= 1 && fc.cost > 0, `${o}: size and cost`);
+    v.art(o, `assets/images/facilities/${fc.art}.png`);
+  }
+  for (const st of STAGES) if (st.shell) v.art(`stage ${st.id}`, `assets/images/shells/${st.shell}.png`);
   return v;
 }

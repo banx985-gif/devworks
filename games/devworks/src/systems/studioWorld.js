@@ -4,29 +4,44 @@
 //
 // Plan space (grid, pathing, positions) is flat; the StudioScreen projects it. Days come from core/Clock:
 // each day the core StaffSystem drains Energy for whoever is working and restores it for whoever is resting.
+//
+// Milestone 11: every one of the 35 facilities (data/facilities.js) can stand here — the starting ones from
+// data/studio.js STATIONS (home spots, seats), the rest bought (placed on the first free spot, then moved in Build
+// Mode) and sold. effect(key) sums the facilities' effects (the effect query every system asks). Studio stages S1–S3
+// grow the floor away from the back walls (setStage): the grid is rebuilt bigger and every placement is checked again,
+// so a legal one never moves (migration); the stage is saved.
 import { Grid } from '../../../../core/Grid.js';
 import { Agent } from '../../../../core/Agent.js';
 import { StaffSystem } from '../../../../core/StaffSystem.js';
 import { STUDIO, STATIONS, PROPS, DOORWAY, WALKER } from '../../data/studio.js';
 import { STAFF_BALANCE } from '../../data/balance.js';
+import { FACILITIES, stageById } from '../../data/facilities.js';
 import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS, startStaffById } from '../../data/staff.js';
 
 const inArea = (a, col, row) => col >= a.col && row >= a.row && col < a.col + a.w && row < a.row + a.h;
 const overlaps = (a, b) => a.col < b.col + b.w && b.col < a.col + a.w && a.row < b.row + b.h && b.row < a.row + a.h;
 
 export function createStudioWorld({ bus, rng, debug }) {
-  const { cols, rows, cellSize: CELL } = STUDIO;
-  const grid = new Grid({ cols, rows, tileSize: CELL });
+  const { cellSize: CELL } = STUDIO;
+  let stage = 1; // Milestone 11: the studio stage (S1 = STUDIO's own size)
+  let cols = STUDIO.cols;
+  let rows = STUDIO.rows;
+  let grid = new Grid({ cols, rows, tileSize: CELL });
 
   // --- stations and props ---------------------------------------------------------------
   // Every Start station exists once (pool); `stations` holds the ones in this studio (Milestone 5b): the "always" ones
   // plus the station each member of staff works at. The array is changed in place, so its holders see the change.
-  const pool = STATIONS.map((def) => ({ kind: 'station', id: def.id, def, fp: { ...def.fp } }));
+  // Milestone 11: the pool is all 35 facilities; a starting station's own data (home spot, seats, flags) wins.
+  const pool = FACILITIES.map((f) => {
+    const st = STATIONS.find((d) => d.id === f.id);
+    const def = { ...f, ...(st ?? {}), purpose: st?.purpose ?? f.line, fp: st?.fp ?? { col: 0, row: 0, w: f.size.w, h: f.size.h } };
+    return { kind: 'station', id: def.id, def, fp: { ...def.fp } };
+  });
   const stations = [];
   const stationById = (id) => stations.find((s) => s.id === id) ?? null;
   const stationIdsFor = (defs, extra = []) => {
     const want = new Set([...extra, ...defs.map((d) => d?.station).filter(Boolean)]);
-    return STATIONS.filter((d) => d.always || want.has(d.id)).map((d) => d.id);
+    return pool.filter((p) => p.def.always || want.has(p.id)).map((p) => p.id);
   };
   function setStations(ids) {
     stations.length = 0;
@@ -129,8 +144,11 @@ export function createStudioWorld({ bus, rng, debug }) {
     st.fp = { ...st.def.fp };
     stations.push(st);
     const ok = (c, r) => !whyNot(st, c, r);
-    let spot = ok(st.fp.col, st.fp.row) ? { col: st.fp.col, row: st.fp.row } : null;
-    for (let r = 0; !spot && r < rows; r++) for (let c = 0; !spot && c < cols; c++) if (ok(c, r)) spot = { col: c, row: r };
+    // Its home spot (a starting station), else the free spot nearest the front of the room, so a new facility stands
+    // in view (not hidden behind others) and can be tapped and dragged at once (Milestone 11).
+    const home = STATIONS.some((d) => d.id === id);
+    let spot = home && ok(st.fp.col, st.fp.row) ? { col: st.fp.col, row: st.fp.row } : null;
+    for (let d = cols + rows - 2; !spot && d >= 0; d--) for (let c = Math.min(cols - 1, d); !spot && c >= 0 && d - c < rows; c--) if (ok(c, d - c)) spot = { col: c, row: d - c };
     if (!spot) {
       stations.splice(stations.indexOf(st), 1);
       return null;
@@ -140,6 +158,36 @@ export function createStudioWorld({ bus, rng, debug }) {
     for (const w of workers) if (w.phase === 'toWork') goToWork(w); else if (w.phase === 'toBreak') goToBreak(w); // re-path round it
     bus.emit('world:moved', { id, col: spot.col, row: spot.row });
     debug?.log(`${st.def.name} placed at ${spot.col},${spot.row}`);
+    return st;
+  }
+
+  // Sell a facility (Milestone 11): it leaves the floor. The caller checks it may go (money, KEEP, nobody working).
+  function removeStation(id) {
+    const st = stationById(id);
+    if (!st) return false;
+    stations.splice(stations.indexOf(st), 1);
+    blockAll();
+    for (const w of workers) if (w.phase === 'toWork') goToWork(w); else if (w.phase === 'toBreak') goToBreak(w);
+    bus.emit('world:moved', { id, sold: true });
+    debug?.log(`${st.def.name} sold`);
+    return true;
+  }
+
+  // The effect query (Milestone 11): the sum of one effect over every facility in the studio.
+  const effect = (key) => stations.reduce((t, st) => t + (st.def.effects?.[key] ?? 0), 0);
+
+  // Studio stage (Milestone 11): a bigger floor. The grid is rebuilt at the new size; every station is checked again
+  // where it stands (settle keeps a legal one exactly where it is; only an illegal one moves, to its home spot or the
+  // first free one); walkers re-path.
+  function setStage(n, { quiet = false } = {}) {
+    const st = stageById(n);
+    stage = st.id;
+    cols = st.cols;
+    rows = st.rows;
+    grid = new Grid({ cols, rows, tileSize: CELL });
+    settle();
+    for (const w of workers) if (w.phase === 'toWork') goToWork(w); else if (w.phase === 'toBreak') goToBreak(w);
+    if (!quiet) bus.emit('studio:stage', { stage: st });
     return st;
   }
 
@@ -156,7 +204,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     // working day, on a break (at or heading to the Break Area) a resting one. Days then come out the same at any
     // speed, so the same save and choices always give the same results (Milestone 3).
     planActivity: (s) => (onDuty(s.id) ? 'working' : 'resting'),
-    restModifier: () => ({ energyMult: 1 + (breakArea?.def.effects?.restEnergyPct ?? 0) / 100 }),
+    restModifier: () => ({ energyMult: 1 + effect('restEnergyPct') / 100 }),
     // Milestone 7: projects can make work more tiring (Push Quality, Crunch): see setEnergyLossMultiplier.
     energyLossMultiplier: (s) => energyLossExtra(s),
   });
@@ -220,6 +268,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   // A new studio: the starting team (Milestone 5b: whoever the founder brings; the Milestone 2 three by default) walks
   // in through the door to their stations. Each starter's station is placed; the room starts from its home layout.
   function newGame(team = STARTERS) {
+    setStage(1, { quiet: true });
     for (const st of pool) st.fp = { ...st.def.fp };
     setStations(stationIdsFor(team));
     settle();
@@ -235,6 +284,7 @@ export function createStudioWorld({ bus, rng, debug }) {
 
   function serialize() {
     return {
+      stage, // Milestone 11
       stations: stations.map((s) => ({ id: s.id, fp: { ...s.fp } })),
       staff: staffSystem.serialize(),
       workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing, tiredIcon: w.tiredIcon })),
@@ -244,6 +294,7 @@ export function createStudioWorld({ bus, rng, debug }) {
 
   // Back to where everyone was: walkers carry on to where they were going.
   function load(data) {
+    setStage(data.stage ?? 1, { quiet: true }); // a save from before Milestone 11 is S1
     // This studio's stations: the saved ones, the "always" ones (a pre-Milestone 5 save gains the shelf) and each
     // member of staff's own station.
     for (const st of pool) st.fp = { ...st.def.fp };
@@ -279,7 +330,21 @@ export function createStudioWorld({ bus, rng, debug }) {
   }
 
   return {
-    grid,
+    get grid() {
+      return grid;
+    },
+    get cols() {
+      return cols;
+    },
+    get rows() {
+      return rows;
+    },
+    get stage() {
+      return stage;
+    },
+    setStage,
+    removeStation,
+    effect,
     stations,
     stationPool: pool,
     props,

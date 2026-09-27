@@ -14,6 +14,9 @@
 //   release (Milestone 8): one or more platforms, porting / certification / QA overhead, launch day
 //   Milestone 9: Business and Create lead to the Marketing Planner; market ({ key, id }) confirms one marketing action;
 //   the release sheet shows the game's Hype, what fans expect, and the competitor releases in its launch month
+//   Milestone 11: shop (Build Mode → Shop: every facility, open ones first, locked ones with why), facility (Build Mode
+//   → tap a station: what it does, Sell for 50%), studio (Business → Studio: the stage, staff cap, game lanes, the
+//   next stage's needs and Upgrade; ?debug=1 adds an award); Business → Build Mode
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -26,10 +29,11 @@ import { DECISIONS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 import { actionById, CONVENTIONS } from '../../data/marketing.js';
 import { elementById } from '../../data/elements.js';
 import { fanExpectationFor } from '../systems/marketing.js';
+import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -99,6 +103,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           buttons: [
             { id: 'ledger', label: 'Ledger', sub: 'Money in and out', icon: 'dev_reward_01', onTap: () => openScreen('ledger') },
             { id: 'catalogue', label: 'Catalogue', sub: `${projects().catalogue.list().length} game${projects().catalogue.list().length === 1 ? '' : 's'}`, icon: 'dev_vfx_07', accent: C.progress, onTap: () => openScreen('catalogue') },
+            ...(shop ? [{ id: 'studio', label: 'Studio', sub: `${shop().stage().name} · stage ${shop().stage().id}`, icon: 'facility_f01', accent: C.progress, onTap: () => open('studio') }] : []),
+            ...(buildMode ? [{ id: 'buildMode', label: 'Build Mode', sub: 'Buy, move and sell facilities', icon: 'facility_f02', accent: C.progress, onTap: () => buildMode() }] : []),
             { id: 'marketing', label: 'Marketing Planner', sub: marketingLine() || 'Hype and the release calendar', icon: 'business_ui_05', onTap: () => openScreen('marketing') },
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
@@ -187,6 +193,58 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       art: a.art,
       sections: [{ lines }, { columns: 1, buttons: [{ id: 'run', label: `Run ${a.name}`, sub: `${a.cost.toLocaleString('en-GB')} Credits`, disabled: !o.ok, onTap: () => runMarketing?.(game.key, a.id) }] }],
     };
+  });
+
+  // Milestone 11: the facility shop (from Build Mode).
+  menus.register('shop', () => {
+    const s = shop?.();
+    if (!s) return null;
+    const list = s.list().filter((x) => !x.owned);
+    return {
+      title: 'Facility Shop',
+      subtitle: `${business().credits.toLocaleString('en-GB')} Credits. A new facility goes on the first free spot; drag it where you want it.`,
+      art: 'facility_f02',
+      accent: C.progress,
+      sections: [
+        {
+          columns: 1,
+          buttons: list.map((x) => ({ id: x.def.id, label: `${x.def.name} · ${x.def.cost.toLocaleString('en-GB')}`, sub: x.ok ? x.def.line + (x.def.later ? ` (with ${x.def.later})` : '') : x.why, icon: x.def.art, locked: !x.ok && !/Credits$/.test(x.why ?? ''), disabled: !x.ok, onTap: () => buyFacility?.(x.def.id) })),
+        },
+      ],
+    };
+  });
+  // One facility in Build Mode: what it does, and Sell.
+  menus.register('facility', (id) => {
+    const s = shop?.();
+    const def = facilityById(id);
+    const st = world().stationById(id);
+    if (!s || !def || !st) return null;
+    const why = s.sellWhy(id);
+    return {
+      title: def.name,
+      subtitle: `${def.role} · ${def.line}${def.later ? ` (with ${def.later})` : ''}`,
+      art: def.art,
+      sections: [{ columns: 1, buttons: [{ id: 'sell', label: `Sell for ${s.refundOf(id).toLocaleString('en-GB')} Credits`, sub: why ?? `Half of its ${def.cost.toLocaleString('en-GB')} back`, disabled: !!why, accent: C.bad, onTap: () => sellFacility?.(id) }] }],
+    };
+  });
+  // The studio stage (Business → Studio).
+  menus.register('studio', () => {
+    const s = shop?.();
+    if (!s) return null;
+    const st = s.stage();
+    const w = world();
+    const n = s.next();
+    const lines = [
+      { text: `${st.line}`, color: C.text },
+      { text: `Staff ${w.staffSystem.staff.length} of ${st.staffCap} · game lanes ${st.lanes} · floor ${w.cols} × ${w.rows}`, color: C.actionDark },
+      { text: 'Hiring comes in a later update; the cap is how many this studio can hold.', color: C.textMuted },
+    ];
+    const sections = [{ lines }];
+    if (n) {
+      sections.push({ title: `Next: ${n.stage.name}`, lines: [...n.reqs.map((r) => ({ text: `${r.ok ? '✓' : '✗'} ${r.label}`, color: r.ok ? C.good : C.bad })), { text: `Staff cap ${n.stage.staffCap} · game lanes ${n.stage.lanes} · floor ${n.stage.cols} × ${n.stage.rows}`, color: C.textMuted }] });
+      sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `${n.stage.cost.toLocaleString('en-GB')} Credits. Everything stays where it is.` : n.why, disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }, ...(debugAward ? [{ id: 'debugAward', label: 'Debug: win an award', sub: 'Awards come in Milestone 19', accent: C.purple, onTap: () => debugAward() }] : [])] });
+    } else sections.push({ lines: [{ text: 'The Corporate HQ and the Global Campus come in a later update.', color: C.textMuted }] });
+    return { title: `Studio: ${st.name}`, subtitle: `Stage ${st.id} of 5`, art: st.shell ?? 'facility_f01', sections };
   });
 
   // The Beta / Gold decision (Milestone 7).

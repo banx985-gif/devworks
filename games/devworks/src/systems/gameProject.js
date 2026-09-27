@@ -21,6 +21,10 @@
 // daily cost scale with the type; a Remake / Remaster starts from the old game's outputs (floor, then its bonus). The
 // finished game carries its type, franchise (ipId) and the game it came from (source).
 //
+// Milestone 11: facility effects (world.effect, data/facilities.js): statPct.<stat> on that stat's progress, progressPct
+// and phasePct.<phase> on progress, bugFixPct on fixing, output.* / outputLarge.* points and outputPct.graphics on the
+// finished game.
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
@@ -150,6 +154,7 @@ export function founderStatMult(founder, staffId, statKey) {
 // studioVariancePct() → the studio's own schedule effect (the Producer Desk while it stands).
 export function createGameProjects({ bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
+  const fx = (key) => world.effect?.(key) ?? 0; // Milestone 11: the facilities' effects
   // A worker's stats with the founder perk applied (outputs), and the perk's own numbers.
   const statsOf = (s) => {
     const f = founder();
@@ -226,8 +231,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       // Only leads on duty work; someone on a break adds nothing that day; nobody works while a decision waits.
       workerModifier: (job, phase, s) => (world.onDuty(s.id) && !decisionOpen(job) ? 1 : 0),
       // The milestone role weights for this scope and phase, and the founder perk.
-      statModifier: (job, phase, s, k) => phaseWeights(job.data.scope, job.phaseIndex, B)[k] * founderStatMult(founder(), s.id, k),
-      progressModifier: (job) => (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1),
+      statModifier: (job, phase, s, k) => phaseWeights(job.data.scope, job.phaseIndex, B)[k] * founderStatMult(founder(), s.id, k) * (1 + fx(`statPct.${k}`) / 100),
+      progressModifier: (job) => (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1) * (1 + (fx('progressPct') + fx(`phasePct.${B.phases[job.phaseIndex].id}`)) / 100),
       onPhaseStart: (job) => {
         const d = job.data;
         if (d.pendingFocus) [d.focus, d.pendingFocus] = [d.pendingFocus, null];
@@ -265,7 +270,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         }
         const bestCode = Math.max(...team.map((s) => s.stats.code ?? 0));
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
-        const bugFixPct = staff.groupEffect(team, 'bugFixPct');
+        const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct');
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
         const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0);
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
@@ -311,6 +316,10 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         const finishedDay = today();
         // Milestone 10: a Remake / Remaster keeps at least the old game's outputs × floor, then adds its bonus.
         const outputs = outputsFrom({ phaseQuality: d.phaseQuality, audio: d.audio, bonus, phaseFocus: d.phaseFocus, scope: d.scope, polishCap: d.polishCap }, B);
+        // Milestone 11: facilities add points (and the Art Render Farm makes Graphics stronger).
+        const large = ['large', 'blockbuster', 'mega'].includes(d.scope);
+        for (const k of Object.keys(outputs)) outputs[k] = Math.round(clamp(outputs[k] * (1 + fx(`outputPct.${k}`) / 100) + fx(`output.${k}`) + (large ? fx(`outputLarge.${k}`) : 0), 0, 100));
+        if (d.polishCap != null) outputs.polish = Math.min(outputs.polish, d.polishCap);
         const T = FRANCHISE_BALANCE.types[d.type] ?? FRANCHISE_BALANCE.types.original;
         if (d.sourceOutputs && T.floor) {
           for (const k of Object.keys(outputs)) if (k !== 'audio') outputs[k] = Math.round(clamp(Math.max(outputs[k], d.sourceOutputs[k] * T.floor) + (T.bonus?.[k] ?? 0), 0, 100));

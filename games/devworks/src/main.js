@@ -19,6 +19,9 @@
 // release calendar of competitor releases (on the planner and the release sheet).
 // Milestone 10: franchises — project types (Original / Sequel / Spin-off / Remake / Remaster) on New Game, fatigue and
 // fans at launch, the back catalogue each month, and the Franchise Archive (Catalogue → Franchises).
+// Milestone 11: facilities — the 35 in data/facilities.js with their effects (world.effect), Build Mode's Shop (buy) and
+// tap-to-sell, Business → Studio (stages S1–S3: a bigger floor, staff cap and game lanes; Standard scope at S2, Large at
+// S3) and Business → Build Mode.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -74,6 +77,7 @@ import { createPlatformMarketScreen } from './screens/PlatformMarketScreen.js';
 import { createMarketingScreen } from './screens/MarketingScreen.js';
 import { createFranchiseArchiveScreen } from './screens/FranchiseArchiveScreen.js';
 import { openStations } from './systems/stationUnlocks.js';
+import { createFacilityShop } from './systems/facilityShop.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -110,11 +114,12 @@ const world = createStudioWorld({ bus, rng: studioRng, debug: log });
 const profile = createStudioProfile({ bus, clock }); // studio name, director, colour, founder + history (Milestone 5b)
 // Each day: the studio settles Energy and breaks, projects work (and pay), then released games sell — so the
 // three are created in that order.
-const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.stationById('F06')?.def.effects?.scheduleVariancePct ?? 0 });
+const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
 const business = createBusiness({ bus, clock, world, projects });
+const shop = createFacilityShop({ bus, world, business, clock, projects }); // Milestone 11 (research: Milestone 12)
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
-const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set(), stage: 1 }) }); // studio stages: Milestones 11 / 22
+const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set(), stage: world.stage }) }); // Milestone 11: studio stages S1–S3
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -253,6 +258,29 @@ const menus = createStudioMenus({
   },
   openScreen: (name) => router.go(name),
   toTitle: () => toTitle(),
+  shop: () => shop,
+  buyFacility: (id) => {
+    const r = shop.buy(id);
+    sheet.close();
+    if (r.ok) beat = { entry: { title: `${r.station.def.name} built!`, body: 'Drag it where you want it. Done when finished.' }, age: 0 };
+    else showTip(r.why);
+  },
+  sellFacility: (id) => {
+    const r = shop.sell(id);
+    sheet.close();
+    if (!r.ok) showTip(r.why);
+  },
+  upgradeStudio: () => {
+    const r = shop.upgrade();
+    sheet.close();
+    if (!r.ok) showTip(r.why);
+  },
+  buildMode: () => {
+    sheet.close();
+    router.go('studio');
+    studio.setBuildMode(true);
+  },
+  debugAward: new URLSearchParams(window.location.search).has('debug') ? () => shop.debugAward() : null,
   runMarketing: (key, id) => {
     sheet.close();
     if (business.marketing.run(id, key)) debug.log(`marketing: ${id} for ${key}`);
@@ -596,6 +624,28 @@ const studio = createStudioScreen({
   bottomBar,
   debug: log,
   sign: () => (profile.data ? { name: profile.name, colour: profile.colour } : null),
+  openShop: () => openMenu('shop'), // Milestone 11
+  openFacility: (id) => openMenu('facility', id),
+});
+// A new studio stage (Milestone 11): the big moment with the stage's picture; new scopes open.
+bus.on('studio:stage', ({ stage }) => {
+  debug.log(`studio stage ${stage.id}: ${stage.name}`);
+  elements.check();
+  feedback.show({
+    title: `Welcome to the ${stage.name}!`,
+    subtitle: `A bigger floor (${stage.cols} × ${stage.rows}), room for ${stage.staffCap} staff and ${stage.lanes} game lanes. Everything stayed where it was.`,
+    accent: COL.good,
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const s = Math.min(1, t / 0.35);
+      const size = 560 * (0.6 + 0.4 * s);
+      ctx.save();
+      ctx.globalAlpha = s;
+      if (stage.shell) assets.drawContained(ctx, stage.shell, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.3 - size / 2, w: size, h: size });
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
 });
 // Development made visible: the art pops while a game is made (only while the studio is on screen, nothing on top).
 const devPops = createDevPops({
@@ -1003,7 +1053,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

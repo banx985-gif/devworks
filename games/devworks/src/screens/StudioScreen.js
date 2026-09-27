@@ -10,6 +10,10 @@
 // the works; the art pops (src/ui/devPops.js) draw here, in the world, through core/VfxSystem's 'world' layer; the
 // released games' covers stand on the Showcase Shelf, with a tag naming each in turn.
 //
+// Milestone 11: the room follows the studio stage (S1–S3: a bigger floor, its own colours; rebuilt on 'studio:stage'
+// and whenever the world's size differs). Build Mode's banner has a Shop button (buy a facility) and tapping a
+// station there opens its facility sheet (sell it).
+//
 // Plan space lives in the world (studioWorld); only drawing and tapping go through the IsoProjection here.
 import { THEME, font } from '../../../../core/Theme.js';
 import { IsoProjection } from '../../../../core/IsoProjection.js';
@@ -22,26 +26,39 @@ import { drawIsoRoom, isoPath, wallPatch, wallPoint } from '../../../../core/Iso
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { STUDIO, STUDIO_LOOK, STUDIO_WALLS, STUDIO_FLOOR, FACILITY_DRAW, SHOWCASE, DOORWAY, WALKER, WORK_STATE, BUILD_TEXT } from '../../data/studio.js';
 import { STATUS_ICONS } from '../../data/home.js';
+import { stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 const S = THEME.size;
-const L = STUDIO_LOOK;
+let L = STUDIO_LOOK; // Milestone 11: the stage's colours over S1's
 const REFUSED_SEC = 2.5; // how long a refused move's reason stays in the banner
 const STATE_COLOR = { Walking: C.progress, Working: C.action, Resting: C.good };
 const TAG_H = 50; // name tags: small text (28), never smaller
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null }) {
   const W = renderer.width;
-  const { cols, rows, cellSize: CELL, wallH, margin } = STUDIO;
+  const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
-  const { grid, stations, props, workers } = world;
+  const { stations, props, workers } = world;
 
-  // --- the room --------------------------------------------------------------
-  const iso = new IsoProjection({ tileSize: CELL, halfW: HW, halfH: HH, originX: margin + rows * HW, originY: margin + wallH });
-  const worldW = (cols + rows) * HW + margin * 2;
-  const worldH = (cols + rows) * HH + wallH + margin * 2;
-  const room = new CachedLayer({ width: worldW, height: worldH, draw: drawRoom });
+  // --- the room (Milestone 11: sized by the studio stage) --------------------------------------------------------
+  let cols;
+  let rows;
+  let iso;
+  let worldW;
+  let worldH;
+  let room;
+  function buildRoom() {
+    cols = world.cols;
+    rows = world.rows;
+    L = { ...STUDIO_LOOK, ...(stageById(world.stage).look ?? {}) };
+    iso = new IsoProjection({ tileSize: CELL, halfW: HW, halfH: HH, originX: margin + rows * HW, originY: margin + wallH });
+    worldW = (cols + rows) * HW + margin * 2;
+    worldH = (cols + rows) * HH + wallH + margin * 2;
+    room = new CachedLayer({ width: worldW, height: worldH, draw: drawRoom });
+  }
+  buildRoom();
 
   const camera = new Camera({ viewW: W, viewH: renderer.height, worldW, worldH });
   camera.minZoom = STUDIO.zoom.min;
@@ -83,6 +100,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     }
   };
   syncStations();
+  bus?.on('world:moved', () => syncStations()); // Milestone 11: bought / sold while the studio is on screen
   const syncWorkers = () => {
     for (const it of [...selection.items]) if (it.kind === 'worker' && !workers.includes(it)) selection.remove(it);
     for (const w of workers) selection.add(w);
@@ -130,6 +148,18 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const b = bannerRect();
     return { x: b.x + b.w - 250, y: b.y + (b.h - 120) / 2, w: 226, h: 120 };
   };
+  const shopRect = () => {
+    const d = doneRect();
+    return { x: d.x - 246, y: d.y, w: 226, h: d.h };
+  };
+  // A new stage: a new room, then look at it again.
+  function restage() {
+    buildRoom();
+    camera.setWorld(worldW, worldH);
+    room.setPixelScale(renderer.pixelScale * STUDIO.zoom.max);
+    if (screen.viewSet) resetView();
+  }
+  bus?.on('studio:stage', () => restage());
 
   // --- camera helpers ------------------------------------------------------------------
   // The camera sees the space between the two bars, so its clamp keeps every room edge reachable.
@@ -205,6 +235,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     taps,
     moves,
     doneRect,
+    shopRect,
     stationRect,
     motion,
     get buildMode() {
@@ -223,6 +254,18 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       const r = w ? workerRect(w) : stationRect(world.stationById(id));
       return camera.worldToScreen(r.x + r.w / 2, r.y + r.h * 0.6);
     },
+    // A screen point where a tap reaches this station (nothing in front of it there), or null (tests).
+    tapPointOf(id) {
+      const st = world.stationById(id);
+      if (!st) return null;
+      const r = stationRect(st);
+      for (let fy = 0.15; fy < 1; fy += 0.1) for (let fx = 0.2; fx < 0.85; fx += 0.1) {
+        const x = r.x + r.w * fx;
+        const y = r.y + r.h * fy;
+        if ((buildMode ? stationPicker : selection).pick(x, y) === st) return camera.worldToScreen(x, y);
+      }
+      return null;
+    },
     // Screen point at the centre of a floor cell (tests).
     screenPointOfCell(col, row) {
       const w = iso.cellCenter(col, row);
@@ -231,7 +274,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     // Floor cell under a screen point, or null if it is off the floor.
     cellAt(sx, sy) {
       const c = rawCell(sx, sy);
-      return grid.inBounds(c.col, c.row) ? c : null;
+      return world.grid.inBounds(c.col, c.row) ? c : null;
     },
     // World point for an art pop: just over a worker's head, or over the top of a station's art (devPops).
     popPoint(target) {
@@ -276,6 +319,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     enter() {
       active = true;
+      if (cols !== world.cols || rows !== world.rows) restage(); // a save at another stage was loaded
       syncStations();
       syncWorkers();
       if (!screen.viewSet) {
@@ -365,8 +409,16 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     onTap(p) {
       if (gestures.multiTouch && !press) return;
       if (buildMode) {
+        let picked = null;
         if (hitRect(p, doneRect())) screen.setBuildMode(false);
-        taps.push({ x: p.x, y: p.y, picked: null, build: true });
+        else if (openShop && hitRect(p, shopRect())) openShop();
+        else if (!hitRect(p, bannerRect())) {
+          // Milestone 11: tapping a station in Build Mode opens its facility sheet (sell it there).
+          const w = camera.screenToWorld(p.x, p.y);
+          picked = stationPicker.pick(w.x, w.y);
+          if (picked && openFacility) openFacility(picked.id);
+        }
+        taps.push({ x: p.x, y: p.y, picked: picked?.id ?? null, build: true });
         press = null;
         return;
       }
@@ -769,20 +821,22 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     ctx.textBaseline = 'top';
     ctx.fillStyle = C.text;
     ctx.font = font(S.title, true);
-    ctx.fillText('Build Mode', b.x + 36, b.y + 34, b.w - 320);
+    ctx.fillText('Build Mode', b.x + 36, b.y + 34, b.w - 560);
     // While dragging: live verdict. After a refused drop: why, in red. Otherwise the hint.
     const reason = moving ? moving.reason : refused?.reason;
     ctx.font = font(S.body, !!reason);
+    const tw = b.w - 560; // the text stops short of Shop and Done
     if (moving && !reason) {
       ctx.fillStyle = C.good;
-      ctx.fillText('Free spot: let go to place', b.x + 36, b.y + 112, b.w - 320);
+      ctx.fillText('Free spot: let go to place', b.x + 36, b.y + 112, tw);
     } else if (reason) {
       ctx.fillStyle = C.bad;
-      ctx.fillText(`Can't place: ${BUILD_TEXT[reason].toLowerCase()}`, b.x + 36, b.y + 112, b.w - 320);
+      ctx.fillText(`Can't place: ${BUILD_TEXT[reason].toLowerCase()}`, b.x + 36, b.y + 112, tw);
     } else {
       ctx.fillStyle = C.textMuted;
-      ctx.fillText(BUILD_TEXT.hint, b.x + 36, b.y + 112, b.w - 320);
+      ctx.fillText(BUILD_TEXT.hint, b.x + 36, b.y + 112, tw);
     }
+    if (openShop) drawButton(ctx, shopRect(), 'Shop', { accent: C.action });
     drawButton(ctx, doneRect(), 'Done', { accent: C.progress });
   }
 

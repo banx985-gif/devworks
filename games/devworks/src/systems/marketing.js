@@ -64,8 +64,9 @@ export function launchTrust({ score, fanExpectation, hype = 0, bugs = 0 }, M = M
 }
 
 // --- the system ------------------------------------------------------------------------------------------------
-// hasWall() → the Marketing Wall (F13) stands in the studio. rankIndex() → the highest rank reached.
-export function createMarketing({ bus, clock, projects, economy, state, hasWall = () => false, rankIndex = () => 0, M = MARKETING_BALANCE }) {
+// hypeEffect() → the facilities' Hype % (Milestone 11: the Marketing Wall and the Media Studio, world.effect('hypePct')).
+// rankIndex() → the highest rank reached.
+export function createMarketing({ bus, clock, projects, economy, state, hypeEffect = () => 0, rankIndex = () => 0, M = MARKETING_BALANCE }) {
   let seed = 'devworks-run';
   let campaigns = {};
   const today = () => clock.totalDays;
@@ -85,10 +86,10 @@ export function createMarketing({ bus, clock, projects, economy, state, hasWall 
   }
   const targetByKey = (key) => targets().find((t) => t.key === key) ?? null;
 
-  // Hype boost for a game (%): Marketing-Heavy (its focus now, or the average it ran with) and the Marketing Wall.
+  // Hype boost for a game (%): Marketing-Heavy (its focus now, or the average it ran with) and the facilities.
   function boostPct(t) {
     const focus = t.job ? (PROJECT_BALANCE.budgetFocus[t.job.data.focus]?.hypePct ?? 0) : (t.record.result.hypePct ?? 0);
-    return focus + (hasWall() ? M.wallPct : 0);
+    return focus + hypeEffect();
   }
 
   // Every action for a game: { action, ok, why, cost, gain, days }.

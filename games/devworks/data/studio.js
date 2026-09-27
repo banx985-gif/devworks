@@ -237,7 +237,7 @@ export const WORK_STATE = {
 
 // Why a spot is refused in Build Mode.
 export const BUILD_TEXT = {
-  hint: 'Drag a station to move it.',
+  hint: 'Drag to move. Tap to sell.',
   offGrid: 'Off the floor',
   overlap: 'Overlaps another station',
   prop: 'Something is already there',
