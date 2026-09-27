@@ -134,6 +134,20 @@ export const STATIONS = [
     seats: [], // nobody works here
     showcase: true,
   },
+  // Milestone 9: the Marketing Wall (bible §36 F13, Rank D). Placed by itself when the studio reaches Rank D (on the
+  // first free spot from its home one; Build Mode moves it like any station). Tap it for the Marketing Planner. Nobody
+  // works here yet (marketing staff come later). effects: campaign Hype +10% while it stands (MARKETING_BALANCE.wallPct).
+  {
+    id: 'F13',
+    name: 'Marketing Wall',
+    role: 'Marketing',
+    art: 'facility_f13',
+    purpose: 'Plan your game marketing here. Campaigns bring 10% more Hype.',
+    unlock: { rank: 'D' },
+    fp: { col: 3, row: 5, w: 2, h: 2 },
+    seats: [],
+    planner: true,
+  },
 ];
 
 // Props dress the room (Milestone 5): decoration only — never tapped, never moved. Each stands on its cells, which

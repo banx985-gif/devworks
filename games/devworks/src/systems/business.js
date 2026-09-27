@@ -10,6 +10,11 @@
 // Milestone 8: 12 platforms (src/systems/platformMarket.js), release on one or more (porting, QA overhead,
 // certification that can fail and delay the launch), sales per platform from its install base and audience fit.
 //
+// Milestone 9 (src/systems/marketing.js, saved here): marketing actions build each game's Hype before launch; at launch
+// Hype sets Fan Expectation (the review's expectation penalty), adds sales and shapes the curve with word of mouth; a
+// same-genre competitor release that month cuts the launch week; Fan Trust moves with the review, bugs at launch,
+// overhype and delays.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -23,6 +28,7 @@ import { PLATFORM_BALANCE } from '../../data/balance.js';
 import { createPlatformMarket, releasable } from './platformMarket.js';
 import { reviewGame } from './reviews.js';
 import { startSales, sellDay, statusOn } from './sales.js';
+import { createMarketing, launchTrust, fanExpectationFor } from './marketing.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -62,12 +68,17 @@ export function createBusiness({ bus, clock, world, projects }) {
     return { copies, revenue };
   }
   const released = () => games().filter((r) => r.release);
+  // The sales curve a game runs on (Milestone 9: its own; older games the Milestone 4 one).
+  const firstCurve = (record) => (record.sales.byPlatform ? Object.values(record.sales.byPlatform)[0]?.curve : record.sales.curve) ?? SALES_BALANCE.curve;
 
   const platforms = createPlatformMarket(); // Milestone 8: the 12 platforms' committed curves
+  // Milestone 9: campaigns, Hype and the release calendar.
+  const marketing = createMarketing({ bus, clock, projects, economy, state, hasWall: () => !!world.stationById?.('F13'), rankIndex: () => reputation.highestRankIndex });
 
   // seed: the run's own seed for the platform market (committed, saved). Tests pass a fixed one.
   function newGame({ seed = 'devworks-run' } = {}) {
     platforms.newGame(seed);
+    marketing.newGame(seed);
     economy.reset();
     economy.add('credits', ECONOMY.startCredits, 'Starting funds', 'start');
     if (ECONOMY.startTokens) economy.add('tokens', ECONOMY.startTokens, 'Starting tokens', 'start');
@@ -146,7 +157,11 @@ export function createBusiness({ bus, clock, world, projects }) {
   // every platform from tomorrow.
   function launch(record, plan) {
     const g = record.result;
-    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation: state.fanExpectation });
+    // Milestone 9: the game's Hype is frozen now and sets what the fans expect.
+    const hype = marketing.launch(record.jobId);
+    const fanExpectation = fanExpectationFor(hype);
+    const clash = marketing.clashFor(g.recipe?.genre, clock.totalDays);
+    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation });
     const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny; // Milestone 7: price and reach by scope
     const ids = plan.platforms.map((x) => x.id);
     delete record.cert;
@@ -158,24 +173,29 @@ export function createBusiness({ bus, clock, world, projects }) {
       model: 'selfDigital',
       reviews: review.outlets,
       score: review.score,
-      fanExpectation: state.fanExpectation,
+      fanExpectation,
+      hype,
+      clash: clash ? { title: clash.competitor.title, studio: clash.competitor.studio, big: clash.competitor.big, pct: clash.pct } : null,
       qaBugs: plan.extraBugs,
       cost: plan.cost,
       certFailed: plan.platforms.filter((x) => x.cert?.failed).map((x) => x.id),
     };
     const byPlatform = {};
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche, price: sc.price, audience: x.buyers });
+      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche, price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
-    state.fanTrust = +clamp(state.fanTrust + (review.score - FAN_TRUST.pivot) * FAN_TRUST.perPoint, 0, 100).toFixed(2);
+    const trust = launchTrust({ score: review.score, fanExpectation, hype, bugs: g.bugs + plan.extraBugs });
+    record.release.trust = trust;
+    state.fanTrust = +clamp(state.fanTrust + trust.total, 0, 100).toFixed(2);
     bus.emit('game:released', { record }); // first, so the reviews are shown before any rank-up they bring
     reputation.add(Math.max(0, review.score * FAME.release.perPoint - FAME.release.minus), `Released ${g.title}`);
     return record;
   }
 
   bus.on('clock:day', () => {
+    marketing.daily(); // Milestone 9: Hype fades and campaigns add theirs, before anything launches today
     // Certified games launch (Milestone 8).
     for (const record of games()) if (record.cert && clock.totalDays >= record.cert.launchDay) launch(record, record.cert.plan);
     for (const record of released()) {
@@ -241,11 +261,12 @@ export function createBusiness({ bus, clock, world, projects }) {
       return economy.inDebt;
     },
     platforms,
+    marketing,
     releasePlan,
     unreleased: () => games().filter((r) => !r.release && !r.cert),
     certifying: () => games().filter((r) => r.cert),
     released,
-    statusOf: (record) => (record.cert ? 'Certifying' : !record.release ? 'Not released' : statusOn(Math.max(0, record.sales.days - 1))),
+    statusOf: (record) => (record.cert ? 'Certifying' : !record.release ? 'Not released' : statusOn(Math.max(0, record.sales.days - 1), SALES_BALANCE, firstCurve(record))),
 
     // Ledger by game month (month 1 = days 0–27): { month, year, lines, byCategory, income, costs, net, endBalance }.
     months(daysPerMonth = clock.daysPerMonth) {
@@ -263,7 +284,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       return [...out.values()].sort((a, b) => b.index - a.index).map((e) => ({ ...e, net: e.income + e.costs, year: Math.floor(e.index / clock.monthsPerYear) + 1, month: (e.index % clock.monthsPerYear) + 1 }));
     },
 
-    serialize: () => ({ economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), state: { ...state } }),
+    serialize: () => ({ economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), marketing: marketing.serialize(), state: { ...state } }),
     load(data) {
       if (!data) {
         newGame(); // a save from before Milestone 4: start the books now
@@ -278,6 +299,7 @@ export function createBusiness({ bus, clock, world, projects }) {
         if (market.demandNow[sg.id] == null) market.demandNow[sg.id] = market.base[sg.id];
       }
       platforms.load(data.platforms);
+      marketing.load(data.marketing);
       Object.assign(state, data.state);
     },
   };

@@ -27,6 +27,9 @@ export const ASSETS = {
   // Milestone 5: the props that dress the studio, and the art pops (bug, idea, code, art, story, money burst, launch).
   ...Object.fromEntries(PROPS.map((p) => art('props', p.art))),
   ...Object.fromEntries([...['bug', 'breakthrough', 'code', 'art', 'story'].map((k) => DEV_POPS[k].art), 'dev_vfx_06', 'dev_vfx_08'].map((k) => art('vfx', k))),
+  // Milestone 9: marketing (the actions, Hype, Fan Trust) and the Marketing Wall (in STATIONS above).
+  ...Object.fromEntries(['business_ui_05', 'business_ui_06', 'business_ui_07', 'business_ui_08', 'business_ui_14'].map((k) => art('business', k))),
+  ...Object.fromEntries(['dev_ui_18', 'dev_ui_19'].map((k) => art('ui', k))),
   // Milestone 0 loader test (?screen=test): the placeholder PWA icon as the real image, and one deliberately missing file.
   m0Real: 'assets/branding/pwa/icon-192.png',
   m0Missing: 'assets/m0-missing-test.png',

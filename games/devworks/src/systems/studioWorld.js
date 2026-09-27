@@ -121,6 +121,28 @@ export function createStudioWorld({ bus, rng, debug }) {
     blockAll();
   }
 
+  // Add a station that opens later (Milestone 9: the Marketing Wall at Rank D): on its home spot, else the first free
+  // spot. Returns the station, or null when it is already here or no spot is free.
+  function addStation(id) {
+    const st = pool.find((s) => s.id === id);
+    if (!st || stationById(id)) return null;
+    st.fp = { ...st.def.fp };
+    stations.push(st);
+    const ok = (c, r) => !whyNot(st, c, r);
+    let spot = ok(st.fp.col, st.fp.row) ? { col: st.fp.col, row: st.fp.row } : null;
+    for (let r = 0; !spot && r < rows; r++) for (let c = 0; !spot && c < cols; c++) if (ok(c, r)) spot = { col: c, row: r };
+    if (!spot) {
+      stations.splice(stations.indexOf(st), 1);
+      return null;
+    }
+    st.fp = { ...st.fp, ...spot };
+    blockAll();
+    for (const w of workers) if (w.phase === 'toWork') goToWork(w); else if (w.phase === 'toBreak') goToBreak(w); // re-path round it
+    bus.emit('world:moved', { id, col: spot.col, row: spot.row });
+    debug?.log(`${st.def.name} placed at ${spot.col},${spot.row}`);
+    return st;
+  }
+
   // --- staff ---------------------------------------------------------------------------
   const staffSystem = new StaffSystem({
     rng,
@@ -271,6 +293,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     seatsOf,
     whyNot,
     moveStation,
+    addStation,
     goToWork,
     goToBreak,
     newGame,

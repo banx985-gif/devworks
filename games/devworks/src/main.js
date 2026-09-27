@@ -14,6 +14,9 @@
 // Gold decisions (Ship / Delay / Cut Feature / Outsource QA / Crunch): the clock stops and the decision sheet opens.
 // Milestone 8: the platform market (12 platforms, seeded install-base curves committed per run, Business → Platform
 // Market), release on one or more platforms (porting, QA overhead, certification that can fail and delay the launch).
+// Milestone 9: marketing (actions build each game's Hype; Hype sets Fan Expectation and sales; word of mouth; Fan
+// Trust in the top bar), the Marketing Planner (Business, Create, and the Marketing Wall placed at Rank D) and the
+// release calendar of competitor releases (on the planner and the release sheet).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -66,6 +69,8 @@ import { createProjectScreen } from './screens/ProjectScreen.js';
 import { createLedgerScreen } from './screens/LedgerScreen.js';
 import { createCatalogueScreen } from './screens/CatalogueScreen.js';
 import { createPlatformMarketScreen } from './screens/PlatformMarketScreen.js';
+import { createMarketingScreen } from './screens/MarketingScreen.js';
+import { openStations } from './systems/stationUnlocks.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -80,7 +85,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -245,6 +250,10 @@ const menus = createStudioMenus({
   },
   openScreen: (name) => router.go(name),
   toTitle: () => toTitle(),
+  runMarketing: (key, id) => {
+    sheet.close();
+    if (business.marketing.run(id, key)) debug.log(`marketing: ${id} for ${key}`);
+  },
   newGame: () => router.go('newProject'),
   openProject: () => router.go('project'),
   decide: (id) => decideNow(id),
@@ -287,6 +296,7 @@ const openStaff = (id) => router.go('staff', { id });
 const openStation = (id) => {
   if (id === makerId && projects.active) router.go('project');
   else if (id === shelfId) router.go('catalogue');
+  else if (world.stationById(id)?.def.planner) router.go('marketing'); // the Marketing Wall (Milestone 9)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -310,6 +320,7 @@ const topBarOptions = {
   stats: () => [
     { icon: TOP_ICONS.credits, text: business.credits.toLocaleString('en-GB'), color: business.inDebt ? COL.bad : COL.text },
     { icon: TOP_ICONS.tokens, text: String(business.tokens), gap: 20 },
+    { icon: 'dev_ui_19', text: String(Math.round(business.state.fanTrust)), gap: 20 }, // Fan Trust (Milestone 9)
     { text: `Rank ${business.rank.id}` },
   ],
   statsBad: () => business.inDebt, // Emergency Credit
@@ -441,6 +452,7 @@ async function playSlot(i) {
   profile.load(data.studio);
   clock.load(data.clock); // the saved speed is checked against the unlocks just loaded
   elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
+  checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
   sessionUsed = true;
@@ -663,6 +675,19 @@ bus.on('project:complete', ({ record }) => {
   });
 });
 
+// Stations that open with the rank (Milestone 9: the Marketing Wall at Rank D) are placed by themselves.
+function checkStations() {
+  for (const st of openStations(world, business.reputation.highestRankIndex)) {
+    beat = { entry: { title: `New station: ${st.def.name}!`, body: 'Tap it to plan your marketing.' }, age: 0 };
+    debug.log(`station opened: ${st.id}`);
+  }
+}
+bus.on('reputation:rankUp', () => started && checkStations());
+// A marketing action starts: a short banner.
+bus.on('marketing:run', ({ action, gain, title }) => {
+  beat = { entry: { title: `${action.name} started`, body: `${title}: +${Math.round(gain)} Hype over ${action.days} days` }, age: 0 };
+});
+
 // Released: the launch rocket takes off through confetti, then the four reviews come in one by one (big feedback:
 // waits until they are all shown, then a tap).
 const REVEAL = { first: 1.4, each: 0.6 };
@@ -671,7 +696,7 @@ bus.on('game:released', ({ record }) => {
   const r = record.release;
   feedback.show({
     title: 'Reviews are in!',
-    subtitle: `${record.result.title} · review score ${r.score} · on sale now on ${(r.platforms ?? [r.platform]).map((id) => platformById(id)?.name).join(', ')}`,
+    subtitle: `${record.result.title} · review score ${r.score} · on sale now on ${(r.platforms ?? [r.platform]).map((id) => platformById(id)?.name).join(', ')}${r.hype ? ` · Hype ${Math.round(r.hype)}, fans expected ${Math.round(r.fanExpectation)}` : ''}${r.trust ? ` · Fan Trust ${r.trust.total >= 0 ? '+' : '−'}${Math.abs(Math.round(r.trust.total))}` : ''}${r.clash ? ` · launch week hit by "${r.clash.title}"` : ''}`,
     accent: COL.gold,
     minShowSec: REVEAL.first + REVEAL.each * r.reviews.length + 0.3,
     onShow: () => {
@@ -921,6 +946,7 @@ const staffDetail = createStaffDetailScreen({
 });
 const ledger = createLedgerScreen({ layout, assets, business, topBar: subTopBar });
 const platformScreen = createPlatformMarketScreen({ layout, assets, business, clock, topBar: subTopBar });
+const marketingScreen = createMarketingScreen({ layout, assets, business, clock, topBar: subTopBar, dateLabel: (d) => clock.shortLabel(d), openRun: (key, id) => openMenu('market', { key, id }) });
 // ?debug=1 (Business sheet): run the next year at once, to watch the platform market move.
 function skipYear() {
   sheet.close();
@@ -954,7 +980,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -969,6 +995,7 @@ router
   .register('ledger', ledger)
   .register('catalogue', catalogueScreen)
   .register('platforms', platformScreen)
+  .register('marketing', marketingScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

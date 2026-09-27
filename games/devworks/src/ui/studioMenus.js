@@ -12,6 +12,8 @@
 //   business: Ledger, Catalogue and Platform Market (Milestone 8; ?debug=1 adds skip-a-year)
 //     with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
 //   release (Milestone 8): one or more platforms, porting / certification / QA overhead, launch day
+//   Milestone 9: Business and Create lead to the Marketing Planner; market ({ key, id }) confirms one marketing action;
+//   the release sheet shows the game's Hype, what fans expect, and the competitor releases in its launch month
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -21,10 +23,13 @@ import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
 import { RELEASE, ECONOMY, PROJECT_BALANCE, PLATFORM_BALANCE } from '../../data/balance.js';
 import { DECISIONS, DECISION_POINTS, scopeById } from '../../data/projects.js';
+import { actionById, CONVENTIONS } from '../../data/marketing.js';
+import { elementById } from '../../data/elements.js';
+import { fanExpectationFor } from '../systems/marketing.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -66,6 +71,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   projects().active
                     ? { id: 'current', label: 'Current project', sub: projectLine(), icon: 'dev_ui_07', onTap: openProject }
                     : { id: 'newGame', label: 'New Game', sub: 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame },
+                  ...(business().marketing.targets().length ? [{ id: 'marketing', label: 'Marketing', sub: marketingLine(), icon: 'business_ui_05', accent: C.progress, onTap: () => openScreen('marketing') }] : []),
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
@@ -93,6 +99,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           buttons: [
             { id: 'ledger', label: 'Ledger', sub: 'Money in and out', icon: 'dev_reward_01', onTap: () => openScreen('ledger') },
             { id: 'catalogue', label: 'Catalogue', sub: `${projects().catalogue.list().length} game${projects().catalogue.list().length === 1 ? '' : 's'}`, icon: 'dev_vfx_07', accent: C.progress, onTap: () => openScreen('catalogue') },
+            { id: 'marketing', label: 'Marketing Planner', sub: marketingLine() || 'Hype and the release calendar', icon: 'business_ui_05', onTap: () => openScreen('marketing') },
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
@@ -130,6 +137,15 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       if (plan.extraBugs) lines.push({ text: `Extra QA for ${chosen.length} platforms: +${plan.extraBugs} bug${plan.extraBugs === 1 ? '' : 's'} the reviews will see`, color: C.bad });
       lines.push({ text: plan.certDays ? `Certification takes ${plan.certDays} days: it launches ${dateOf(plan.launchDay)}` : 'No certification needed: it launches today', color: C.text });
     } else lines.push({ text: plan.why, color: C.bad });
+    // Milestone 9: Hype, what fans expect, and the competition in the launch month.
+    const mk = b.marketing;
+    const hype = mk.hypeOf(rec.jobId);
+    lines.push({ text: `Hype ${Math.round(hype)}: fans expect a review of about ${Math.round(fanExpectationFor(hype))}`, color: C.actionDark });
+    const launchDay = plan.ok ? plan.launchDay : day;
+    const comps = mk.competitors(mk.monthOf(launchDay));
+    const clash = mk.clashFor(rec.result.recipe?.genre, launchDay);
+    if (clash) lines.push({ text: `${clash.competitor.big ? 'Big' : 'Small'} ${elementById(clash.competitor.genre)?.name ?? ''} release that month: "${clash.competitor.title}" (${clash.competitor.studio}) cuts your launch week by ${clash.pct}%`, color: C.bad });
+    else lines.push({ text: comps.length ? `Launch month: ${comps.map((x) => `"${x.title}" (${elementById(x.genre)?.name ?? ''}${x.big ? ', big' : ''})`).join(', ')}, none in your genre` : 'No competitor releases in the launch month', color: C.textMuted });
     return {
       title: `Release "${rec.result.title}"`,
       subtitle: `${RELEASE_MODEL.name}. Pick one or more platforms.`,
@@ -149,6 +165,27 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         { lines },
         { columns: 1, buttons: [{ id: 'release', label: plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', disabled: !plan.ok, onTap: () => doRelease(number, chosen) }] },
       ],
+    };
+  });
+
+  // Run one marketing action (Milestone 9): what it costs and brings, then Run.
+  menus.register('market', (t) => {
+    const mk = business().marketing;
+    const game = mk.targetByKey(t?.key);
+    const o = mk.options(t?.key).find((x) => x.action.id === t?.id);
+    if (!game || !o) return null;
+    const a = o.action;
+    const lines = [
+      { text: `${a.cost.toLocaleString('en-GB')} Credits now · +${Math.round(o.gain)} Hype over ${a.days} days`, color: C.actionDark },
+      `Hype now ${Math.round(mk.hypeOf(game.key))}. More Hype sells more at launch, but fans expect more too.`,
+    ];
+    if (a.months) lines.push(`${CONVENTIONS[mk.monthOfYear()] ?? 'A show'} is on this month.`);
+    if (!o.ok) lines.push({ text: o.why, color: C.bad });
+    return {
+      title: `${a.name}: ${game.title}`,
+      subtitle: a.line,
+      art: a.art,
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'run', label: `Run ${a.name}`, sub: `${a.cost.toLocaleString('en-GB')} Credits`, disabled: !o.ok, onTap: () => runMarketing?.(game.key, a.id) }] }],
     };
   });
 
@@ -199,6 +236,11 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       ],
     }));
   }
+  // The Hype of the game being marketed (the one in the works first).
+  const marketingLine = () => {
+    const t = business().marketing.targets()[0];
+    return t ? `Hype ${Math.round(business().marketing.hypeOf(t.key))} · ${t.title}` : '';
+  };
   const projectLine = () => {
     const v = projects().view();
     return v ? `${v.title} · ${v.phaseName} ${Math.floor(v.phaseFrac * 100)}%` : '';

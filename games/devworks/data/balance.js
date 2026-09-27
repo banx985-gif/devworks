@@ -313,5 +313,38 @@ export const FAME = {
 };
 export const FAN_TRUST = { start: 50, pivot: 55, perPoint: 0.3 }; // release: + (review − 55) × 0.3, kept 0–100
 
+// --- Marketing, Hype, Fan Trust, the release calendar (Milestone 9, bible §21 / §30). All placeholders. ---
+// Hype (0–100) belongs to one game. Actions (data/marketing.js) add their Hype over their days, × (1 + boostPct %) for
+// the Marketing-Heavy focus (M7's hypePct) and the Marketing Wall (wallPct); Delay / Cut Feature take their M7 Hype
+// off at once. Before launch Hype fades by decayPct % a day (so a campaign just before launch counts most); at launch
+// it is frozen on the game.
+//   Fan Expectation = expectation.base + hype × expectation.perHype. The review contract's expectation penalty
+//     (REVIEW_BALANCE.expectationWeight) then bites: a weak game with big Hype reviews worse.
+//   Sales: lifetime × (1 + hype / 100 × hypeSalesPct / 100), and the launch spike's share grows by spikePerHype × hype
+//     / 100 (hyped games sell up front).
+//   Word of mouth: strength = clamp((review − wom.from) / (wom.full − wom.from), 0, 1) × (1 − hype / 100 × wom.hypeDamp).
+//     It adds a slow "word of mouth" part to the sales curve (share = strength × wom.share, rising for about wom.days
+//     and fading after), shrinks the launch spike (× 1 − strength × wom.quietSpike: nobody knew it was coming), stretches the decay and the tail (× 1 + strength × decayStretch / tailStretch) and adds
+//     strength × wom.bonusPct % to lifetime sales. A strong, quiet game keeps selling long after its launch month.
+//     With no Hype and a review under wom.from the curve is exactly the Milestone 4 one.
+// Fan Trust (studio, 0–100) at launch: the review (FAN_TRUST, below), − trust.bugPer × bugs over trust.bugFree (at
+// most trust.bugMax), − trust.overhypePer × how far the review falls short of Fan Expectation beyond
+// trust.overhypeGrace (at most trust.overhypeMax); + trust.metPer × hype / 100 when a hyped game meets its
+// expectation. Each Delay costs trust.delay at once.
+// Release calendar: every month gets 0–2 placeholder competitor releases (chances in `competitors.count`), each big
+// with chance `bigChance`. A launch in the same month as a same-genre release loses clash.bigPct % (big) or
+// clash.smallPct % (small) of its launch week (the first clash.days days).
+export const MARKETING_BALANCE = {
+  decayPct: 0.8,
+  wallPct: 10,
+  expectation: { base: 10, perHype: 0.8 },
+  hypeSalesPct: 50,
+  spikePerHype: 0.2,
+  wom: { from: 60, full: 85, hypeDamp: 0.85, share: 0.45, quietSpike: 0.5, days: 30, decayStretch: 0.6, tailStretch: 1, bonusPct: 35 },
+  trust: { bugFree: 5, bugPer: 0.4, bugMax: 8, overhypeGrace: 5, overhypePer: 0.3, overhypeMax: 12, metPer: 3, delay: 1.5 },
+  competitors: { count: [0.35, 0.45, 0.2], bigChance: 0.3 }, // chance of 0, 1, 2 releases in a month
+  clash: { days: 7, bigPct: 40, smallPct: 12 },
+};
+
 // Speed unlocks (bible §4): 2× after the first shipped game; 4× at Rank C or Year 4.
 export const SPEED_UNLOCKS = { 2: { shipped: 1 }, 4: { rank: 'C', year: 4 } };
