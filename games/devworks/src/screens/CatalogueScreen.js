@@ -5,6 +5,7 @@ import { THEME } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
+import { scopeById } from '../../data/projects.js';
 import { drawCover } from '../ui/gameCard.js';
 
 const C = THEME.color;
@@ -56,6 +57,9 @@ export function createCatalogueScreen({ layout, assets, business, projects, topB
       ctx.roundRect(tx, r.y + 88, chipW, 48, 24);
       ctx.fill();
       text(ctx, status, tx + chipW / 2, r.y + 112, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: C.textOnDark });
+      // Milestone 7: scope and schedule (games from before it have no deadline).
+      const sched = g.deadlineDay == null ? '' : g.lateDays ? ` · ${g.lateDays} days late` : ' · on time';
+      text(ctx, `${scopeById(g.scope)?.name ?? ''}${sched}`, tx + chipW + 16, r.y + 112, { size: S.small, bold: !!g.lateDays, color: g.lateDays ? C.bad : C.textMuted, baseline: 'middle', maxWidth: tw - chipW - 16 });
       if (rec.release) {
         assets.drawContained(ctx, 'dev_vfx_07', { x: tx, y: r.y + 150, w: 90, h: 52 });
         text(ctx, `Review ${rec.release.score}`, tx + 100, r.y + 176, { size: S.heading, bold: true, baseline: 'middle' });

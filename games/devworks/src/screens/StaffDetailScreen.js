@@ -12,7 +12,8 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 36;
 
-export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null }) {
+// history(id) → { crunchDays, crunches } (Milestone 7: crunch exposure) or null.
+export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null }) {
   let id = null;
   let scrollY = 0;
   let drag = null;
@@ -124,6 +125,14 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       const lines = wrapLines(def.text, cw, S.body);
       para(ctx, def.text, x, y, cw, { color: C.textMuted });
       y += lines.length * S.body * 1.3 + 24;
+    }
+
+    // Crunch exposure (Milestone 7): only shown once they have crunched.
+    const h = history(s.id);
+    if (h?.crunchDays) {
+      y = heading(ctx, 'Crunch', x, y);
+      text(ctx, `${h.crunchDays} crunch day${h.crunchDays === 1 ? '' : 's'} over ${h.crunches} crunch${h.crunches === 1 ? '' : 'es'}`, x, y, { color: C.bad, bold: true, maxWidth: cw });
+      y += 64;
     }
 
     // The Founding Developer (Milestone 5b): the permanent flag, the perk and the history so far.

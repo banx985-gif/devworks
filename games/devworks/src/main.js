@@ -10,6 +10,8 @@
 // Switching to another slot after one has been played reloads the page first, so no state crosses between studios.
 // Milestone 6: all 50 recipe elements, opened by rank / year / research (src/systems/elementUnlocks.js); the pickers
 // show why a locked one is locked; covers come from the recipe (30 families, data/covers.js).
+// Milestone 7: six scopes (Standard+ wait for studio stages), budget focus, a deadline with a seeded slip, and the Beta /
+// Gold decisions (Ship / Delay / Cut Feature / Outsource QA / Crunch): the clock stops and the decision sheet opens.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -37,7 +39,7 @@ import { createBottomBar } from '../../../core/ui/BottomBar.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
 import { drawToasts } from '../../../core/ui/Toast.js';
 import { ASSETS } from '../data/assets.js';
-import { CALENDAR } from '../data/balance.js';
+import { CALENDAR, PROJECT_BALANCE } from '../data/balance.js';
 import { BOTTOM_SLOTS, TOP_ICONS, BADGES } from '../data/home.js';
 import { SAVE } from '../data/save.js';
 import { FAMILIES, elementById } from '../data/elements.js';
@@ -96,11 +98,11 @@ const world = createStudioWorld({ bus, rng: studioRng, debug: log });
 const profile = createStudioProfile({ bus, clock }); // studio name, director, colour, founder + history (Milestone 5b)
 // Each day: the studio settles Energy and breaks, projects work (and pay), then released games sell — so the
 // three are created in that order.
-const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder() });
+const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.stationById('F06')?.def.effects?.scheduleVariancePct ?? 0 });
 const business = createBusiness({ bus, clock, world, projects });
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
-const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set() }) });
+const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set(), stage: 1 }) }); // studio stages: Milestones 11 / 22
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -239,6 +241,8 @@ const menus = createStudioMenus({
   toTitle: () => toTitle(),
   newGame: () => router.go('newProject'),
   openProject: () => router.go('project'),
+  decide: (id) => decideNow(id),
+  dateOf: (d) => clock.shortLabel(d),
   isUnlocked: (id) => elements.isOpen(id),
   lockReason: (id) => elements.reason(id),
   recipe: () => newProject.setup?.recipe ?? {},
@@ -249,6 +253,23 @@ const menus = createStudioMenus({
     sheet.close();
   },
 });
+// The Beta / Gold decision (Milestone 7): the clock stops and the sheet asks; the speed comes back after the choice.
+let speedBeforeDecision = null;
+function askDecision() {
+  if (speedBeforeDecision === null && !clock.paused) speedBeforeDecision = clock.speed;
+  clock.pause();
+  openMenu('decision');
+}
+bus.on('project:decision', () => askDecision());
+function decideNow(id) {
+  sheet.close();
+  const sp = speedBeforeDecision;
+  speedBeforeDecision = null;
+  if (sp) clock.setSpeed(sp); // first, so "Game finished!" (Ship at Gold) keeps the speed to come back to
+  if (!projects.decide(id)) return;
+  debug.log(`decision: ${id}`);
+  if (projects.decision) askDecision(); // Cut / Outsource at Gold: still to ship
+}
 function openMenu(kind, target) {
   const build = menus.for(kind, target);
   if (build) sheet.open(build);
@@ -271,6 +292,7 @@ bus.on('screen:change', () => sheet.close());
 let debugBadges = false;
 const BADGE_RULES = {
   lowCondition: () => world.workers.filter((w) => w.tiredIcon || w.staff.status.stressed).length,
+  decision: () => (projects.decision ? '!' : 0),
 };
 const badgeFor = (id) => (debugBadges ? (id === 'inbox' ? 1 : '!') : BADGE_RULES[BADGES[id]]?.() || null);
 
@@ -387,6 +409,7 @@ function reloadInto(intent) {
 function resume() {
   started = true;
   router.go('studio');
+  if (projects.decision) askDecision(); // saved while a Beta / Gold decision was waiting (Milestone 7)
 }
 
 // Play a slot: the one already open carries on; another one after a slot was open reloads the page first.
@@ -601,13 +624,19 @@ const newProject = createNewProjectScreen({
   topBar: subTopBar,
   textPrompt,
   openPicker: (family) => openMenu(`pick:${family}`),
+  scopeOpen: (id) => elements.scopeOpen(id),
+  scopeReason: (id) => elements.scopeReason(id),
+  estimate: (team, scope) => projects.estimate(team, scope),
+  dateLabel: (d) => clock.shortLabel(d),
+  today: () => clock.totalDays,
+  costPerDay: (scope, focus) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100)),
   onStart: (setup) => {
     projects.start(setup, studioRng);
     debug.log(`project started: ${setup.title}`);
     router.go('studio');
   },
 });
-const projectScreen = createProjectScreen({ layout, assets, world, projects, topBar: subTopBar });
+const projectScreen = createProjectScreen({ layout, assets, world, projects, topBar: subTopBar, dateLabel: (d) => clock.shortLabel(d), openDecision: () => askDecision() });
 
 // A finished game: the big result (pauses until tapped); the game itself is already in the catalogue.
 bus.on('project:complete', ({ record }) => {
@@ -617,7 +646,7 @@ bus.on('project:complete', ({ record }) => {
   const scope = SCOPES.find((x) => x.id === g.scope)?.name ?? '';
   feedback.show({
     title: 'Game finished!',
-    subtitle: `${g.title} · ${scope} game in ${record.days} days · ${g.bugs} bug${g.bugs === 1 ? '' : 's'} left`,
+    subtitle: `${g.title} · ${scope} game in ${record.days} days${g.deadlineDay == null ? '' : g.lateDays ? ` (${g.lateDays} days late)` : ' (on time)'} · ${g.bugs} bug${g.bugs === 1 ? '' : 's'} left`,
     accent: COL.good,
     drawFn: (ctx, t) => drawFinished(ctx, t, g),
     onAck: () => {
@@ -878,6 +907,7 @@ const staffDetail = createStaffDetailScreen({
   assets,
   world,
   topBar: subTopBar,
+  history: (id) => projects.staffHistory[id] ?? null,
   founderInfo: () => {
     const f = profile.founder();
     return f ? { ...f, flag: profile.data.founder.flag, history: profile.data.founder, years: profile.yearsEmployed() } : null;
@@ -906,7 +936,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

@@ -28,14 +28,14 @@ export const TIERS = {
   secret: { name: 'Secret', statCap: 650, traitSlots: 3 },
 };
 
-// Trait effects are not numbered in the bible: these are placeholders. Only energyLossPct and bugFixPct do anything
-// yet; the others wait for their systems.
+// Trait effects are not numbered in the bible: these are placeholders. energyLossPct and bugFixPct since Milestone 2;
+// outputBonus (Milestone 7): points added to a finished game's outputs when that person is on its core team.
 export const TRAITS = {
   bugHunter: { name: 'Bug Hunter', text: 'Spots bugs early: +10% bug fixing.', effects: { bugFixPct: 10 } },
-  goodFeel: { name: 'Good Feel', text: 'Games just feel right: +5 Fun on projects they design.', effects: { funBonus: 5 } },
+  goodFeel: { name: 'Good Feel', text: 'Games just feel right: +3 Gameplay on games they work on.', effects: { outputBonus: { gameplay: 3 } } },
   calmSchedule: { name: 'Calm Schedule', text: 'Stays calm under deadlines: loses 10% less Energy while working.', effects: { energyLossPct: -10 } },
-  strongShapes: { name: 'Strong Shapes', text: 'Bold, readable art: +5 Graphics on projects they draw.', effects: { graphicsBonus: 5 } },
-  sharpDialogue: { name: 'Sharp Dialogue', text: 'Lines that land: +5 Story on projects they write.', effects: { storyBonus: 5 } },
+  strongShapes: { name: 'Strong Shapes', text: 'Bold, readable art: +3 Graphics on games they work on.', effects: { outputBonus: { graphics: 3 } } },
+  sharpDialogue: { name: 'Sharp Dialogue', text: 'Lines that land: +3 Story on games they work on.', effects: { outputBonus: { story: 3 } } },
 };
 
 // The start staff (bible §10, fixed 26 Sept; plan review A1; Milestone 5b adds Niko and Sam). station = the facility

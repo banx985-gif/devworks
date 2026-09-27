@@ -109,6 +109,7 @@ export const STATIONS = [
     purpose: 'Keep the schedule on track: 5% less schedule slip.',
     fp: { col: 6, row: 5, w: 2, h: 2 },
     seats: [{ dc: 1, dr: 2 }],
+    effects: { scheduleVariancePct: -5 }, // Milestone 7: while it stands in the studio
   },
   {
     id: 'F08',

@@ -2,7 +2,11 @@
 // title and recipe, the five milestones with a bar each (done / now / to come), days so far, the live output
 // stats and bug count, breakthroughs, cost so far (tracked only; nothing is charged until Milestone 4) and the
 // team with what each lead is doing. Drag scrolls when it does not fit.
-import { THEME } from '../../../../core/Theme.js';
+// Milestone 7: the schedule (due date, on track / behind / late, crunch days left), the budget focus (a change waits
+// for the next milestone) and, when the game waits at Beta or Gold, a button for the decision.
+import { THEME, font } from '../../../../core/Theme.js';
+import { drawButton, hitRect } from '../../../../core/ui/Button.js';
+import { BUDGET_FOCUS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { text } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
@@ -13,7 +17,9 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
 
-export function createProjectScreen({ layout, assets, world, projects, topBar }) {
+export function createProjectScreen({ layout, assets, world, projects, topBar, dateLabel = (d) => `day ${d}`, openDecision = () => {} }) {
+  let rects = {}; // content-space tappable rects from the last drawn frame: id → { r, onTap }
+  const STATUS = { onTrack: ['On track', C.good], behind: ['Running behind', C.bad], late: ['Late', C.bad], none: ['No deadline (an older project)', C.textMuted] };
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -27,6 +33,14 @@ export function createProjectScreen({ layout, assets, world, projects, topBar })
     let y = PAD;
     text(ctx, v.title, PAD, y, { size: S.title, bold: true, maxWidth: cw });
     y += 76;
+    text(ctx, `${scopeById(v.scope)?.name ?? ''} game`, PAD, y, { size: S.small, color: C.textMuted });
+    y += 50;
+    if (v.decision) {
+      const r = { x: PAD, y, w: cw, h: 110 };
+      drawButton(ctx, r, `${DECISION_POINTS[v.decision.point]} decision: choose now`, { accent: C.action, font: font(S.body, true) });
+      rects.decide = { r, onTap: openDecision };
+      y += 140;
+    }
     drawRecipeIcons(ctx, assets, v.recipe, PAD, y, 100, 14);
     y += 130;
 
@@ -55,12 +69,49 @@ export function createProjectScreen({ layout, assets, world, projects, topBar })
     });
     y += 24;
 
+    // Schedule (Milestone 7).
+    text(ctx, 'Schedule', PAD, y, { size: S.heading, bold: true });
+    const [label, colour] = STATUS[v.status];
+    text(ctx, label, PAD + cw, y + 8, { size: S.body, bold: true, color: colour, align: 'right' });
+    y += 62;
+    if (v.deadlineDay != null) {
+      text(ctx, `Due ${dateLabel(v.deadlineDay)} · at this pace done ${dateLabel(Math.max(v.projectedDay, 0))}`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+      y += 50;
+    }
+    if (v.crunchLeft > 0) {
+      text(ctx, `Crunching: ${v.crunchLeft} more day${v.crunchLeft === 1 ? '' : 's'} (tiring, more bugs)`, PAD, y, { size: S.small, bold: true, color: C.bad, maxWidth: cw });
+      y += 50;
+    }
+    const notes = [v.cut && 'feature package cut', v.outsourced && 'QA outsourced'].filter(Boolean);
+    if (notes.length) {
+      text(ctx, notes.join(' · '), PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+      y += 50;
+    }
+    y += 14;
+
+    // Budget focus: a change waits for the next milestone (bible §12).
+    text(ctx, 'Budget focus', PAD, y, { size: S.heading, bold: true });
+    y += 62;
+    const third = (cw - 40) / 3;
+    BUDGET_FOCUS.forEach((b, i) => {
+      const r = { x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 };
+      const now = v.focus === b.id;
+      const next = v.pendingFocus === b.id;
+      drawButton(ctx, r, now ? `✓ ${b.name}` : next ? `→ ${b.name}` : b.name, { selected: now || next, accent: next ? C.action : C.progress, font: font(S.body, true) });
+      rects[`focus:${b.id}`] = { r, onTap: () => projects.setFocus(b.id) };
+    });
+    y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
+    const nowF = BUDGET_FOCUS.find((b) => b.id === v.focus);
+    const nextF = BUDGET_FOCUS.find((b) => b.id === v.pendingFocus);
+    text(ctx, nextF ? `${nextF.name} starts at the next milestone. Now: ${nowF.line}` : nowF.line, PAD, y, { size: S.small, color: nextF ? C.actionDark : C.textMuted, maxWidth: cw });
+    y += 70;
+
     // Output stats so far.
     text(ctx, 'Game so far', PAD, y, { size: S.heading, bold: true });
     text(ctx, `${v.breakthroughs} breakthrough${v.breakthroughs === 1 ? '' : 's'}`, PAD + cw, y + 8, { size: S.body, color: C.gold, align: 'right' });
     y += 62;
     y += drawOutputs(ctx, v.outputs, v.bugs, PAD, y, cw) + 20;
-    text(ctx, `Cost so far: ${v.cost.toLocaleString('en-GB')} Credits (not charged yet)`, PAD, y, { size: S.body, color: C.textMuted, maxWidth: cw });
+    text(ctx, `Cost so far: ${v.cost.toLocaleString('en-GB')} Credits`, PAD, y, { size: S.body, color: C.textMuted, maxWidth: cw });
     y += 70;
 
     // Team.
@@ -85,7 +136,22 @@ export function createProjectScreen({ layout, assets, world, projects, topBar })
       scroll.scrollY = 0;
     },
     onTap(p) {
-      topBar.handleTap(p);
+      if (topBar.handleTap(p) || !scroll.contains(p)) return;
+      const c = scroll.toContent(p);
+      Object.values(rects).find((x) => hitRect(c, x.r))?.onTap();
+    },
+    // Screen rect of a tappable thing (tests): 'decide', 'focus:lean'…
+    rectOf(id) {
+      const x = rects[id];
+      const pr = panelRect();
+      return x ? { x: pr.x + x.r.x, y: pr.y + x.r.y - scroll.scrollY, w: x.r.w, h: x.r.h } : null;
+    },
+    scrollTo(id) {
+      const x = rects[id];
+      if (x) {
+        scroll.scrollY = x.r.y - 40;
+        scroll.clamp();
+      }
     },
     render(ctx) {
       const r = panelRect();
@@ -98,6 +164,7 @@ export function createProjectScreen({ layout, assets, world, projects, topBar })
       ctx.stroke();
       const v = projects.view();
       scroll.begin(ctx);
+      rects = {};
       if (v) scroll.contentHeight = drawContent(ctx, v, r.w);
       else text(ctx, 'No game in the works. Start one from Create → New Game.', PAD, PAD, { size: S.body, color: C.textMuted, maxWidth: r.w - PAD * 2 });
       scroll.end(ctx);

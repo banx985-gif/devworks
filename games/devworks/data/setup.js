@@ -7,7 +7,7 @@
 //   statPct        the founder's `stat` counts this much more (progress and outputs)
 //   bugPct         bugs made on the project, % (Alex)
 //   outputBonus    points added to a finished game's outputs (Mina, Niko, Sam)
-//   scheduleVariancePct   Tess: kept for the schedule-variance system (none yet: projects don't slip until it exists)
+//   scheduleVariancePct   Tess: the schedule slip narrows by this % while she is on the team (Milestone 7)
 // team = the starting team (spec §3), founder first. Always 3.
 export const FOUNDERS = [
   {

@@ -7,6 +7,8 @@
 //   pick:<family>: the element list for one recipe slot (open ones pick; locked ones greyed with a padlock and the
 //     reason, Milestone 6; an open one that clashes with the recipe so far says what it needs)
 //   release (target = catalogue number): platform (OpenDesk PC only), price, release model, the Release button
+//   decision (Milestone 7): the Beta / Gold choice for the game in the works — Ship / Delay / Cut Feature /
+//     Outsource QA / Crunch, each with what it does; the ones not open now greyed with why
 //   business: Ledger and Catalogue, with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
@@ -15,11 +17,12 @@ import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
 import { ROLES } from '../../data/staff.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
-import { RELEASE, ECONOMY } from '../../data/balance.js';
+import { RELEASE, ECONOMY, PROJECT_BALANCE } from '../../data/balance.js';
+import { DECISIONS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
+export function createStudioMenus({ decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -57,9 +60,10 @@ export function createStudioMenus({ world, open, projects, business, newGame, op
                   ...business()
                     .unreleased()
                     .map((r) => ({ id: `release${r.number}`, label: `Release "${r.result.title}"`, sub: 'Finished and waiting', icon: r.result.cover, onTap: () => open('release', r.number) })),
+                  ...(projects().decision ? [{ id: 'decision', label: `${DECISION_POINTS[projects().decision.point]} decision needed`, sub: 'Your game waits for you', icon: 'dev_ui_07', accent: C.action, onTap: () => open('decision') }] : []),
                   projects().active
                     ? { id: 'current', label: 'Current project', sub: projectLine(), icon: 'dev_ui_07', onTap: openProject }
-                    : { id: 'newGame', label: 'New Game', sub: 'Tiny · about 2 months', icon: slot.icon, onTap: newGame },
+                    : { id: 'newGame', label: 'New Game', sub: 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame },
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
@@ -99,15 +103,44 @@ export function createStudioMenus({ world, open, projects, business, newGame, op
     const rec = projects().catalogue.get(number);
     if (!rec || rec.release) return null;
     const p = PLATFORMS.find((x) => x.id === RELEASE.platform);
-    const keep = (RELEASE.price * (100 - RELEASE.storeCutPct)) / 100;
+    const price = PROJECT_BALANCE.scopes[rec.result.scope]?.price ?? RELEASE.price; // Milestone 7: by scope
+    const keep = (price * (100 - RELEASE.storeCutPct)) / 100;
     return {
       title: `Release "${rec.result.title}"`,
       subtitle: `${RELEASE_MODEL.name}. The four outlets review it straight away.`,
       art: rec.result.cover,
       sections: [
         { title: 'Platform', columns: 1, buttons: [{ id: p.id, label: p.name, sub: `${p.audienceLabel} · ✓ Chosen`, icon: p.art, accent: C.progress, onTap: () => {} }] },
-        { lines: [`Price: ${RELEASE.price} Credits a copy. You keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`] },
+        { lines: [`${scopeById(rec.result.scope)?.name ?? ''} game. Price: ${price} Credits a copy. You keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`] },
         { columns: 1, buttons: [{ id: 'release', label: 'Release', sub: 'Reviews come in, then sales start', onTap: () => doRelease(number) }] },
+      ],
+    };
+  });
+
+  // The Beta / Gold decision (Milestone 7).
+  menus.register('decision', () => {
+    const p = projects();
+    const job = p.active;
+    const dec = p.decision;
+    if (!job || !dec) return null;
+    const v = p.view();
+    const late = v.deadlineDay == null ? '' : v.status === 'onTrack' ? 'On schedule' : `Due ${dateOf(v.deadlineDay)}: ${v.status === 'late' ? 'already late' : 'running behind'}`;
+    const D = PROJECT_BALANCE.decisions;
+    const extra = { outsource: ` Costs ${(PROJECT_BALANCE.scopes[v.scope].baseCostPerDay * D.outsource.costDays).toLocaleString('en-GB')} Credits.` };
+    const opts = p.options();
+    return {
+      title: `${DECISION_POINTS[dec.point]}: ${v.title}`,
+      subtitle: dec.point === 'beta' ? 'Alpha / Beta is done. How do you want to finish?' : 'Gold Master is done. Ship it, or keep working?',
+      accent: C.action,
+      sections: [
+        { lines: [{ text: `${v.bugs} bug${v.bugs === 1 ? '' : 's'} left · ${late}`, color: v.status === 'onTrack' ? C.text : C.bad }] },
+        {
+          columns: 1,
+          buttons: DECISIONS.map((d) => {
+            const o = opts.find((x) => x.id === d.id);
+            return { id: `decide:${d.id}`, label: d.name, sub: o.ok ? d[dec.point] + (extra[d.id] && o.ok ? extra[d.id] : '') : o.why, disabled: !o.ok, accent: d.id === 'ship' ? C.good : d.id === 'crunch' ? C.bad : C.progress, onTap: () => decide?.(d.id) };
+          }),
+        },
       ],
     };
   });

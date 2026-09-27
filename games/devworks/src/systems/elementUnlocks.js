@@ -4,12 +4,16 @@
 // nothing is researched, so research-locked elements stay locked (the picker shows why) unless ?debug=1's
 // "Unlock all" opens everything.
 //
+// Milestone 7: project scopes too. A scope opens with its studio stage (data/projects.js SCOPES.stage; stages come in
+// Milestones 11 / 22, so the studio is stage 1 until then) or with the debug unlock-all (a 'scope' action, saved).
+//
 // Events: 'elements:unlocked' { ids } (the ones that opened now, in catalogue order).
 import { UnlockRunner } from '../../../../core/UnlockActions.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 import { ELEMENTS, STARTING_UNLOCKED, elementById } from '../../data/elements.js';
 import { researchById } from '../../data/research.js';
 import { FAME } from '../../data/balance.js';
+import { SCOPES, STAGE_NAMES, scopeById } from '../../data/projects.js';
 
 // Is one unlock rule met? state: { rankIndex, year, researched: Set }.
 export function ruleMet(unlock, { rankIndex = 0, year = 1, researched = new Set() }) {
@@ -54,8 +58,18 @@ export function createElementUnlocks({ bus = null, state }) {
       if (ids.length && source !== 'start') bus?.emit('elements:unlocked', { ids });
       return ids;
     },
-    // ?debug=1: open all 50.
+    // Scopes (Milestone 7): open by studio stage, or by the debug unlock-all.
+    scopeOpen: (id) => {
+      const sc = scopeById(id);
+      return !!sc && ((state().stage ?? 1) >= sc.stage || runner.has('scope', id));
+    },
+    scopeReason: (id) => {
+      const sc = scopeById(id);
+      return sc && !api.scopeOpen(id) ? `Needs the ${STAGE_NAMES[sc.stage]} (studio stage ${sc.stage})` : null;
+    },
+    // ?debug=1: open all 50 elements and every scope.
     unlockAll() {
+      runner.run(SCOPES.map((sc) => ({ type: 'scope', id: sc.id })), 'debug');
       const fired = runner.run(ELEMENTS.map((e) => ({ type: 'element', id: e.id })), 'debug');
       if (fired.length) bus?.emit('elements:unlocked', { ids: fired.map((a) => a.id) });
       return fired.length;

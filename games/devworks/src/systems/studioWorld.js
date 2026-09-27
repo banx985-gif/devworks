@@ -135,7 +135,10 @@ export function createStudioWorld({ bus, rng, debug }) {
     // speed, so the same save and choices always give the same results (Milestone 3).
     planActivity: (s) => (onDuty(s.id) ? 'working' : 'resting'),
     restModifier: () => ({ energyMult: 1 + (breakArea?.def.effects?.restEnergyPct ?? 0) / 100 }),
+    // Milestone 7: projects can make work more tiring (Push Quality, Crunch): see setEnergyLossMultiplier.
+    energyLossMultiplier: (s) => energyLossExtra(s),
   });
+  let energyLossExtra = () => 1;
 
   const workers = []; // { kind: 'worker', id, staff, def, agent, station, breakSeat, phase }
   const workerById = (id) => workers.find((w) => w.id === id) ?? null;
@@ -273,6 +276,9 @@ export function createStudioWorld({ bus, rng, debug }) {
     newGame,
     serialize,
     load,
+    setEnergyLossMultiplier(fn) {
+      energyLossExtra = fn ?? (() => 1);
+    },
     get simTime() {
       return simTime;
     },

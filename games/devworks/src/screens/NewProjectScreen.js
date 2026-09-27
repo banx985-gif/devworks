@@ -4,6 +4,8 @@
 // Tiny uses 2–3. The Start button stays at the bottom, greyed until everything is filled in.
 // Milestone 6: a recipe must be legal — an element that needs another (a 3D look needs 3D technology) marks its slot
 // red, and Start says what to fix.
+// Milestone 7: six scopes (locked ones greyed, the reason under them), five budget focuses, and a line with how long
+// this team should take, the deadline and the daily cost. Fewer leads than a scope usually has still works (slower).
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -17,8 +19,9 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
 const TITLE_MAX = 28;
+const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0 }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -37,8 +40,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     else if (recipeProblems(setup.recipe).length) out.push('a recipe fix (see the red slot)');
     if (!setup.title.trim()) out.push('a title');
     const n = setup.team.length;
-    const { min, max } = scope().team;
-    if (n < min) out.push(`${min - n} more lead${min - n > 1 ? 's' : ''}`);
+    const { max } = scope().team;
+    if (!scopeOpen(setup.scope)) out.push('an open scope');
+    if (n < HARD_MIN) out.push(`${HARD_MIN - n} more lead${HARD_MIN - n > 1 ? 's' : ''}`);
     if (n > max) out.push(`${n - max} fewer lead${n - max > 1 ? 's' : ''}`);
     return out;
   };
@@ -123,15 +127,33 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     y += 3 * 170 + 30;
 
     // Scope, audio, budget.
-    heading('Scope', scope().line);
-    SCOPES.forEach((s, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, s.name, setup.scope === s.id, () => (setup.scope = s.id), { id: `scope:${s.id}` }));
-    y += 150; // chips are button height (110)
+    // Scope: three to a row; locked ones greyed, why under them. Then this team's estimate and deadline.
+    const third = (cw - 40) / 3;
+    const grid = (i) => ({ x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
+    heading('Scope');
+    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, locked: !scopeOpen(sc.id) }));
+    y += Math.ceil(SCOPES.length / 3) * 130 + 10;
+    const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
+    const lines = [{ t: scope().line, c: C.text }];
+    if (estimate && setup.team.length) {
+      const e = estimate(setup.team, setup.scope);
+      lines.push({ t: `This team: about ${Math.round(e.days)} days · due ${dateLabel(today() + e.deadlineDays)} · ${costPerDay(setup.scope, setup.budget)} Credits a day`, c: C.actionDark });
+    }
+    if (setup.team.length < scope().team.min) lines.push({ t: `Short-staffed: ${scope().name} usually has ${scope().team.min}–${scope().team.max} people. It still works, just slower.`, c: C.bad });
+    if (firstLocked) lines.push({ t: `${firstLocked.name} and up: ${scopeReason(firstLocked.id)?.replace('Needs', 'need') ?? 'locked'} and later stages.`, c: C.textMuted });
+    for (const l of lines) {
+      if (ctx) text(ctx, l.t, PAD, y, { size: S.small, color: l.c, maxWidth: cw });
+      y += 48;
+    }
+    y += 24;
     heading('Audio package', AUDIO_PACKAGES.find((a) => a.id === setup.audio).line);
     AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
     y += 150; // chips are button height (110)
-    heading('Budget focus', BUDGET_FOCUS.find((b) => b.id === setup.budget).line);
-    BUDGET_FOCUS.forEach((b, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
-    y += 150; // chips are button height (110)
+    heading('Budget focus');
+    BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
+    y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
+    if (ctx) text(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+    y += 72;
 
     // Core team: one lead slot per role.
     const { min, max } = scope().team;

@@ -34,17 +34,20 @@ export function statusOn(d, S = SALES_BALANCE) {
 }
 
 // Credits the studio keeps from one copy.
-export const netPerCopy = (R = RELEASE) => (R.price * (100 - R.storeCutPct)) / 100;
+// price: the game's own (Milestone 7: set by its scope), else the release default.
+export const netPerCopy = (R = RELEASE, price = R.price) => (price * (100 - R.storeCutPct)) / 100;
 
 // Start a game's sales at release. Returns the plain, saveable sales state.
-export function startSales({ score, fit, trust, demand, platform, reviewSeed, day }, S = SALES_BALANCE) {
+// Milestone 7: salesMult (bigger scopes reach more players) and price come from the game's scope.
+export function startSales({ score, fit, trust, demand, platform, reviewSeed, day, salesMult = 1, price = RELEASE.price }, S = SALES_BALANCE) {
   const audience = S.platforms[platform]?.audience ?? 0;
   const a = appeal({ score, fit, trust, demand }, S);
   return {
     platform,
     releasedDay: day,
     appeal: +a.toFixed(6),
-    lifetime: +lifetimeCopies(audience, a).toFixed(3),
+    lifetime: +(lifetimeCopies(audience, a) * salesMult).toFixed(3),
+    price,
     rng: new Rng(`${reviewSeed}|sales`).getState(),
     carry: 0,
     copies: 0,
@@ -62,7 +65,7 @@ export function sellDay(sales, S = SALES_BALANCE, R = RELEASE) {
   const exact = sales.lifetime * dayShare(sales.days, S) * wobble + sales.carry;
   const copies = Math.max(0, Math.floor(exact));
   sales.carry = +(exact - copies).toFixed(6);
-  const revenue = Math.round(copies * netPerCopy(R));
+  const revenue = Math.round(copies * netPerCopy(R, sales.price ?? R.price));
   sales.copies += copies;
   sales.revenue += revenue;
   sales.days++;

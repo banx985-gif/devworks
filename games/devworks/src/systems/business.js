@@ -13,7 +13,7 @@ import { EconomySystem } from '../../../../core/EconomySystem.js';
 import { ReputationSystem } from '../../../../core/ReputationSystem.js';
 import { MarketSystem } from '../../../../core/MarketSystem.js';
 import { Rng } from '../../../../core/Rng.js';
-import { ECONOMY, RELEASE, REVIEW_BALANCE, SALES_BALANCE, FAME, FAN_TRUST, SPEED_UNLOCKS } from '../../data/balance.js';
+import { PROJECT_BALANCE, ECONOMY, RELEASE, REVIEW_BALANCE, SALES_BALANCE, FAME, FAN_TRUST, SPEED_UNLOCKS } from '../../data/balance.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 import { PLATFORMS } from '../../data/platforms.js';
 import { reviewGame } from './reviews.js';
@@ -59,16 +59,17 @@ export function createBusiness({ bus, clock, world, projects }) {
     if (!record || record.release) return null;
     const g = record.result;
     const review = reviewGame(g, { fanExpectation: state.fanExpectation });
+    const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny; // Milestone 7: price and reach by scope
     record.release = {
       day: clock.totalDays,
       platform: RELEASE.platform,
-      price: RELEASE.price,
+      price: sc.price,
       model: 'selfDigital',
       reviews: review.outlets,
       score: review.score,
       fanExpectation: state.fanExpectation,
     };
-    record.sales = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(RELEASE.platform), platform: RELEASE.platform, reviewSeed: g.reviewSeed, day: clock.totalDays });
+    record.sales = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(RELEASE.platform), platform: RELEASE.platform, reviewSeed: g.reviewSeed, day: clock.totalDays, salesMult: sc.salesMult, price: sc.price });
     state.shipped++;
     state.fanTrust = +clamp(state.fanTrust + (review.score - FAN_TRUST.pivot) * FAN_TRUST.perPoint, 0, 100).toFixed(2);
     bus.emit('game:released', { record }); // first, so the reviews are shown before any rank-up they bring

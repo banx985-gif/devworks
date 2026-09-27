@@ -40,8 +40,52 @@ export const STAFF_BALANCE = {
 //   Cost (paid from Credits since Milestone 4): the audio package up front, then the scope's production cost every
 //     day the project runs. Salaries are paid monthly for everyone, project or not.
 export const PROJECT_BALANCE = {
+  // Scopes (Milestone 7, bible §12; plan review B: the bible gives no numbers). totalWork = progress needed (the three
+  // starters make about 2 a day, so Tiny ≈ 2 months, Small ≈ 4, Standard ≈ 7 with the same team; more staff = faster).
+  // baseCostPerDay = production cost each day (salaries are paid monthly). price and salesMult: bigger games sell for
+  // more and to more players. qualityBonus: points a finished game's outputs get from the extra content (not AUDIO).
+  // prodShift: bigger projects lean more on Production (the milestone role weights: every phase's weights × (1 −
+  // shift), then PROD + shift). complexity: added to the bug multiplier.
   scopes: {
-    tiny: { totalWork: 112, bugsPerDay: 0.4, baseCostPerDay: 30 }, // production costs; salaries are paid monthly
+    tiny: { totalWork: 112, bugsPerDay: 0.4, baseCostPerDay: 30, price: 12, salesMult: 1, qualityBonus: 0, prodShift: 0, complexity: 0 },
+    small: { totalWork: 210, bugsPerDay: 0.36, baseCostPerDay: 55, price: 18, salesMult: 1.6, qualityBonus: 3, prodShift: 0, complexity: 0.05 },
+    standard: { totalWork: 400, bugsPerDay: 0.4, baseCostPerDay: 110, price: 30, salesMult: 2.8, qualityBonus: 6, prodShift: 0.05, complexity: 0.1 },
+    large: { totalWork: 720, bugsPerDay: 0.45, baseCostPerDay: 220, price: 45, salesMult: 4.8, qualityBonus: 9, prodShift: 0.1, complexity: 0.2 },
+    blockbuster: { totalWork: 1150, bugsPerDay: 0.5, baseCostPerDay: 420, price: 60, salesMult: 8, qualityBonus: 12, prodShift: 0.15, complexity: 0.3 },
+    mega: { totalWork: 1700, bugsPerDay: 0.55, baseCostPerDay: 800, price: 70, salesMult: 12, qualityBonus: 15, prodShift: 0.2, complexity: 0.4 },
+  },
+  // Budget focus (bible §12, exact): costPct on the daily production cost; qualityPct on every output a phase builds
+  // (not AUDIO); innovationPct on INNOVATION only; bugPct on bugs made; energyPct on the team's working Energy loss;
+  // hypePct is stored on the game for Milestone 9 (Hype); variancePct widens the schedule slip. Each phase keeps the
+  // focus it started with: a change waits for the next milestone.
+  budgetFocus: {
+    lean: { costPct: -20, qualityPct: -8, bugPct: 5 },
+    balanced: {},
+    pushQuality: { costPct: 25, qualityPct: 10, energyPct: 10 },
+    marketingHeavy: { costPct: -5, hypePct: 15, bugPct: 3 },
+    experimental: { innovationPct: 12, variancePct: 8, bugPct: 8 },
+  },
+  // Recipe complexity (bible §20: bugs rise with complexity): added to the bug multiplier for each element used.
+  complexity: { TEC03: 0.08, TEC04: 0.15, TEC05: 0.12, TEC06: 0.2, TEC07: 0.12, TEC08: 0.15, ADR04: 0.08, FEA02: 0.05, FEA03: 0.15, FEA04: 0.2, FEA05: 0.08, FEA06: 0.12, FEA07: 0.1 },
+  // Schedule (Milestone 7). At the start the work is stretched by a seeded slip between min and max (so a project can
+  // come in early or late); the Producer founder perk (Tess, −5%) and the Producer Desk (F06, −5%) narrow it, the
+  // Experimental focus widens it. Deadline = the estimate for this team (their stats at full strength, ÷ dutyFactor
+  // for breaks) × (1 + buffer). Pressure: while the work is behind the calendar, bugs rise by pressureBugPct % × how
+  // far behind (as a fraction of the whole project).
+  schedule: { slip: { min: -0.08, max: 0.15 }, dutyFactor: 0.83, buffer: 0.08, pressureBugPct: 80 },
+  // The choices at Beta (end of Alpha / Beta) and Gold (end of Gold Master), bible §20. Ship carries on / finishes.
+  //   delay: Gold Master gets workPct % of the total work again (more fixing days) and +polish; hype for M9; maxUses
+  //   cut: the feature package is cut: its complexity goes, bugs −bugsPct %, remaining Gold work −workPct %,
+  //        INNOVATION −innovation; once
+  //   outsource: costs costDays × the scope's daily cost; bugs −bugsPct % at once, remaining Gold work −workPct %;
+  //        POLISH can't finish above polishCap (the supplier's quality); once
+  //   crunch: for `days` worked days progress +progressPct %, Energy loss +energyPct %, Morale moraleDay a day, bugs
+  //        +bugPct %; added to each worker's crunch history; never forced; Beta only (at Gold nothing is left to rush)
+  decisions: {
+    delay: { workPct: 8, polish: 3, hype: -5, maxUses: 2 }, // + POLISH points per delay
+    cut: { bugsPct: 30, workPct: 25, innovation: 4, hype: -8 },
+    outsource: { costDays: 20, bugsPct: 60, workPct: 40, polishCap: 72 },
+    crunch: { days: 14, progressPct: 50, energyPct: 30, moraleDay: -1.5, bugPct: 20 },
   },
   progressDivisor: 100,
   // Phases in order. weights: which staff stats drive progress (sum 1). emphasis: how much of each output this phase
@@ -157,7 +201,8 @@ export const REVIEW_BALANCE = {
     techPlay: { weights: { graphics: 1.6, polish: 1.5 }, bias: -1 }, // the tech one
   },
   jitter: 3, // ± points per outlet, from the review seed
-  bugPenalty: { tiny: { max: 25, scale: 10 } },
+  // Bigger games are judged with more patience for bugs (Milestone 7): the scale grows with the scope.
+  bugPenalty: { tiny: { max: 25, scale: 10 }, small: { max: 25, scale: 18 }, standard: { max: 27, scale: 32 }, large: { max: 29, scale: 55 }, blockbuster: { max: 31, scale: 90 }, mega: { max: 33, scale: 140 } },
   expectationWeight: 0.5,
   innovationPerPoint: 0.08,
   lowScore: 45, // below this the line names the weakest output instead of praising the best
