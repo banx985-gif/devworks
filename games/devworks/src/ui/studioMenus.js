@@ -9,7 +9,9 @@
 //   release (target = catalogue number): platform (OpenDesk PC only), price, release model, the Release button
 //   decision (Milestone 7): the Beta / Gold choice for the game in the works — Ship / Delay / Cut Feature /
 //     Outsource QA / Crunch, each with what it does; the ones not open now greyed with why
-//   business: Ledger and Catalogue, with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
+//   business: Ledger, Catalogue and Platform Market (Milestone 8; ?debug=1 adds skip-a-year)
+//     with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
+//   release (Milestone 8): one or more platforms, porting / certification / QA overhead, launch day
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -17,12 +19,12 @@ import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
 import { ROLES } from '../../data/staff.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
-import { RELEASE, ECONOMY, PROJECT_BALANCE } from '../../data/balance.js';
+import { RELEASE, ECONOMY, PROJECT_BALANCE, PLATFORM_BALANCE } from '../../data/balance.js';
 import { DECISIONS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -91,6 +93,8 @@ export function createStudioMenus({ decide = null, dateOf = (d) => `day ${d}`, w
           buttons: [
             { id: 'ledger', label: 'Ledger', sub: 'Money in and out', icon: 'dev_reward_01', onTap: () => openScreen('ledger') },
             { id: 'catalogue', label: 'Catalogue', sub: `${projects().catalogue.list().length} game${projects().catalogue.list().length === 1 ? '' : 's'}`, icon: 'dev_vfx_07', accent: C.progress, onTap: () => openScreen('catalogue') },
+            { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
+            ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
         },
         ...(toTitle ? [{ columns: 1, buttons: [{ id: 'mainMenu', label: 'Main Menu', sub: 'Saves your studio, then back to the title screen', icon: biz.icon, accent: C.progress, onTap: toTitle }] }] : []),
@@ -99,20 +103,51 @@ export function createStudioMenus({ decide = null, dateOf = (d) => `day ${d}`, w
   });
 
   // Release a finished game: one platform, one price, one release model for now.
+  // Release a finished game (Milestone 8): pick one or more platforms that are out now; the sheet shows each one's
+  // state, players, audience fit and certification, then the porting / certification cost, the QA overhead and when
+  // it launches. The picks are kept per game while the sheet is open.
+  const picks = new Map(); // catalogue number → [platform ids]
+  const fmt = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n.toLocaleString('en-GB'));
   menus.register('release', (number) => {
+    const b = business();
     const rec = projects().catalogue.get(number);
-    if (!rec || rec.release) return null;
-    const p = PLATFORMS.find((x) => x.id === RELEASE.platform);
+    if (!rec || rec.release || rec.cert) return null;
+    const day = today();
+    const active = b.platforms.active(day);
+    let chosen = (picks.get(number) ?? [RELEASE.platform]).filter((id) => active.some((x) => x.id === id));
+    if (!chosen.length && active.length) chosen = [active[0].id];
+    picks.set(number, chosen);
+    const plan = b.releasePlan(number, chosen, day);
     const price = PROJECT_BALANCE.scopes[rec.result.scope]?.price ?? RELEASE.price; // Milestone 7: by scope
     const keep = (price * (100 - RELEASE.storeCutPct)) / 100;
+    const toggle = (id) => {
+      const now = picks.get(number) ?? [];
+      picks.set(number, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
+    };
+    const lines = [`${scopeById(rec.result.scope)?.name ?? ''} game. ${price} Credits a copy; you keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`];
+    if (plan.ok) {
+      if (plan.cost) lines.push({ text: `Porting ${plan.portCost.toLocaleString('en-GB')} + certification ${plan.certFees.toLocaleString('en-GB')} = ${plan.cost.toLocaleString('en-GB')} Credits now`, color: C.actionDark });
+      if (plan.extraBugs) lines.push({ text: `Extra QA for ${chosen.length} platforms: +${plan.extraBugs} bug${plan.extraBugs === 1 ? '' : 's'} the reviews will see`, color: C.bad });
+      lines.push({ text: plan.certDays ? `Certification takes ${plan.certDays} days: it launches ${dateOf(plan.launchDay)}` : 'No certification needed: it launches today', color: C.text });
+    } else lines.push({ text: plan.why, color: C.bad });
     return {
       title: `Release "${rec.result.title}"`,
-      subtitle: `${RELEASE_MODEL.name}. The four outlets review it straight away.`,
+      subtitle: `${RELEASE_MODEL.name}. Pick one or more platforms.`,
       art: rec.result.cover,
       sections: [
-        { title: 'Platform', columns: 1, buttons: [{ id: p.id, label: p.name, sub: `${p.audienceLabel} · ✓ Chosen`, icon: p.art, accent: C.progress, onTap: () => {} }] },
-        { lines: [`${scopeById(rec.result.scope)?.name ?? ''} game. Price: ${price} Credits a copy. You keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`] },
-        { columns: 1, buttons: [{ id: 'release', label: 'Release', sub: 'Reviews come in, then sales start', onTap: () => doRelease(number) }] },
+        {
+          title: 'Platforms out now',
+          columns: 1,
+          buttons: active.map((pl) => {
+            const on = chosen.includes(pl.id);
+            const x = plan.platforms?.find((q) => q.id === pl.id) ?? b.releasePlan(number, [pl.id], day).platforms[0];
+            const fit = x.fit > 1.05 ? ' · good fit' : x.fit < 0.95 ? ' · weak fit' : '';
+            const cert = pl.open ? ' · no certification' : ` · certification ${PLATFORM_BALANCE.friendliness[pl.friendliness].certDays} days`;
+            return { id: pl.id, label: on ? `✓ ${pl.name}` : pl.name, sub: `${x.status}${x.niche > 1 ? ' (niche bonus)' : ''} · ${fmt(x.base)} players${fit}${cert}`, icon: pl.art, accent: on ? C.good : C.progress, onTap: () => toggle(pl.id) };
+          }),
+        },
+        { lines },
+        { columns: 1, buttons: [{ id: 'release', label: plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', disabled: !plan.ok, onTap: () => doRelease(number, chosen) }] },
       ],
     };
   });

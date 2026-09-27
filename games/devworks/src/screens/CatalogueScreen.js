@@ -14,7 +14,7 @@ const PAD = 32;
 const ROW_H = 330;
 const HEAD_H = 190;
 
-export function createCatalogueScreen({ layout, assets, business, projects, topBar, openRelease }) {
+export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease }) {
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -49,7 +49,7 @@ export function createCatalogueScreen({ layout, assets, business, projects, topB
       const tw = r.x + r.w - 20 - tx;
       text(ctx, g.title, tx, r.y + 24, { size: S.heading, bold: true, maxWidth: tw });
       const status = business.statusOf(rec);
-      const chip = { Selling: C.good, 'Long tail': C.progress, 'Not released': C.warn }[status];
+      const chip = { Selling: C.good, 'Long tail': C.progress, 'Not released': C.warn, Certifying: C.purple }[status];
       ctx.font = `bold ${S.small}px ${THEME.family}`;
       const chipW = ctx.measureText(status).width + 36;
       ctx.fillStyle = chip;
@@ -65,6 +65,10 @@ export function createCatalogueScreen({ layout, assets, business, projects, topB
         text(ctx, `Review ${rec.release.score}`, tx + 100, r.y + 176, { size: S.heading, bold: true, baseline: 'middle' });
         text(ctx, `${rec.sales.copies.toLocaleString('en-GB')} copies sold`, tx, r.y + 222, { size: S.body, maxWidth: tw });
         text(ctx, `${rec.sales.revenue.toLocaleString('en-GB')} Credits earned`, tx, r.y + 266, { size: S.body, color: C.good, bold: true, maxWidth: tw });
+      } else if (rec.cert) {
+        // Milestone 8: in certification until its launch day.
+        text(ctx, `In certification: launches ${dateLabel(rec.cert.launchDay)}`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
+        text(ctx, `${rec.cert.plan.platforms.map((x) => x.name).join(', ')}`, tx, r.y + 204, { size: S.small, color: C.textMuted, maxWidth: tw });
       } else {
         text(ctx, `Finished, ${g.bugs} bug${g.bugs === 1 ? '' : 's'} left`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
         drawButton(ctx, releaseRect(r), 'Release');
@@ -95,7 +99,7 @@ export function createCatalogueScreen({ layout, assets, business, projects, topB
       const w = panelRect().w;
       games().forEach((rec, i) => {
         const row = rowRect(i, w);
-        if (!rec.release && hitRect(q, row)) openRelease(rec.number);
+        if (!rec.release && !rec.cert && hitRect(q, row)) openRelease(rec.number);
       });
     },
     render(ctx) {

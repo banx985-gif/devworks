@@ -217,7 +217,13 @@ export const REVIEW_BALANCE = {
 // Each day's copies wobble by ± jitter from the game's own seeded sales state; fractions carry over to the next day.
 // Status: "Selling" while the spike + decay still sell more than the tail, then "Long tail".
 export const SALES_BALANCE = {
-  platforms: { P01: { audience: 2000, demand: { min: 85, max: 115 } } },
+  // audience: the old (Milestone 4) fixed P01 audience, still used by games that went on sale before Milestone 8.
+  // Since Milestone 8 a platform's buyers = its install base × PLATFORM_BALANCE.buyerPct. demand: the monthly market
+  // (core MarketSystem, one segment per platform).
+  platforms: {
+    P01: { audience: 2000, demand: { min: 85, max: 115 } },
+    ...Object.fromEntries(['P02', 'P03', 'P04', 'P05', 'P06', 'P07', 'P08', 'P09', 'P10', 'P11', 'P12'].map((id) => [id, { demand: { min: 80, max: 120 } }])),
+  },
   market: { drift: 8, trendChance: 0.15, trendSegments: [1, 1], trendShift: 10, trendMonths: [1, 2], floor: 60, ceiling: 140 },
   curve: {
     spike: { share: 0.3, days: 5 },
@@ -231,6 +237,65 @@ export const SALES_BALANCE = {
   trustBase: 0.8,
   trustPer: 0.004,
   jitter: 0.15,
+};
+
+// --- Platform market (Milestone 8, bible §17). The bible gives the table, not the numbers: all placeholders. ---
+// Install base (players who own the platform), from src/systems/platformMarket.js:
+//   y = years since the start of the calendar; the era runs from (from − 1) to `to`, both moved by the run's committed
+//   shift (whole months). u = how far through its era (0–1).
+//   normal:  u < growthEnd: startShare → 1 (smooth);  up to peakEnd: 1 (Peak);  to the era's end: down to endShare
+//            (Declining);  after it: Dead (no new releases; the base keeps fading by fadeYears)
+//   evergreen (to: null): startShare → 1 over the years (1 − e^(−years / evergreenYears)); Growing, then Peak for good
+//   base = peak × shape × the run's committed success (success.min–max; P01, the open PC, never varies)
+// Committed at the start of a run from its own seed and saved, so a reload never changes a platform's fortunes.
+// Sales: a platform's buyers = install base on release day × buyerPct; × the genre's fit with the platform's audience
+// (genreFit, 1 = neutral); × (1 + nicheBonusPct %) on Declining hardware (few new games: bible §17 niche).
+// Multi-platform: every platform after the first costs portDays × the scope's daily cost × the friendliness's portMult
+// and adds qaBugsPct % of the game's bugs (at least 1) — the reviews see them. Certification (not on open platforms):
+// certDays and a fee by friendliness, failChance to fail once (seeded from the game and platform: a reload never
+// changes it), which adds failDelay days. The game launches everywhere when the slowest platform passes.
+export const PLATFORM_BALANCE = {
+  buyerPct: 0.1,
+  shape: { growthEnd: 0.35, peakEnd: 0.6, endShare: 0.3, fadeYears: 1 },
+  evergreenYears: 4,
+  success: { min: 0.75, max: 1.3 },
+  shiftMonths: 4, // an era can start and end up to this many months early or late
+  platforms: {
+    P01: { peak: 60000, startShare: 0.3333, fixed: true }, // 20,000 players on day one = the Milestone 4 audience of 2,000
+    P02: { peak: 70000, startShare: 0.35 },
+    P03: { peak: 110000, startShare: 0.3 },
+    P04: { peak: 90000, startShare: 0.2 },
+    P05: { peak: 140000, startShare: 0.2 },
+    P06: { peak: 230000, startShare: 0.2 },
+    P07: { peak: 170000, startShare: 0.2 },
+    P08: { peak: 210000, startShare: 0.2 },
+    P09: { peak: 330000, startShare: 0.2 },
+    P10: { peak: 250000, startShare: 0.2 },
+    P11: { peak: 400000, startShare: 0.15 },
+    P12: { peak: 360000, startShare: 0.15 },
+  },
+  nicheBonusPct: 25,
+  friendliness: {
+    'Very High': { certDays: 2, certFee: 150, failChance: 0.05, portMult: 0.6 },
+    High: { certDays: 4, certFee: 300, failChance: 0.1, portMult: 0.8 },
+    Medium: { certDays: 7, certFee: 500, failChance: 0.2, portMult: 1.1 },
+  },
+  failDelay: { min: 3, max: 6 },
+  portDays: 10,
+  qaBugsPct: 10,
+  // Genre × platform audience: how well a genre sells to each audience (1 = neutral).
+  genreFit: {
+    GEN01: { kidsCasual: 1.3, allAges: 1.2, core: 0.9, coreHardcore: 0.8, casualCore: 1.1 }, // Platformer
+    GEN02: { kidsCasual: 0.8, allAges: 1, core: 1.2, coreHardcore: 1.2, casualCore: 1 }, // RPG
+    GEN03: { kidsCasual: 0.6, allAges: 0.8, core: 1.1, coreHardcore: 1.3, casualCore: 0.9 }, // Strategy
+    GEN04: { kidsCasual: 0.9, allAges: 1, core: 1, coreHardcore: 1.2, casualCore: 1.1 }, // Simulation
+    GEN05: { kidsCasual: 1, allAges: 1.1, core: 1.2, coreHardcore: 1, casualCore: 1 }, // Racing
+    GEN06: { kidsCasual: 0.9, allAges: 1, core: 1.3, coreHardcore: 1.1, casualCore: 1 }, // Action
+    GEN07: { kidsCasual: 1, allAges: 1.1, core: 1, coreHardcore: 1, casualCore: 1 }, // Adventure
+    GEN08: { kidsCasual: 1.3, allAges: 1.1, core: 0.8, coreHardcore: 1, casualCore: 1.3 }, // Puzzle
+    GEN09: { kidsCasual: 1, allAges: 1.3, core: 1.1, coreHardcore: 0.8, casualCore: 1.1 }, // Sports
+    GEN10: { kidsCasual: 0.5, allAges: 0.8, core: 1.2, coreHardcore: 1.2, casualCore: 0.9 }, // Horror
+  },
 };
 
 // Fame and Fan Trust (bible §21) and ranks (bible §8). The rank never drops (core ReputationSystem).

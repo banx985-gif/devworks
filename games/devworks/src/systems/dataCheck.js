@@ -7,7 +7,8 @@ import { DataValidator } from '../../../../core/DataValidator.js';
 import { FAMILIES, ELEMENTS, STARTING_UNLOCKED, elementsOf } from '../../data/elements.js';
 import { COVER_FAMILIES, PARKED_COVERS, FILED_COVERS, coverArt, coverFamilyFor, coverFor } from '../../data/covers.js';
 import { RESEARCH } from '../../data/research.js';
-import { REVIEW_BALANCE, FAME } from '../../data/balance.js';
+import { REVIEW_BALANCE, FAME, PLATFORM_BALANCE, SALES_BALANCE } from '../../data/balance.js';
+import { PLATFORMS } from '../../data/platforms.js';
 import { OUTPUTS } from '../../data/projects.js';
 
 // Element icons still parked in assets/images/_spares (shown as placeholders on purpose).
@@ -97,5 +98,25 @@ export function checkGameData({ fetchFn } = {}) {
     }
   }
   for (const f of COVER_FAMILIES) if (!f.override) v.check(reached.has(f.id), `cover ${f.id}: no recipe ever picks it`);
+  // Platforms (Milestone 8): the 12 of bible §17, each with its numbers, a known audience group and friendliness, a
+  // sane era, market demand, and its picture.
+  const P = PLATFORM_BALANCE;
+  v.uniqueIds('platforms', PLATFORMS);
+  v.check(PLATFORMS.length === 12, `platforms: ${PLATFORMS.length}, the bible has 12`);
+  const groups = new Set(Object.keys(P.genreFit.GEN01));
+  for (const pl of PLATFORMS) {
+    const o = `platform ${pl.id}`;
+    const d = P.platforms[pl.id];
+    if (v.check(!!d, `${o}: no balance numbers`)) v.check(d.peak > 0 && d.startShare > 0 && d.startShare <= 1, `${o}: bad peak / startShare`);
+    v.ref(o, 'audience group', pl.group, groups);
+    v.ref(o, 'friendliness', pl.friendliness, new Set(Object.keys(P.friendliness)));
+    v.check(Number.isInteger(pl.era.from) && pl.era.from >= 1 && (pl.era.to == null || pl.era.to > pl.era.from), `${o}: bad era`);
+    v.check(!!SALES_BALANCE.platforms[pl.id]?.demand, `${o}: no market demand range`);
+    v.art(o, `assets/images/platforms/${pl.art}.png`);
+  }
+  for (const g of elementsOf('genre')) {
+    const f = P.genreFit[g.id];
+    if (v.check(!!f, `platform fit: none for ${g.id}`)) for (const k of groups) v.check(f[k] > 0 && f[k] <= 2, `platform fit ${g.id}.${k}`);
+  }
   return v;
 }

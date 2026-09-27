@@ -12,6 +12,8 @@
 // show why a locked one is locked; covers come from the recipe (30 families, data/covers.js).
 // Milestone 7: six scopes (Standard+ wait for studio stages), budget focus, a deadline with a seeded slip, and the Beta /
 // Gold decisions (Ship / Delay / Cut Feature / Outsource QA / Crunch): the clock stops and the decision sheet opens.
+// Milestone 8: the platform market (12 platforms, seeded install-base curves committed per run, Business → Platform
+// Market), release on one or more platforms (porting, QA overhead, certification that can fail and delay the launch).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -63,6 +65,8 @@ import { createNewProjectScreen } from './screens/NewProjectScreen.js';
 import { createProjectScreen } from './screens/ProjectScreen.js';
 import { createLedgerScreen } from './screens/LedgerScreen.js';
 import { createCatalogueScreen } from './screens/CatalogueScreen.js';
+import { createPlatformMarketScreen } from './screens/PlatformMarketScreen.js';
+import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
 import { createRouteTestScreen } from './screens/RouteTestScreen.js';
@@ -76,7 +80,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -232,10 +236,12 @@ const menus = createStudioMenus({
   open: (kind, target) => openMenu(kind, target),
   projects: () => projects,
   business: () => business,
-  doRelease: (number) => {
+  today: () => clock.totalDays,
+  debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
+  doRelease: (number, ids) => {
     sheet.close();
-    const rec = business.release(number);
-    if (rec) debug.log(`released: ${rec.result.title} (review ${rec.release.score})`);
+    const rec = business.release(number, ids);
+    if (rec) debug.log(rec.release ? `released: ${rec.result.title} (review ${rec.release.score})` : `certifying: ${rec.result.title}`);
   },
   openScreen: (name) => router.go(name),
   toTitle: () => toTitle(),
@@ -448,7 +454,7 @@ async function startStudio(i, setup) {
   if (sessionUsed) return reloadInto({ action: 'new', slot: i, setup });
   const founder = founderById(setup.founder);
   world.newGame(founder.team.map(startStaffById));
-  business.newGame();
+  business.newGame({ seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // the run's platform market seed
   elements.newGame();
   profile.create(setup);
   slot = slots.slot(i);
@@ -665,7 +671,7 @@ bus.on('game:released', ({ record }) => {
   const r = record.release;
   feedback.show({
     title: 'Reviews are in!',
-    subtitle: `${record.result.title} · review score ${r.score} · on sale now on OpenDesk PC`,
+    subtitle: `${record.result.title} · review score ${r.score} · on sale now on ${(r.platforms ?? [r.platform]).map((id) => platformById(id)?.name).join(', ')}`,
     accent: COL.gold,
     minShowSec: REVEAL.first + REVEAL.each * r.reviews.length + 0.3,
     onShow: () => {
@@ -914,7 +920,19 @@ const staffDetail = createStaffDetailScreen({
   },
 });
 const ledger = createLedgerScreen({ layout, assets, business, topBar: subTopBar });
-const catalogueScreen = createCatalogueScreen({ layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n) });
+const platformScreen = createPlatformMarketScreen({ layout, assets, business, clock, topBar: subTopBar });
+// ?debug=1 (Business sheet): run the next year at once, to watch the platform market move.
+function skipYear() {
+  sheet.close();
+  for (let i = 0; i < clock.daysPerMonth * clock.monthsPerYear; i++) clock.advanceDay();
+  debug.log(`skipped to Year ${clock.year}`);
+  router.go('platforms');
+}
+// Sent to certification: a short banner with the launch day.
+bus.on('game:certifying', ({ record }) => {
+  beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
+});
+const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n) });
 
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
@@ -936,7 +954,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -950,6 +968,7 @@ router
   .register('project', projectScreen)
   .register('ledger', ledger)
   .register('catalogue', catalogueScreen)
+  .register('platforms', platformScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

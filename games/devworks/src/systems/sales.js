@@ -39,8 +39,7 @@ export const netPerCopy = (R = RELEASE, price = R.price) => (price * (100 - R.st
 
 // Start a game's sales at release. Returns the plain, saveable sales state.
 // Milestone 7: salesMult (bigger scopes reach more players) and price come from the game's scope.
-export function startSales({ score, fit, trust, demand, platform, reviewSeed, day, salesMult = 1, price = RELEASE.price }, S = SALES_BALANCE) {
-  const audience = S.platforms[platform]?.audience ?? 0;
+export function startSales({ score, fit, trust, demand, platform, reviewSeed, day, salesMult = 1, price = RELEASE.price, audience = S.platforms[platform]?.audience ?? 0 }, S = SALES_BALANCE) {
   const a = appeal({ score, fit, trust, demand }, S);
   return {
     platform,
