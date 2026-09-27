@@ -11,8 +11,8 @@ import { REVIEW_BALANCE, FAME, PLATFORM_BALANCE, SALES_BALANCE } from '../../dat
 import { PLATFORMS } from '../../data/platforms.js';
 import { OUTPUTS } from '../../data/projects.js';
 
-// Element icons still parked in assets/images/_spares (shown as placeholders on purpose).
-export const PARKED_ELEMENTS = ['element_gen01', 'element_ply08'];
+// Element icons parked in assets/images/_spares (shown as placeholders on purpose). None since the 27 Sept redraws.
+export const PARKED_ELEMENTS = [];
 
 export function checkGameData({ fetchFn } = {}) {
   const v = new DataValidator(fetchFn ? { fetchFn } : {});

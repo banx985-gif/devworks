@@ -17,7 +17,7 @@ export const ASSETS = {
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),
-  // Game projects (Milestone 3): all 50 element icons; every filed cover family (Milestone 6: 26 of 30, parked ones
+  // Game projects (Milestone 3): all 50 element icons; every filed cover family (Milestone 6; all 30 since 27 Sept — parked ones
   // are never asked for — they show a fallback family's picture).
   ...Object.fromEntries(ELEMENTS.map((e) => art('elements', e.art))),
   ...Object.fromEntries(FILED_COVERS.map((k) => art('covers', k))),

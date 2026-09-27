@@ -47,8 +47,8 @@ export const COVER_FAMILIES = [
   { id: 'cover_30', name: 'Perfect Game', override: true },
 ];
 
-// Still parked in assets/images/_spares (not filed yet): shown as their fallback family.
-export const PARKED_COVERS = ['cover_01', 'cover_20', 'cover_25', 'cover_28'];
+// Parked art (in assets/images/_spares, not filed yet) is shown as its fallback family. All 30 filed 27 Sept (redraws).
+export const PARKED_COVERS = [];
 
 export const coverFamilyById = (id) => COVER_FAMILIES.find((f) => f.id === id) ?? null;
 
