@@ -1,6 +1,7 @@
 // Staff detail (Milestone 2), from a roster card or by tapping a worker in the studio: portrait, name, role, tier,
 // level / XP, salary, what they are doing now, Energy / Morale, the five work stats (bar against the tier's cap;
 // the role's main stat is marked) and traits with what they do. Drag scrolls when it does not fit.
+// Milestone 5b: the Founding Developer gets their flag, founder perk and history (years, games credited) at the end.
 import { THEME, font } from '../../../../core/Theme.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
@@ -11,7 +12,7 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 36;
 
-export function createStaffDetailScreen({ layout, assets, world, topBar }) {
+export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null }) {
   let id = null;
   let scrollY = 0;
   let drag = null;
@@ -123,6 +124,35 @@ export function createStaffDetailScreen({ layout, assets, world, topBar }) {
       const lines = wrapLines(def.text, cw, S.body);
       para(ctx, def.text, x, y, cw, { color: C.textMuted });
       y += lines.length * S.body * 1.3 + 24;
+    }
+
+    // The Founding Developer (Milestone 5b): the permanent flag, the perk and the history so far.
+    const f = founderInfo();
+    if (f && f.id === s.id) {
+      y += 10;
+      ctx.font = font(S.body, true);
+      const chipW = ctx.measureText(`★ ${f.flag}`).width + 40;
+      ctx.fillStyle = C.panelGold;
+      ctx.strokeStyle = C.gold;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(x, y, chipW, 58, 29);
+      ctx.fill();
+      ctx.stroke();
+      text(ctx, `★ ${f.flag}`, x + 20, y + 10, { bold: true, color: C.gold });
+      y += 74;
+      text(ctx, f.perk.name, x, y, { bold: true });
+      y += 48;
+      y += para(ctx, f.perk.text, x, y, cw, { color: C.textMuted }) + 12;
+      const games = f.history.gamesCredited.length;
+      const lines = [
+        `${f.history.continuous ? 'With the studio since day one' : 'Left the studio'} · ${f.years.toFixed(1)} years`,
+        `Games credited: ${games}`,
+      ];
+      for (const line of lines) {
+        text(ctx, line, x, y, { color: C.actionDark, bold: true, maxWidth: cw });
+        y += 50;
+      }
     }
     return y + PAD - y0;
   }

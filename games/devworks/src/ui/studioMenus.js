@@ -6,7 +6,7 @@
 //     Create: "New Game" (or "Current project" while one is running) and the Starter Desks
 //   pick:<family>: the element list for one recipe slot (open ones pick; locked ones greyed with a padlock)
 //   release (target = catalogue number): platform (OpenDesk PC only), price, release model, the Release button
-//   business: Ledger and Catalogue, with the balance, Fame, rank and Fan Trust
+//   business: Ledger and Catalogue, with the balance, Fame, rank and Fan Trust; Main Menu (saves first, Milestone 5b)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -18,7 +18,7 @@ import { RELEASE, ECONOMY } from '../../data/balance.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ world, open, projects, business, newGame, openProject, isUnlocked, onPick, picked, doRelease, openScreen }) {
+export function createStudioMenus({ world, open, projects, business, newGame, openProject, isUnlocked, onPick, picked, doRelease, openScreen, toTitle = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -87,6 +87,7 @@ export function createStudioMenus({ world, open, projects, business, newGame, op
             { id: 'catalogue', label: 'Catalogue', sub: `${projects().catalogue.list().length} game${projects().catalogue.list().length === 1 ? '' : 's'}`, icon: 'dev_vfx_07', accent: C.progress, onTap: () => openScreen('catalogue') },
           ],
         },
+        ...(toTitle ? [{ columns: 1, buttons: [{ id: 'mainMenu', label: 'Main Menu', sub: 'Saves your studio, then back to the title screen', icon: biz.icon, accent: C.progress, onTap: toTitle }] }] : []),
       ],
     };
   });

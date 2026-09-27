@@ -5,7 +5,7 @@
 // status icons over a worker's head.
 import { THEME, font } from '../../../../core/Theme.js';
 import { STATIONS, STUDIO } from '../../data/studio.js';
-import { STARTERS } from '../../data/staff.js';
+import { START_STAFF } from '../../data/staff.js';
 import { TOP_ICONS, STATUS_ICONS } from '../../data/home.js';
 import { ELEMENTS } from '../../data/elements.js';
 import { COVER_BY_GENRE, DEFAULT_COVER } from '../../data/covers.js';
@@ -18,7 +18,7 @@ export function registerPlaceholders(assets) {
     const { w: fw, h: fh } = st.fp;
     assets.setFallback(st.art, (ctx, x, y, w, h) => drawDeskBlock(ctx, x, y, w, h, fw, fh, st.name), { aspect: (fw + fh) / ((fw + fh) / 2 + DESK_H) });
   }
-  for (const def of STARTERS) assets.setFallback(def.art, (ctx, x, y, w, h) => drawPerson(ctx, x, y, w, h, def.name.split(' ')[0]), { aspect: PERSON_ASPECT });
+  for (const def of START_STAFF) assets.setFallback(def.art, (ctx, x, y, w, h) => drawPerson(ctx, x, y, w, h, def.name.split(' ')[0]), { aspect: PERSON_ASPECT });
   assets.setFallback(TOP_ICONS.credits, drawCoin);
   assets.setFallback(TOP_ICONS.tokens, drawGem);
   assets.setFallback(STATUS_ICONS.tired, drawTired);

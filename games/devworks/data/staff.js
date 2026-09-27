@@ -1,5 +1,6 @@
-// DEVWORKS staff content (Milestone 2): stats, roles, tiers, traits and the three starters. Plain data only.
-// Bible §9 (system) and §10 (roster). Only the starting team is here; candidates and the other 47 come later.
+// DEVWORKS staff content (Milestone 2): stats, roles, tiers, traits and the start staff. Plain data only.
+// Bible §9 (system) and §10 (roster). Milestone 5b: all five start staff (one per role, any of them can found the
+// studio) are here; the starting team comes from the founder picked (data/setup.js). The other 45 come later.
 
 // The five work stats, in display order. Visible range 1–999.
 export const STATS = [
@@ -27,16 +28,19 @@ export const TIERS = {
   secret: { name: 'Secret', statCap: 650, traitSlots: 3 },
 };
 
-// Trait effects are not numbered in the bible: these are placeholders. Only energyLossPct does anything yet
-// (core StaffSystem reads it); the others wait for projects and bugs.
+// Trait effects are not numbered in the bible: these are placeholders. Only energyLossPct and bugFixPct do anything
+// yet; the others wait for their systems.
 export const TRAITS = {
   bugHunter: { name: 'Bug Hunter', text: 'Spots bugs early: +10% bug fixing.', effects: { bugFixPct: 10 } },
   goodFeel: { name: 'Good Feel', text: 'Games just feel right: +5 Fun on projects they design.', effects: { funBonus: 5 } },
   calmSchedule: { name: 'Calm Schedule', text: 'Stays calm under deadlines: loses 10% less Energy while working.', effects: { energyLossPct: -10 } },
+  strongShapes: { name: 'Strong Shapes', text: 'Bold, readable art: +5 Graphics on projects they draw.', effects: { graphicsBonus: 5 } },
+  sharpDialogue: { name: 'Sharp Dialogue', text: 'Lines that land: +5 Story on projects they write.', effects: { storyBonus: 5 } },
 };
 
-// The starting team (bible §10, fixed 26 Sept; plan review A1). station = the facility they work at.
-export const STARTERS = [
+// The start staff (bible §10, fixed 26 Sept; plan review A1; Milestone 5b adds Niko and Sam). station = the facility
+// they work at: the Artist at the Art Station (F04), the Writer at the Writer Corner (F05).
+export const START_STAFF = [
   {
     id: 'PRG01',
     name: 'Alex Byte',
@@ -62,6 +66,30 @@ export const STARTERS = [
     station: 'F03',
   },
   {
+    id: 'ART01',
+    name: 'Niko Bell',
+    role: 'ART',
+    tier: 'standard',
+    startLevel: 1,
+    stats: { code: 68, des: 79, art: 102, wrt: 68, prod: 79 },
+    salary: 500,
+    traits: ['strongShapes'],
+    art: 'staff_art01',
+    station: 'F04',
+  },
+  {
+    id: 'WRT01',
+    name: 'Sam Reed',
+    role: 'WRT',
+    tier: 'standard',
+    startLevel: 1,
+    stats: { code: 75, des: 86, art: 64, wrt: 120, prod: 86 },
+    salary: 500,
+    traits: ['sharpDialogue'],
+    art: 'staff_wrt01',
+    station: 'F05',
+  },
+  {
     id: 'PRO01',
     name: 'Tess Grant',
     role: 'PRO',
@@ -74,3 +102,7 @@ export const STARTERS = [
     station: 'F06',
   },
 ];
+export const startStaffById = (id) => START_STAFF.find((d) => d.id === id) ?? null;
+
+// The Milestone 2–5 starting team (Alex, Mina, Tess): the default layout, and the team of every save from before 5b.
+export const STARTERS = ['PRG01', 'DSN01', 'PRO01'].map(startStaffById);

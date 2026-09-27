@@ -45,6 +45,7 @@ export const STUDIO_LOOK = {
 export const STUDIO_WALLS = {
   window: { side: 'right', t0: 6.2, t1: 8.7, h0: 105, h1: 215 },
   door: { side: 'left', t0: 9.4, t1: 11.2, h0: 0, h1: 190 },
+  sign: { side: 'right', t0: 3.4, t1: 5.8, h0: 150, h1: 222 }, // Milestone 5b: the studio's name, in the studio colour
 };
 // The rug and the patch of window light on the floor, in cells.
 export const STUDIO_FLOOR = {
@@ -56,7 +57,10 @@ export const STUDIO_FLOOR = {
 // drop cell heights below the footprint's front corner.
 export const FACILITY_DRAW = { width: 1.05, drop: 0.2 };
 
-// The starting stations (bible §36: all "Start" facilities). fp = footprint on the grid (blocked for walking).
+// The starting stations (bible §36: all "Start" facilities). always = in every studio (the Starter Desks, the Break
+// Area, the Showcase Shelf); the others are placed only when a starter works there (Milestone 5b: Mina → Design Board,
+// Niko → Art Station, Sam → Writer Corner, Tess → Producer Desk). The three role stations share one home spot; if two
+// are ever needed at once the second settles on the first free spot. fp = footprint on the grid (blocked for walking).
 // seats = where a worker stands to use it, relative to the footprint, so they move with it. Any station can be
 // moved in Build Mode. Drawn at FACILITY_DRAW. effects are the bible's numbers, as data.
 export const STATIONS = [
@@ -66,6 +70,7 @@ export const STATIONS = [
     role: 'Maker',
     art: 'facility_f01',
     purpose: 'Where the team makes its games. Needed for one active game project.',
+    always: true,
     fp: { col: 1, row: 1, w: 3, h: 2 },
     seats: [{ dc: 1, dr: 2 }],
   },
@@ -75,6 +80,24 @@ export const STATIONS = [
     role: 'Specialist',
     art: 'facility_f03',
     purpose: 'Plan the game on the board. Design milestones go 8% faster.',
+    fp: { col: 6, row: 1, w: 2, h: 2 },
+    seats: [{ dc: 1, dr: 2 }],
+  },
+  {
+    id: 'F04',
+    name: 'Art Station',
+    role: 'Specialist',
+    art: 'facility_f04',
+    purpose: 'Draw the game here. Art milestones go 8% faster.',
+    fp: { col: 6, row: 1, w: 2, h: 2 },
+    seats: [{ dc: 1, dr: 2 }],
+  },
+  {
+    id: 'F05',
+    name: 'Writer Corner',
+    role: 'Specialist',
+    art: 'facility_f05',
+    purpose: 'Write the story here. Writing milestones go 8% faster.',
     fp: { col: 6, row: 1, w: 2, h: 2 },
     seats: [{ dc: 1, dr: 2 }],
   },
@@ -93,6 +116,7 @@ export const STATIONS = [
     role: 'Rest',
     art: 'facility_f08',
     purpose: 'Where the team rests. Energy comes back 20% faster.',
+    always: true,
     fp: { col: 5, row: 9, w: 3, h: 3 },
     seats: [{ dc: 0, dr: 3 }, { dc: 1, dr: 3 }, { dc: 2, dr: 3 }],
     rest: true,
@@ -104,6 +128,7 @@ export const STATIONS = [
     role: 'Showcase',
     art: 'facility_f14',
     purpose: 'Your released games on display. Tap it for the Catalogue.',
+    always: true,
     fp: { col: 0, row: 4, w: 1, h: 2 },
     seats: [], // nobody works here
     showcase: true,

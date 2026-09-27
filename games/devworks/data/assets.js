@@ -1,7 +1,7 @@
 // DEVWORKS image list: key → path (relative to index.html), using the final art-list paths.
 // Art not drawn yet shows its stand-in (src/ui/placeholders.js) until the file is filed here.
 import { STATIONS, PROPS, DEV_POPS } from './studio.js';
-import { STARTERS } from './staff.js';
+import { START_STAFF } from './staff.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
 import { COVER_BY_GENRE, DEFAULT_COVER } from './covers.js';
@@ -11,9 +11,9 @@ import { TOP_ICONS } from './home.js';
 const art = (folder, key) => [key, `assets/images/${folder}/${key}.png`];
 
 export const ASSETS = {
-  // Studio: the starting stations (with the Showcase Shelf, Milestone 5) and the starting team.
+  // Studio: the starting stations (with the Showcase Shelf, Milestone 5) and the five start staff (Milestone 5b).
   ...Object.fromEntries(STATIONS.map((s) => art('facilities', s.art))),
-  ...Object.fromEntries(STARTERS.map((d) => art('staff', d.art))),
+  ...Object.fromEntries(START_STAFF.map((d) => art('staff', d.art))),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

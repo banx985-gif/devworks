@@ -6,6 +6,9 @@
 // when it starts and saved with it, and everything runs on whole days. The same save and choices give the same
 // progress, bugs, breakthroughs and outputs. The state at Gold Master becomes the game's review seed (bible §14).
 // Money (Milestone 4): charge(amount, reason) pays the audio package at the start and production every day.
+// Founder perk (Milestone 5b, data/setup.js): founder() → { id, perk } or null. While the founder is on the team their
+// perk stat counts statPct more (progress and outputs), bugs made change by bugPct while they are on duty, and a
+// finished game they are credited on gets the outputBonus.
 //
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count } and 'project:breakthrough' { key, points }.
@@ -74,8 +77,26 @@ export function fixesForDay({ phaseIndex, bestCode, bugFixPct = 0 }, B = PROJECT
 const rollCount = (x, rng) => Math.floor(x) + (rng.next() < x - Math.floor(x) ? 1 : 0);
 
 // --- the system ---------------------------------------------------------------------------------------
-export function createGameProjects({ bus, world, clock = null, charge = null, B = PROJECT_BALANCE }) {
+// The founder's perk as a multiplier on one of a worker's stats (1 for everyone else).
+export function founderStatMult(founder, staffId, statKey) {
+  const perk = founder?.perk;
+  return perk && founder.id === staffId && perk.stat === statKey ? 1 + (perk.statPct ?? 0) / 100 : 1;
+}
+
+export function createGameProjects({ bus, world, clock = null, charge = null, founder = () => null, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
+  // A worker's stats with the founder perk applied (outputs), and the perk's own numbers.
+  const statsOf = (s) => {
+    const f = founder();
+    if (!f || f.id !== s.id) return s.stats;
+    const out = { ...s.stats };
+    out[f.perk.stat] = (out[f.perk.stat] ?? 0) * founderStatMult(f, s.id, f.perk.stat);
+    return out;
+  };
+  const founderIn = (ids) => {
+    const f = founder();
+    return f && ids.includes(f.id) ? f : null;
+  };
   const catalogue = new JobHistory({ bus }); // finished games (data only for now)
   const phases = B.phases.map((p) => ({ id: p.id, name: PHASE_NAMES[p.id], weights: p.weights }));
 
@@ -102,6 +123,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, B 
     hooks: {
       // Only leads on duty work; someone on a break adds nothing that day.
       workerModifier: (job, phase, s) => (world.onDuty(s.id) ? 1 : 0),
+      statModifier: (job, phase, s, k) => founderStatMult(founder(), s.id, k),
       onPhaseStart: (job) => {
         job.phaseTarget = B.scopes[job.data.scope].totalWork * B.phases[job.phaseIndex].share;
         job.data.acc = { sum: {}, days: 0 };
@@ -113,15 +135,16 @@ export function createGameProjects({ bus, world, clock = null, charge = null, B 
         d.cost += today;
         charge?.(today, `Production: ${job.name}`);
         if (!team.length) return; // everyone on a break: no work, no bugs, no ideas
-        const members = team.map((s) => ({ stats: s.stats, mult: staff.workMultiplier(s) }));
+        const members = team.map((s) => ({ stats: statsOf(s), mult: staff.workMultiplier(s) }));
         const str = outputStrengths(members, B);
         d.acc.days++;
         for (const [k, v] of Object.entries(str)) d.acc.sum[k] = (d.acc.sum[k] ?? 0) + v;
         const bestCode = Math.max(...team.map((s) => s.stats.code ?? 0));
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
         const bugFixPct = staff.groupEffect(team, 'bugFixPct');
+        const bugMult = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
         withRng(job, (r) => {
-          const made = rollCount(bugsForDay({ scope: d.scope, phaseIndex: job.phaseIndex, bestCode, avgEnergy }, B), r);
+          const made = rollCount(bugsForDay({ scope: d.scope, phaseIndex: job.phaseIndex, bestCode, avgEnergy }, B) * bugMult, r);
           if (made) {
             d.bugs += made;
             bus?.emit('project:bug', { job, count: made });
@@ -146,6 +169,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, B 
       },
       onComplete: (job) => {
         const d = job.data;
+        const bonus = { ...d.bonus };
+        for (const [k, v] of Object.entries(founderIn(job.slots)?.perk.outputBonus ?? {})) bonus[k] = (bonus[k] ?? 0) + v;
         for (const id of job.slots) {
           const s = staff.get(id);
           if (s) s.assigned = false;
@@ -156,7 +181,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, B 
           recipe: { ...d.recipe },
           audio: d.audio,
           budget: d.budget,
-          outputs: outputsFrom({ phaseQuality: d.phaseQuality, audio: d.audio, bonus: d.bonus }, B),
+          outputs: outputsFrom({ phaseQuality: d.phaseQuality, audio: d.audio, bonus }, B),
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),

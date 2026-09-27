@@ -5,6 +5,9 @@
 // Milestone 5: real art in the studio (props, the Showcase Shelf with the released covers), workers that move, the
 // art pops while a game is made, a medium beat when a milestone is done, the big cover at "Game finished!", a launch
 // rocket and confetti on release, and a money burst on big sales days.
+// Milestone 5b: a title screen on launch (Continue, Load / Slots, New Game, Settings), four save slots (core/SaveSlots),
+// New Game setup (studio name, Studio Director, colour, Founding Developer) and founder perks. Slot 1 is the old save.
+// Switching to another slot after one has been played reloads the page first, so no state crosses between studios.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -19,13 +22,14 @@ import { DebugOverlay } from '../../../core/DebugOverlay.js';
 import { SystemBack } from '../../../core/SystemBack.js';
 import { Clock } from '../../../core/Clock.js';
 import { createStorageAdapter } from '../../../core/StorageAdapter.js';
-import { SaveSlot } from '../../../core/SaveStore.js';
+import { SaveSlots } from '../../../core/SaveSlots.js';
 import { Autosave } from '../../../core/Autosave.js';
 import { MajorFeedback } from '../../../core/MajorFeedback.js';
 import { VfxSystem } from '../../../core/VfxSystem.js';
 import { FloatFeed } from '../../../core/FloatFeed.js';
 import { TextPrompt } from '../../../core/ui/TextPrompt.js';
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
+import { Dialog } from '../../../core/ui/Modal.js';
 import { createTopBar } from '../../../core/ui/TopBar.js';
 import { createBottomBar } from '../../../core/ui/BottomBar.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
@@ -37,6 +41,11 @@ import { SAVE } from '../data/save.js';
 import { STARTING_UNLOCKED, FAMILIES, elementById } from '../data/elements.js';
 import { SCOPES } from '../data/projects.js';
 import { STATIONS, DEV_POPS, BIG_SALES } from '../data/studio.js';
+import { founderById } from '../data/setup.js';
+import { startStaffById } from '../data/staff.js';
+import { createStudioProfile, migrateToV2, slotSummary } from './systems/studioProfile.js';
+import { createTitleScreen } from './screens/TitleScreen.js';
+import { createSetupScreen } from './screens/SetupScreen.js';
 import { createDevPops } from './ui/devPops.js';
 import { createStudioWorld } from './systems/studioWorld.js';
 import { createGameProjects } from './systems/gameProject.js';
@@ -58,7 +67,8 @@ const COL = THEME.color;
 const W = 1080;
 const BASE_H = 1920; // 9:16; taller phones grow the height (see Renderer)
 const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bars top and bottom
-const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'studio';
+const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
+const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
 const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue']; // where the top bar's Pause / speeds apply
 
@@ -69,7 +79,8 @@ const layout = new UiLayout(renderer);
 bus.on('renderer:resize', () => layout.refresh());
 const input = new Input(renderer, bus);
 const assets = new AssetManager({ bus });
-const router = new ScreenRouter(bus, { roots: ['studio', 'test'] });
+const router = new ScreenRouter(bus, { roots: ['studio', 'test', 'title'] });
+const dialog = new Dialog({ layout, assets }); // confirm boxes (delete a slot)
 const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
 registerPlaceholders(assets); // stand-ins for art not drawn yet
 
@@ -78,9 +89,10 @@ const clock = new Clock({ bus, ...CALENDAR });
 const log = { log: (m) => debug.log(m) };
 const studioRng = new Rng('devworks-studio'); // the run's seeded randomness (saved with the studio)
 const world = createStudioWorld({ bus, rng: studioRng, debug: log });
+const profile = createStudioProfile({ bus, clock }); // studio name, director, colour, founder + history (Milestone 5b)
 // Each day: the studio settles Energy and breaks, projects work (and pay), then released games sell — so the
 // three are created in that order.
-const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason) });
+const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder() });
 const business = createBusiness({ bus, clock, world, projects });
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 let unlocked = new Set(STARTING_UNLOCKED); // open recipe elements (research opens more from Milestone 6)
@@ -108,8 +120,10 @@ const loop = new FixedStepLoop({
       clock.update(dt);
       world.update(clock.paused ? 0 : dt * clock.speed);
       autosave.tick(dt);
+      profile.addPlayTime(dt);
     }
     router.update(dt);
+    dialog.update(dt);
     sheet.update(dt);
     feedback.height = renderer.height;
     feedback.update(dt);
@@ -128,6 +142,7 @@ const loop = new FixedStepLoop({
     router.render(ctx, alpha);
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
+    dialog.render(ctx);
     if (tip) drawTip(ctx);
     if (beat && !feedback.active && router.currentName === 'studio' && !studio.buildMode) drawBeat(ctx);
     feedback.render(ctx);
@@ -169,14 +184,16 @@ function afterFeedback() {
 }
 router.modal = {
   get active() {
-    return loop.paused || feedback.active;
+    return loop.paused || dialog.active || feedback.active;
   },
-  onTap: () => (loop.paused ? loop.resume('tap') : feedback.onTap()),
-  onBack: () => (loop.paused ? loop.resume('back') : feedback.acknowledge()),
+  onTap: (p) => (loop.paused ? loop.resume('tap') : dialog.active ? dialog.onTap(p) : feedback.onTap()),
+  onDown: (p) => dialog.active && dialog.onDown?.(p),
+  onUp: (p) => dialog.active && dialog.onUp?.(p),
+  onBack: () => (loop.paused ? loop.resume('back') : dialog.active ? dialog.onBack() : feedback.acknowledge()),
 };
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'p' && e.key !== 'P' && e.key !== ' ') return;
-  if (textPrompt.active || feedback.active) return;
+  if (textPrompt.active || feedback.active || dialog.active || MENU_SCREENS.includes(router.currentName)) return;
   if (WORLD_SCREENS.includes(router.currentName) && !loop.paused) clock.togglePause();
   else loop.togglePause();
 });
@@ -212,6 +229,7 @@ const menus = createStudioMenus({
     if (rec) debug.log(`released: ${rec.result.title} (review ${rec.release.score})`);
   },
   openScreen: (name) => router.go(name),
+  toTitle: () => toTitle(),
   newGame: () => router.go('newProject'),
   openProject: () => router.go('project'),
   isUnlocked: (id) => unlocked.has(id),
@@ -307,10 +325,17 @@ systemBack = new SystemBack({ onBack: back });
 bus.on('input:up', () => systemBack.rearm()); // re-arm after any tap, in case a Back at the studio let it go
 
 // ---------------------------------------------------------------------------
-// Saving: its own database; the last 3 saves kept; saved on month ends, speed changes, moved stations, every 10 s
-// of running time if anything changed, and straight away when the app goes to the background.
-let slot = null;
-const saveData = () => ({ clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), unlocked: [...unlocked] });
+// Saving: its own database; four campaign slots (Milestone 5b), each keeping its last 3 saves; saved on month ends,
+// speed changes, moved stations, every 10 s of running time if anything changed, straight away when the app goes to
+// the background, and on the way back to the Main Menu.
+let slots = null; // core SaveSlots (slot i = keys[i]; Slot 1 is the old single save's key)
+let slot = null; // the SaveSlot being played
+let slotIndex = null;
+let sessionUsed = false; // a slot has been opened since the page loaded: opening another one reloads first
+let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
+let lastSlot = null;
+const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
+const saveData = () => ({ clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), unlocked: [...unlocked], studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -322,28 +347,139 @@ const autosave = new Autosave({
 });
 autosave.installBackground();
 
-async function loadOrStart() {
-  try {
-    const adapter = await createStorageAdapter({ dbName: SAVE.dbName, prefix: SAVE.localPrefix });
-    slot = new SaveSlot({ adapter, key: SAVE.key, rolling: SAVE.rolling, version: SAVE.version, bus });
-    const data = await slot.load();
-    if (data) {
-      world.load(data.world);
-      projects.load(data.games); // a Milestone 2 save has none: nothing in the works, an empty catalogue
-      business.load(data.business); // a Milestone 3 save has none: the books start now (starting Credits)
-      if (data.unlocked) unlocked = new Set(data.unlocked);
-      clock.load(data.clock); // last: the saved speed is checked against the unlocks just loaded
-      debug.log(`save loaded: day ${clock.totalDays}, ${world.workers.length} staff`);
-      return;
-    }
-  } catch (err) {
-    console.error('[DEVWORKS] could not load the save; starting a new studio', err);
-    debug.log('save unreadable: new studio');
-  }
-  world.newGame();
-  business.newGame();
-  debug.log('new studio');
+async function prepareSaves() {
+  const adapter = await createStorageAdapter({ dbName: SAVE.dbName, prefix: SAVE.localPrefix });
+  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2 }, rolling: SAVE.rolling, bus });
+  await refreshSlots();
 }
+// The slot cards: what each slot holds now (read fresh from storage).
+async function refreshSlots() {
+  const all = await slots.peekAll();
+  slotCards = all.map((d, index) => ({ index, summary: d && !d.error ? slotSummary(d) : null, error: d?.error ?? null }));
+  // Continue: the last slot played, else (a save from before 5b has no record of it) the most recently saved one.
+  lastSlot = await slots.lastUsed();
+  if (lastSlot == null || !slotCards[lastSlot]?.summary) {
+    let best = null;
+    slots.savedAt.forEach((t, i) => {
+      if (t != null && slotCards[i].summary && (best == null || t > slots.savedAt[best])) best = i;
+    });
+    lastSlot = best;
+  }
+}
+function reloadInto(intent) {
+  try {
+    sessionStorage.setItem(INTENT_KEY, JSON.stringify(intent));
+  } catch {
+    /* no sessionStorage: the player lands on the title screen instead */
+  }
+  window.location.reload();
+}
+function resume() {
+  started = true;
+  router.go('studio');
+}
+
+// Play a slot: the one already open carries on; another one after a slot was open reloads the page first.
+async function playSlot(i) {
+  if (sessionUsed && slotIndex === i && slot) return resume();
+  if (sessionUsed) return reloadInto({ action: 'play', slot: i });
+  const s = slots.slot(i);
+  let data = null;
+  try {
+    data = await s.load();
+  } catch (err) {
+    console.error('[DEVWORKS] could not load slot', i + 1, err);
+  }
+  if (!data) {
+    debug.log(`slot ${i + 1}: nothing to load`);
+    await refreshSlots();
+    router.go('title', { view: 'slots' });
+    return;
+  }
+  world.load(data.world);
+  projects.load(data.games); // a Milestone 2 save has none: nothing in the works, an empty catalogue
+  business.load(data.business); // a Milestone 3 save has none: the books start now (starting Credits)
+  if (data.unlocked) unlocked = new Set(data.unlocked);
+  profile.load(data.studio);
+  clock.load(data.clock); // last: the saved speed is checked against the unlocks just loaded
+  slot = s;
+  slotIndex = i;
+  sessionUsed = true;
+  await slots.setLastUsed(i);
+  debug.log(`slot ${i + 1} loaded: day ${clock.totalDays}, ${world.workers.length} staff`);
+  resume();
+}
+
+// START STUDIO: a new studio in an empty slot, with the founder's starting team at their stations.
+async function startStudio(i, setup) {
+  if (sessionUsed) return reloadInto({ action: 'new', slot: i, setup });
+  const founder = founderById(setup.founder);
+  world.newGame(founder.team.map(startStaffById));
+  business.newGame();
+  profile.create(setup);
+  slot = slots.slot(i);
+  slotIndex = i;
+  sessionUsed = true;
+  started = true;
+  await slot.save(saveData());
+  await slots.setLastUsed(i);
+  debug.log(`new studio in slot ${i + 1}: ${setup.studio}, founder ${founder.id}`);
+  router.go('studio');
+}
+
+// Main Menu (Business sheet): save, stop the clock, show the title screen.
+async function toTitle() {
+  sheet.close();
+  if (slot && started) {
+    try {
+      await slot.save(saveData());
+    } catch (err) {
+      console.error('[DEVWORKS] save before the Main Menu failed', err);
+    }
+  }
+  started = false;
+  await refreshSlots();
+  router.go('title');
+}
+
+function deleteSlot(i) {
+  const name = slotCards[i]?.summary?.studio;
+  dialog.confirm({
+    title: `Delete Slot ${i + 1}?`,
+    body: name ? `"${name}" will be gone for good. This can't be undone.` : 'This save will be gone for good.',
+    yes: 'Delete',
+    danger: true,
+    onYes: async () => {
+      await slots.remove(i);
+      if (slotIndex === i) {
+        slot = null; // the open studio is gone: nothing saves into this slot again
+        slotIndex = null;
+      }
+      debug.log(`slot ${i + 1} deleted`);
+      await refreshSlots();
+    },
+  });
+}
+
+async function newGameFromMenu() {
+  const i = slotCards.findIndex((c) => !c.summary && !c.error);
+  if (i < 0) titleScreen.showSlots('All 4 slots are full. Delete one to start a new studio.');
+  else router.go('setup', { slot: i });
+}
+
+const titleScreen = createTitleScreen({
+  layout,
+  assets,
+  slots: () => slotCards,
+  last: () => lastSlot,
+  onContinue: (i) => playSlot(i),
+  onPlay: (i) => playSlot(i),
+  onNewGame: () => newGameFromMenu(),
+  onNewInSlot: (i) => router.go('setup', { slot: i }),
+  onDelete: (i) => deleteSlot(i),
+  onSettings: () => sheet.open({ title: 'Settings', subtitle: 'Sound, text size and other options will live here.', accent: COL.progress }),
+});
+const setupScreen = createSetupScreen({ layout, assets, textPrompt, onBack: () => router.go('title', { view: 'slots' }), onStart: (i, setup) => startStudio(i, setup) });
 
 // ---------------------------------------------------------------------------
 // Boot screen: shows while the images and the save load, then hands over to the studio (or the test screen).
@@ -353,10 +489,19 @@ const bootScreen = {
     this.progress = 0;
     Promise.all([
       assets.loadImages(ASSETS, (done, total) => (this.progress = done / total)).then((r) => debug.log(`assets: ${r.loaded} loaded, ${r.missing.length} missing`)),
-      loadOrStart(),
+      prepareSaves().catch((err) => console.error('[DEVWORKS] saves unavailable', err)),
     ]).then(() => {
-      started = true;
-      router.go(START_SCREEN);
+      // Straight after a reload for another slot: open it; otherwise the title screen (or ?screen=test).
+      let intent = null;
+      try {
+        intent = JSON.parse(sessionStorage.getItem(INTENT_KEY) ?? 'null');
+        sessionStorage.removeItem(INTENT_KEY);
+      } catch {
+        intent = null;
+      }
+      if (START_SCREEN === 'title' && slots && intent?.action === 'play') playSlot(intent.slot);
+      else if (START_SCREEN === 'title' && slots && intent?.action === 'new') startStudio(intent.slot, intent.setup);
+      else router.go(START_SCREEN);
     });
   },
   render(ctx) {
@@ -395,6 +540,7 @@ const studio = createStudioScreen({
   topBar,
   bottomBar,
   debug: log,
+  sign: () => (profile.data ? { name: profile.name, colour: profile.colour } : null),
 });
 // Development made visible: the art pops while a game is made (only while the studio is on screen, nothing on top).
 const devPops = createDevPops({
@@ -709,7 +855,16 @@ function drawFinished(ctx, t, g) {
   ctx.restore();
 }
 const roster = createRosterScreen({ renderer, layout, assets, world, topBar: subTopBar, openStaff });
-const staffDetail = createStaffDetailScreen({ layout, assets, world, topBar: subTopBar });
+const staffDetail = createStaffDetailScreen({
+  layout,
+  assets,
+  world,
+  topBar: subTopBar,
+  founderInfo: () => {
+    const f = profile.founder();
+    return f ? { ...f, flag: profile.data.founder.flag, history: profile.data.founder, years: profile.yearsEmployed() } : null;
+  },
+});
 const ledger = createLedgerScreen({ layout, assets, business, topBar: subTopBar });
 const catalogueScreen = createCatalogueScreen({ layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n) });
 
@@ -726,11 +881,13 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [] };
+  window.__dw = { renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
   .register('boot', bootScreen)
+  .register('title', titleScreen)
+  .register('setup', setupScreen)
   .register('studio', studio)
   .register('roster', roster)
   .register('staff', staffDetail)

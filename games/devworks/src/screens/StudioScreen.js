@@ -18,7 +18,7 @@ import { WorldGestures } from '../../../../core/WorldGestures.js';
 import { CachedLayer } from '../../../../core/CachedLayer.js';
 import { Selection } from '../../../../core/Selection.js';
 import { characterPose, drawCharacter } from '../../../../core/CharacterMotion.js';
-import { drawIsoRoom, isoPath, wallPatch } from '../../../../core/IsoRoom.js';
+import { drawIsoRoom, isoPath, wallPatch, wallPoint } from '../../../../core/IsoRoom.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { STUDIO, STUDIO_LOOK, STUDIO_WALLS, STUDIO_FLOOR, FACILITY_DRAW, SHOWCASE, DOORWAY, WALKER, WORK_STATE, BUILD_TEXT } from '../../data/studio.js';
 import { STATUS_ICONS } from '../../data/home.js';
@@ -31,7 +31,7 @@ const STATE_COLOR = { Walking: C.progress, Working: C.action, Resting: C.good };
 const TAG_H = 50; // name tags: small text (28), never smaller
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null }) {
   const W = renderer.width;
   const { cols, rows, cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -75,10 +75,14 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     depthOf,
   });
   const stationPicker = new Selection(null, { boundsOf: (it) => stationRect(it), depthOf }); // Build Mode: stations only
-  stations.forEach((s) => {
-    selection.add(s);
-    stationPicker.add(s);
-  });
+  // This studio's stations (Milestone 5b: they depend on the starting team), kept in step with the world's list.
+  const syncStations = () => {
+    for (const pick of [selection, stationPicker]) {
+      for (const it of [...pick.items]) if (it.kind === 'station' && !stations.includes(it)) pick.remove(it);
+      for (const st of stations) pick.add(st);
+    }
+  };
+  syncStations();
   const syncWorkers = () => {
     for (const it of [...selection.items]) if (it.kind === 'worker' && !workers.includes(it)) selection.remove(it);
     for (const w of workers) selection.add(w);
@@ -272,6 +276,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     enter() {
       active = true;
+      syncStations();
       syncWorkers();
       if (!screen.viewSet) {
         screen.viewSet = true;
@@ -395,6 +400,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     render(ctx) {
       camera.apply(ctx);
       room.render(ctx, 0, 0);
+      drawSign(ctx);
       if (buildMode) drawBuildFloor(ctx);
       drawSelectionMark(ctx);
       drawShadows(ctx);
@@ -472,6 +478,26 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     fillPatch(g, wallPatch(iso, dr.side, dr.t0 - 0.12, dr.t1 + 0.12, dr.h0, dr.h1 + 12), L.doorFrame, L.wallCap, 3);
     fillPatch(g, wallPatch(iso, dr.side, dr.t0, dr.t1, dr.h0, dr.h1), L.door, L.wallCap, 2);
     fillPatch(g, wallPatch(iso, dr.side, dr.t1 - 0.3, dr.t1 - 0.15, 88, 100), '#F2C66D', L.wallCap, 1.5);
+  }
+
+  // The studio sign on the right wall (Milestone 5b): the studio's name on a plate in the studio colour, drawn by code
+  // (no art: the spec's badge frame isn't drawn yet). Text runs along the wall.
+  function drawSign(ctx) {
+    const sg = sign();
+    const at = STUDIO_WALLS.sign;
+    if (!sg || !at) return;
+    fillPatch(ctx, wallPatch(iso, at.side, at.t0, at.t1, at.h0, at.h1), sg.colour, L.wallCap, 4);
+    fillPatch(ctx, wallPatch(iso, at.side, at.t0 + 0.1, at.t1 - 0.1, at.h0 + 8, at.h1 - 8), 'rgba(255,255,255,0.16)', 'rgba(255,255,255,0.55)', 2);
+    const o = wallPoint(iso, at.side, at.t0, (at.h0 + at.h1) / 2);
+    const len = (at.t1 - at.t0) * HW;
+    ctx.save();
+    ctx.transform(1, HH / HW, 0, 1, o.x, o.y);
+    ctx.font = font(30, true);
+    ctx.fillStyle = C.textOnAction;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sg.name, len / 2, 2, len - 30);
+    ctx.restore();
   }
 
   function fillPatch(g, pts, fill, stroke = null, width = 2) {

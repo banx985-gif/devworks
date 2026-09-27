@@ -9,7 +9,7 @@ import { Agent } from '../../../../core/Agent.js';
 import { StaffSystem } from '../../../../core/StaffSystem.js';
 import { STUDIO, STATIONS, PROPS, DOORWAY, WALKER } from '../../data/studio.js';
 import { STAFF_BALANCE } from '../../data/balance.js';
-import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
+import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS, startStaffById } from '../../data/staff.js';
 
 const inArea = (a, col, row) => col >= a.col && row >= a.row && col < a.col + a.w && row < a.row + a.h;
 const overlaps = (a, b) => a.col < b.col + b.w && b.col < a.col + a.w && a.row < b.row + b.h && b.row < a.row + a.h;
@@ -19,8 +19,20 @@ export function createStudioWorld({ bus, rng, debug }) {
   const grid = new Grid({ cols, rows, tileSize: CELL });
 
   // --- stations and props ---------------------------------------------------------------
-  const stations = STATIONS.map((def) => ({ kind: 'station', id: def.id, def, fp: { ...def.fp } }));
+  // Every Start station exists once (pool); `stations` holds the ones in this studio (Milestone 5b): the "always" ones
+  // plus the station each member of staff works at. The array is changed in place, so its holders see the change.
+  const pool = STATIONS.map((def) => ({ kind: 'station', id: def.id, def, fp: { ...def.fp } }));
+  const stations = [];
   const stationById = (id) => stations.find((s) => s.id === id) ?? null;
+  const stationIdsFor = (defs, extra = []) => {
+    const want = new Set([...extra, ...defs.map((d) => d?.station).filter(Boolean)]);
+    return STATIONS.filter((d) => d.always || want.has(d.id)).map((d) => d.id);
+  };
+  function setStations(ids) {
+    stations.length = 0;
+    for (const st of pool) if (ids.includes(st.id)) stations.push(st);
+  }
+  setStations(stationIdsFor(STARTERS));
   const breakArea = stations.find((s) => s.def.rest);
   // Props (Milestone 5) never move: their cells are simply taken (walked round, never built on).
   const props = PROPS.map((def) => ({ kind: 'prop', id: def.id, def, fp: { ...def.fp } }));
@@ -180,11 +192,15 @@ export function createStudioWorld({ bus, rng, debug }) {
   });
   bus.on('clock:month', () => staffSystem.monthlyTick());
 
-  // A new studio: the three starters walk in through the door to their stations.
-  function newGame() {
+  // A new studio: the starting team (Milestone 5b: whoever the founder brings; the Milestone 2 three by default) walks
+  // in through the door to their stations. Each starter's station is placed; the room starts from its home layout.
+  function newGame(team = STARTERS) {
+    for (const st of pool) st.fp = { ...st.def.fp };
+    setStations(stationIdsFor(team));
+    settle();
     staffSystem.staff = [];
     workers.length = 0;
-    STARTERS.forEach((def, i) => {
+    team.forEach((def, i) => {
       const staff = staffSystem.addFromDefinition(def);
       const w = makeWorker(staff, def, i);
       w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row + (i % DOORWAY.h));
@@ -203,6 +219,10 @@ export function createStudioWorld({ bus, rng, debug }) {
 
   // Back to where everyone was: walkers carry on to where they were going.
   function load(data) {
+    // This studio's stations: the saved ones, the "always" ones (a pre-Milestone 5 save gains the shelf) and each
+    // member of staff's own station.
+    for (const st of pool) st.fp = { ...st.def.fp };
+    setStations(stationIdsFor((data.staff ?? []).map((s) => startStaffById(s.id)), (data.stations ?? []).map((s) => s.id)));
     for (const s of data.stations ?? []) {
       const st = stationById(s.id);
       if (st) st.fp = { ...st.fp, col: s.fp.col, row: s.fp.row };
@@ -211,7 +231,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     staffSystem.load(data.staff ?? []);
     workers.length = 0;
     staffSystem.staff.forEach((staff, i) => {
-      const def = STARTERS.find((d) => d.id === staff.id);
+      const def = startStaffById(staff.id);
       if (!def) return;
       const w = makeWorker(staff, def, i);
       const saved = (data.workers ?? []).find((x) => x.id === staff.id);
@@ -236,6 +256,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   return {
     grid,
     stations,
+    stationPool: pool,
     props,
     workers,
     staffSystem,

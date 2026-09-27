@@ -70,6 +70,7 @@ export class AudioManager {
         this.musicBus.connect(this.master);
         this._applyVolumes();
         this._loadFiles();
+        this.warmUp();
       }
       if (this.ctx.state === 'suspended') this.ctx.resume?.().catch?.(() => {});
       if (this.wantedMusic && !this.track) this.playMusic(this.wantedMusic, { force: true });
@@ -77,6 +78,23 @@ export class AudioManager {
       this.ctx = null; // no sound on this device: the game carries on silently
     }
     return !!this.ctx;
+  }
+
+  // Make the code-made sounds and tracks ahead of time, one every few frames, so the first play of a track never
+  // stalls a frame (each track takes a moment to build).
+  warmUp({ gapMs = 60 } = {}) {
+    if (!this.ctx || this._warming) return;
+    const todo = [...Object.keys(this.music).map((id) => [id, true]), ...Object.keys(this.sounds).map((id) => [id, false])];
+    this._warming = true;
+    const step = () => {
+      const next = todo.shift();
+      if (!next) return (this._warming = false);
+      try {
+        if (!this.buffers.has(next[0])) this._buffer(next[0], { music: next[1] });
+      } catch {}
+      setTimeout(step, gapMs);
+    };
+    setTimeout(step, gapMs);
   }
 
   get unlocked() {
@@ -260,8 +278,8 @@ export class AudioManager {
   // --- music ------------------------------------------------------------------------------------------------------------
   playMusic(id, { force = false } = {}) {
     if (!this.music[id]) return false;
+    if (!force && (this.track?.id === id || (!this.ctx && this.wantedMusic === id))) return true;
     this.wantedMusic = id;
-    if (!force && this.track?.id === id) return true;
     this.counts[id] = (this.counts[id] ?? 0) + 1;
     this._log(id, !this.ctx);
     if (!this.ctx) return true; // starts with the first tap

@@ -1,11 +1,15 @@
 // Where and how DEVWORKS saves (Milestone 2). Its own database and keys, so it never meets another series game's
 // saves (they can share a web address).
+// Milestone 5b: four campaign slots on the shared core/SaveSlots.js, each its own SaveSlot (its own rolling copies),
+// so playing one never touches another. Slot 1 keeps the old key, so a save from before 5b simply is Slot 1
+// (migrated to version 2: a studio name, a director and Alex Byte as Founder). metaKey holds the last slot played.
 export const SAVE = {
   dbName: 'devworks',
   localPrefix: 'devworks:',
-  key: 'devworks:campaign',
-  rolling: 3, // keep the last 3 saves; a damaged newest copy falls back to the one before
-  version: 1,
+  slots: ['devworks:campaign', 'devworks:campaign:2', 'devworks:campaign:3', 'devworks:campaign:4'],
+  metaKey: 'devworks:meta',
+  rolling: 3, // each slot keeps its last 3 saves; a damaged newest copy falls back to the one before
+  version: 2,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)
   triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp'],
 };
