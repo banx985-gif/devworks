@@ -24,6 +24,8 @@
 //   card; spawn Standard / Rare / Elite — Legendary / Secret stay gated)
 //   Milestone 16: Create → Engines (the Engine Catalogue); engineStart (kind): what it does, the team (Programmers
 //   first), Start
+//   Milestone 17: Business → Publishers and Contract Board (screens); contractTeam (id): pick the team, Accept; the
+//   release sheet keeps a publisher's platform in (and says so)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -42,7 +44,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -117,6 +119,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             ...(shop ? [{ id: 'studio', label: 'Studio', sub: `${shop().stage().name} · stage ${shop().stage().id}`, icon: 'facility_f01', accent: C.progress, onTap: () => open('studio') }] : []),
             ...(buildMode ? [{ id: 'buildMode', label: 'Build Mode', sub: 'Buy, move and sell facilities', icon: 'facility_f02', accent: C.progress, onTap: () => buildMode() }] : []),
             { id: 'marketing', label: 'Marketing Planner', sub: marketingLine() || 'Hype and the release calendar', icon: 'business_ui_05', onTap: () => openScreen('marketing') },
+            ...(publishers ? [{ id: 'publishers', label: 'Publishers', sub: `${publishers().offers.length} offer${publishers().offers.length === 1 ? '' : 's'} · ${publishers().active.length} signed`, icon: 'business_ui_01', accent: C.purple, onTap: () => openScreen('publishers') }] : []),
+            ...(contracts ? [{ id: 'contracts', label: 'Contract Board', sub: `${contracts().offers.length} jobs · ${contracts().active.length} of 2 active`, icon: 'business_ui_03', accent: C.purple, onTap: () => openScreen('contracts') }] : []),
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
@@ -144,11 +148,14 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const plan = b.releasePlan(number, chosen, day);
     const price = PROJECT_BALANCE.scopes[rec.result.scope]?.price ?? RELEASE.price; // Milestone 7: by scope
     const keep = (price * (100 - RELEASE.storeCutPct)) / 100;
+    const needs = publishers?.()?.requiredPlatform(rec, day); // Milestone 17
+    if (needs && !chosen.includes(needs)) chosen = [...chosen, needs];
     const toggle = (id) => {
+      if (id === needs) return; // the publisher's platform stays in
       const now = picks.get(number) ?? [];
       picks.set(number, now.includes(id) ? now.filter((x) => x !== id) : [...now, id]);
     };
-    const lines = [`${scopeById(rec.result.scope)?.name ?? ''} game. ${price} Credits a copy; you keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`];
+    const lines = [...(needs ? [{ text: `${rec.result.deal.name} publishes it: it must come out on ${publishers().platformName(needs)}, and they take ${rec.result.deal.sharePct}% of sales.`, color: C.purple }] : []), `${scopeById(rec.result.scope)?.name ?? ''} game. ${price} Credits a copy; you keep ${keep.toFixed(2)} (the store takes ${RELEASE.storeCutPct}%).`];
     if (plan.ok) {
       if (plan.cost) lines.push({ text: `Porting ${plan.portCost.toLocaleString('en-GB')} + certification ${plan.certFees.toLocaleString('en-GB')} = ${plan.cost.toLocaleString('en-GB')} Credits now`, color: C.actionDark });
       if (plan.extraBugs) lines.push({ text: `Extra QA for ${chosen.length} platforms: +${plan.extraBugs} bug${plan.extraBugs === 1 ? '' : 's'} the reviews will see`, color: C.bad });
@@ -486,6 +493,37 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         { lines: [{ text: `${p.costPerDay} Credits a day · mostly CODE (Programmers) · tier now: ${en.tierNow()}`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
         { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
         { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
+      ],
+    };
+  });
+
+  // Milestone 17: accept a contract — pick who works on it.
+  const contractTeams = new Map();
+  const w0 = () => world();
+  menus.register('contractTeam', (id) => {
+    const k = contracts?.();
+    const c = k?.offers.find((x) => x.id === id);
+    if (!c) return null;
+    const opts = k.teamOptions();
+    const free = opts.filter((o) => !o.why);
+    if (!contractTeams.has(id)) contractTeams.set(id, free.sort((a, b) => (b.staff.stats[c.stat] ?? 0) - (a.staff.stats[c.stat] ?? 0)).slice(0, 2).map((o) => o.staff.id)); // the best two (the deadline is set for them)
+    const team = contractTeams.get(id).filter((x) => free.some((o) => o.staff.id === x));
+    contractTeams.set(id, team);
+    const stat = STATS.find((s) => s.key === c.stat);
+    const why = !k.board.canAccept ? 'Only 2 contracts at once' : team.length ? null : 'Pick at least one person';
+    // This team's pace (on duty about 3 days in 4, with breaks) against the deadline.
+    const pace = team.reduce((t, id) => t + (w0().staffSystem.get(id)?.stats[c.stat] ?? 0), 0) / k.divisor;
+    const days = pace > 0 ? Math.ceil(c.work / pace / 0.75) : Infinity;
+    const paceLine = Number.isFinite(days) ? { text: `This team: about ${days} days${days > c.deadlineDays ? ' — too slow for the deadline, add someone' : ''}`, color: days > c.deadlineDays ? C.bad : C.good } : null;
+    return {
+      title: `Contract: ${c.client}`,
+      subtitle: `${c.work} work in ${c.deadlineDays} days · pays ${c.pay.toLocaleString('en-GB')} Credits · ${stat.label} counts`,
+      art: 'business_ui_03',
+      accent: C.purple,
+      sections: [
+        ...(paceLine ? [{ lines: [paceLine] }] : []),
+        { title: 'Team', columns: 2, buttons: opts.map((o) => ({ id: `cteam:${o.staff.id}`, label: team.includes(o.staff.id) ? `✓ ${o.staff.name}` : o.staff.name, sub: o.why ?? `${stat.label} ${o.staff.stats[c.stat]}`, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !!o.why, accent: team.includes(o.staff.id) ? C.good : C.progress, onTap: () => contractTeams.set(id, team.includes(o.staff.id) ? team.filter((x) => x !== o.staff.id) : [...team, o.staff.id]) })) },
+        { columns: 1, buttons: [{ id: 'contractGo', label: 'Accept the contract', sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { contractTeams.delete(id); acceptContract?.(id, team); } }] },
       ],
     };
   });

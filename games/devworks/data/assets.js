@@ -3,6 +3,7 @@
 import { STATIONS, PROPS, DEV_POPS } from './studio.js';
 import { FACILITIES, STAGES } from './facilities.js';
 import { ROSTER } from './staff.js';
+import { PUBLISHERS } from './publishers.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
 import { FILED_COVERS } from './covers.js';
@@ -17,6 +18,10 @@ export const ASSETS = {
   ...Object.fromEntries(ROSTER.map((d) => art('staff', d.art))), // Milestone 13: everyone recruitment can find
   ...Object.fromEntries([art('vfx', 'dev_vfx_02')]), // Milestone 13: training courses
   ...Object.fromEntries([art('ui', 'dev_ui_11')]), // Milestone 16: the Engine icon
+  // Milestone 17: the publishers' logos, the Publishers / Contract Board icons.
+  ...Object.fromEntries(PUBLISHERS.map((p) => art('logos', p.logo))),
+  ...Object.fromEntries(['business_ui_01', 'business_ui_03'].map((k) => art('business', k))),
+  ...Object.fromEntries([art('ui', 'dev_ui_24')]),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

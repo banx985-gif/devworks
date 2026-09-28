@@ -16,6 +16,8 @@
 // slot to change — never the combo); a recipe that makes a known combo says so.
 // Milestone 16: "Engine": Licensed technology or one of the studio's own engine versions (those without strength for the
 // recipe's Technology greyed with why), with what it does to this game.
+// Milestone 17: "Publisher": Self-publish or a signed deal (it sets the scope; its clauses must hold: the scope, the
+// genres under a control clause; a publisher-owned franchise needs that publisher's deal).
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -33,7 +35,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -92,6 +94,8 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const { max } = scope().team;
     if (!scopeOpen(setup.scope)) out.push('an open scope');
     if (laneWhy()) out.push(laneWhy()); // Milestone 13: every game lane busy
+    if (setup.deal && dealWhy(setup.deal, setup)) out.push(dealWhy(setup.deal, setup).replace(/ wants /, ' wanting ')); // Milestone 17
+    if (ipWhy(setup)) out.push(ipWhy(setup));
     if (n < HARD_MIN) out.push(`${HARD_MIN - n} more lead${HARD_MIN - n > 1 ? 's' : ''}`);
     if (n > max) out.push(`${n - max} fewer lead${n - max > 1 ? 's' : ''}`);
     return out;
@@ -233,6 +237,25 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     }
     if (hintLines.length) y += 10;
 
+    // Publisher (Milestone 17): only while a deal is signed and waiting for its game.
+    const ds = deals();
+    if (setup.deal && !ds.some((d) => d.id === setup.deal)) setup.deal = null;
+    if (ds.length) {
+      heading('Publisher', setup.deal ? ds.find((d) => d.id === setup.deal)?.label : 'Self-publish');
+      const opts = [{ id: null, label: 'Self-publish' }, ...ds.map((d) => ({ id: d.id, label: d.short, scope: d.scope }))];
+      const half = (cw - 20) / 2;
+      opts.forEach((o, i) =>
+        chip({ x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.deal === o.id, () => {
+          setup.deal = o.id;
+          if (o.scope && scopeOpen(o.scope)) setup.scope = o.scope;
+        }, { id: `deal:${o.id ?? 'self'}` }),
+      );
+      y += Math.ceil(opts.length / 2) * 130 + 10;
+      const d = ds.find((x) => x.id === setup.deal);
+      const why = d ? dealWhy(d.id, setup) : null;
+      if (ctx) text(ctx, d ? why ?? d.terms : 'You keep every sale. Pick a signed deal to publish with it.', PAD, y, { size: S.small, color: why ? C.bad : d ? C.actionDark : C.textMuted, maxWidth: cw });
+      y += 70;
+    }
     // Engine (Milestone 16): only once the studio has one.
     const engs = engineChoices(setup.recipe.technology);
     if (engs.length) {

@@ -62,7 +62,7 @@ export function gameEffects(attrs, tier, technology) {
   };
 }
 
-export function createEngines({ bus, clock, world, business, projects, research, studioName = () => 'Studio' }) {
+export function createEngines({ bus, clock, world, business, projects, research, studioName = () => 'Studio', extraBusy = () => null }) {
   const staff = world.staffSystem;
   const today = () => clock.totalDays;
   const daysPerYear = () => clock.daysPerMonth * clock.monthsPerYear;
@@ -147,6 +147,7 @@ export function createEngines({ bus, clock, world, business, projects, research,
       const job = projects.jobs.find((j) => j.slots.includes(id));
       if (job) return `${staff.get(id)?.name ?? id} is making ${job.name}`;
       if (world.workerById(id)?.away) return `${staff.get(id)?.name ?? id} is away on a course`;
+      if (extraBusy(id)) return `${staff.get(id)?.name ?? id}: ${extraBusy(id).toLowerCase()}`; // Milestone 17: a contract
     }
     return null;
   };

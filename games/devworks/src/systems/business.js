@@ -25,6 +25,9 @@
 // Milestone 15: a combo game's launch effects (result.comboFx): casual / core audience sales on platforms of that
 // audience group, a longer sales tail, Fan Trust.
 //
+// Milestone 17: a game made under a publisher deal (result.deal) must release on the deal's platform when it can, and
+// the publisher's reach adds launch sales (on PC only for OpenGate). The share of sales is taken in publishers.js.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -149,6 +152,12 @@ export function createBusiness({ bus, clock, world, projects }) {
       certDays: Math.max(0, ...list.map((x) => x.cert?.days ?? 0)),
     };
     plan.cost = plan.portCost + plan.certFees;
+    // Milestone 17: the publisher's platform (waived when it can't be released on now).
+    const need = g.deal?.platform;
+    if (plan.ok && need && !ids.includes(need) && releasable(platforms.state(need, day).status)) {
+      plan.ok = false;
+      plan.why = `${g.deal.name} wants it on ${platformById(need)?.name ?? need}`;
+    }
     plan.launchDay = day + plan.certDays;
     return plan;
   }
@@ -207,7 +216,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       return (AUDIENCE_GROUPS.casual.includes(grp) ? cfx.casualPct ?? 0 : 0) + (AUDIENCE_GROUPS.core.includes(grp) ? cfx.corePct ?? 0 : 0);
     };
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100), price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? g.deal.salesPct ?? 0 : 0) / 100), price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;

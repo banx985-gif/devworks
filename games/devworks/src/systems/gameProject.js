@@ -229,6 +229,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
     d.hype ??= 0;
     d.combos ??= []; // Milestone 15 (a game started before it keeps none)
     d.engine ??= null; // Milestone 16
+    d.deal ??= null; // Milestone 17: a publisher deal (its id)
     d.type ??= 'original'; // Milestone 10
     d.costMult ??= 1;
     return job;
@@ -520,6 +521,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         costMult: +(T.costMult * (1 + cfx.costPct / 100)).toFixed(4), // Milestone 15: a combo's production cost
         combos,
         engine: setup.engine ? engineFor(setup.engine, setup.recipe.technology) : null, // Milestone 16: a snapshot
+        deal: setup.deal ?? null, // Milestone 17: the publisher deal this game is made under (src/systems/publishers.js)
         ipId: setup.ipId ?? null,
         source: src ? src.number : null,
         sourceOutputs: src && T.floor ? { ...src.result.outputs } : null,
