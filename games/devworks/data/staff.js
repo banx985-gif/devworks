@@ -1,6 +1,7 @@
 // DEVWORKS staff content (Milestone 2): stats, roles, tiers, traits and the start staff. Plain data only.
+// Milestone 14: all 50 of bible §10 (ROSTER), every trait with a small effect, signature traits for Legendary / Secret.
 // Bible §9 (system) and §10 (roster). Milestone 5b: all five start staff (one per role, any of them can found the
-// studio) are here; the starting team comes from the founder picked (data/setup.js). The other 45 come later.
+// studio) are here; the starting team comes from the founder picked (data/setup.js).
 
 // The five work stats, in display order. Visible range 1–999.
 export const STATS = [
@@ -24,8 +25,8 @@ export const TIERS = {
   standard: { name: 'Standard', statCap: 220, traitSlots: 1 },
   rare: { name: 'Rare', statCap: 300, traitSlots: 1 },
   elite: { name: 'Elite', statCap: 400, traitSlots: 2 },
-  legendary: { name: 'Legendary', statCap: 520, traitSlots: 2 },
-  secret: { name: 'Secret', statCap: 650, traitSlots: 3 },
+  legendary: { name: 'Legendary', statCap: 520, traitSlots: 2, signature: true }, // "2 + signature" (bible §9)
+  secret: { name: 'Secret', statCap: 650, traitSlots: 3, signature: true }, // "3 + signature"
 };
 
 // Trait effects are not numbered in the bible: these are placeholders. energyLossPct and bugFixPct since Milestone 2;
@@ -62,6 +63,29 @@ export const TRAITS = {
   artDirector: { name: 'Art Director', text: 'One look for the whole game: +6 Graphics on games they work on.', effects: { outputBonus: { graphics: 6 } } },
   narrativeLead: { name: 'Narrative Lead', text: 'Leads the writing: +6 Story on games they work on.', effects: { outputBonus: { story: 6 } } },
   executiveProducer: { name: 'Executive Producer', text: 'Runs a tight ship: loses 20% less Energy while working.', effects: { energyLossPct: -20 } },
+  // Milestone 14: the later Rares.
+  engineMind: { name: 'Engine Mind', text: 'Thinks in engines: +3 Innovation on games they work on.', effects: { outputBonus: { innovation: 3 } } },
+  fastCompiler: { name: 'Fast Compiler', text: 'Never waits for a build: +10% bug fixing.', effects: { bugFixPct: 10 } },
+  prototypeFast: { name: 'Prototype Fast', text: 'Quick to try ideas: +3 Innovation on games they work on.', effects: { outputBonus: { innovation: 3 } } },
+  economyBrain: { name: 'Economy Brain', text: 'Rewards that feel fair: +3 Gameplay on games they work on.', effects: { outputBonus: { gameplay: 3 } } },
+  fastConcept: { name: 'Fast Concept', text: 'Sketches in minutes: learns 15% faster (XP).', effects: { xpGainPct: 15 } },
+  lightingEye: { name: 'Lighting Eye', text: 'Light that sets the mood: +3 Graphics on games they work on.', effects: { outputBonus: { graphics: 3 } } },
+  loreKeeper: { name: 'Lore Keeper', text: 'Every detail fits: +3 Story on games they work on.', effects: { outputBonus: { story: 3 } } },
+  characterVoice: { name: 'Character Voice', text: 'People you remember: +2 Story and +2 Audience Fit on games they work on.', effects: { outputBonus: { story: 2, audienceFit: 2 } } },
+  marketingRead: { name: 'Marketing Read', text: 'Knows what players want: +3 Audience Fit on games they work on.', effects: { outputBonus: { audienceFit: 3 } } },
+  scopeKnife: { name: 'Scope Knife', text: 'Cuts the fat: +3 Polish on games they work on.', effects: { outputBonus: { polish: 3 } } },
+  // Signature traits (Legendary / Secret staff; bible §9: "2 + signature" / "3 + signature"). Defined now; their owners
+  // arrive with the secrets (Milestones 28–29). A signature never copies (mentoring) and doesn't use a trait slot.
+  codeArchitect: { name: 'Code Architect', signature: true, text: 'Signature: +25% bug fixing and +5 Polish on games they work on.', effects: { bugFixPct: 25, outputBonus: { polish: 5 } } },
+  designLegend: { name: 'Design Legend', signature: true, text: 'Signature: +8 Gameplay on games they work on.', effects: { outputBonus: { gameplay: 8 } } },
+  visualLegend: { name: 'Visual Legend', signature: true, text: 'Signature: +8 Graphics on games they work on.', effects: { outputBonus: { graphics: 8 } } },
+  storyLegend: { name: 'Story Legend', signature: true, text: 'Signature: +8 Story on games they work on.', effects: { outputBonus: { story: 8 } } },
+  studioLegend: { name: 'Studio Legend', signature: true, text: 'Signature: loses 25% less Energy and +4 Polish on games they work on.', effects: { energyLossPct: -25, outputBonus: { polish: 4 } } },
+  impossibleBuild: { name: 'Impossible Build', signature: true, text: 'Signature: +35% bug fixing and +6 Innovation on games they work on.', effects: { bugFixPct: 35, outputBonus: { innovation: 6 } } },
+  perfectLoop: { name: 'Perfect Loop', signature: true, text: 'Signature: +10 Gameplay and +4 Polish on games they work on.', effects: { outputBonus: { gameplay: 10, polish: 4 } } },
+  dreamRender: { name: 'Dream Render', signature: true, text: 'Signature: +10 Graphics and +4 Innovation on games they work on.', effects: { outputBonus: { graphics: 10, innovation: 4 } } },
+  impossibleEnding: { name: 'Impossible Ending', signature: true, text: 'Signature: +10 Story and +4 Audience Fit on games they work on.', effects: { outputBonus: { story: 10, audienceFit: 4 } } },
+  futureProof: { name: 'Future Proof', signature: true, text: 'Signature: loses 30% less Energy and +5 Audience Fit on games they work on.', effects: { energyLossPct: -30, outputBonus: { audienceFit: 5 } } },
 };
 
 // The start staff (bible §10, fixed 26 Sept; plan review A1; Milestone 5b adds Niko and Sam). station = the facility
@@ -130,8 +154,7 @@ export const START_STAFF = [
 ];
 export const startStaffById = (id) => START_STAFF.find((d) => d.id === id) ?? null;
 
-// Milestone 13: the people recruitment can find (bible §10). Only the rows that prove each eligibility rule are here;
-// the full 50 (the other Rares, Legendary and Secret staff, signatures, art checks) is Milestone 14.
+// Milestone 13: the people recruitment can find (bible §10); Milestone 14 completes the 50.
 //   eligibility: { start: true }            Standard: on the boards from day one (a Start Candidate; the five founders
 //                                           who weren't picked are Standards too)
 //                { rank: 'D' }              Rare: the studio has reached Rank D
@@ -141,6 +164,7 @@ export const startStaffById = (id) => START_STAFF.find((d) => d.id === id) ?? nu
 //                                           (RECRUIT.roleFacilities)
 //                { rank: 'A', major: true } Elite: Rank A and a major achievement (plan review: a Million Seller or a
 //                                           C04+ award win; awards are Milestone 19)
+//                { secret: 'SEC-STAFF-…' }  Legendary / Secret: only through that secret (Milestones 28–29)
 // startCandidate: the second Standard of each role (spec §9: the early tutorial recruits, shown first).
 const person = (id, name, role, tier, startLevel, s, salary, trait, eligibility, extra = {}) => ({
   id,
@@ -150,7 +174,7 @@ const person = (id, name, role, tier, startLevel, s, salary, trait, eligibility,
   startLevel,
   stats: { code: s[0], des: s[1], art: s[2], wrt: s[3], prod: s[4] },
   salary,
-  traits: [trait],
+  traits: Array.isArray(trait) ? [...trait] : [trait],
   art: `staff_${id.toLowerCase()}`,
   eligibility,
   ...extra,
@@ -181,7 +205,37 @@ export const RECRUITS = [
   person('ART08', 'Ren Mori', 'ART', 'elite', 17, [235, 246, 337, 235, 246], 2200, 'artDirector', { rank: 'A', major: true }),
   person('WRT08', 'Dorian Pike', 'WRT', 'elite', 17, [242, 253, 231, 322, 253], 2200, 'narrativeLead', { rank: 'A', major: true }),
   person('PRO08', 'Cassian Ward', 'PRO', 'elite', 17, [249, 260, 238, 249, 340], 2200, 'executiveProducer', { rank: 'A', major: true }),
+  // Milestone 14: the rest of bible §10. The later role-milestone Rares need more released games with their role on the
+  // team (xx05: 4, xx06: 6 — placeholders; the bible only says "role milestone").
+  person('PRG05', 'Juno Park', 'PRG', 'rare', 8, [183, 149, 127, 138, 149], 1100, 'engineMind', { roleGames: 4 }),
+  person('PRG06', 'Omar Vale', 'PRG', 'rare', 10, [196, 129, 140, 151, 129], 1150, 'fastCompiler', { roleGames: 6 }),
+  person('DSN05', 'Zara Vale', 'DSN', 'rare', 8, [145, 168, 134, 145, 123], 1100, 'prototypeFast', { roleGames: 4 }),
+  person('DSN06', 'Finn Cross', 'DSN', 'rare', 10, [125, 181, 147, 125, 136], 1150, 'economyBrain', { roleGames: 6 }),
+  person('ART05', 'Imani West', 'ART', 'rare', 8, [119, 130, 186, 119, 130], 1100, 'fastConcept', { roleGames: 4 }),
+  person('ART06', 'Rue Park', 'ART', 'rare', 10, [132, 143, 166, 132, 143], 1150, 'lightingEye', { roleGames: 6 }),
+  person('WRT05', 'Freya Moss', 'WRT', 'rare', 8, [126, 137, 148, 171, 137], 1100, 'loreKeeper', { roleGames: 4 }),
+  person('WRT06', 'Eli Hart', 'WRT', 'rare', 10, [139, 150, 128, 184, 150], 1150, 'characterVoice', { roleGames: 6 }),
+  person('PRO05', 'Amaya Price', 'PRO', 'rare', 8, [133, 144, 122, 133, 189], 1100, 'marketingRead', { roleGames: 4 }),
+  person('PRO06', 'Soren March', 'PRO', 'rare', 10, [146, 124, 135, 146, 169], 1150, 'scopeKnife', { roleGames: 6 }),
+  // Legendary and Secret (Prestige) staff: gated by their SEC-STAFF secret (Milestones 28–29). The bible names only their
+// signature trait; each also carries their role's Elite trait as the normal one (placeholder: tiers allow 2 / 3 + a
+// signature, and every row needs at least one normal trait). Until then nobody can
+  // find or hire them; ?debug=1 can preview their card only.
+  person('PRG09', 'Dr. Ada Flux', 'PRG', 'legendary', 21, [409, 340, 351, 329, 340], 4050, ['systemsThinker', 'codeArchitect'], { secret: 'SEC-STAFF-L1' }),
+  person('DSN09', 'Sora Quill', 'DSN', 'legendary', 21, [336, 427, 325, 336, 347], 4050, ['featureCutter', 'designLegend'], { secret: 'SEC-STAFF-L2' }),
+  person('ART09', 'Aurelia Frame', 'ART', 'legendary', 21, [343, 354, 412, 343, 354], 4050, ['threeDMaster', 'visualLegend'], { secret: 'SEC-STAFF-L3' }),
+  person('WRT09', 'Cass Story', 'WRT', 'legendary', 21, [350, 328, 339, 430, 328], 4050, ['branchingMind', 'storyLegend'], { secret: 'SEC-STAFF-L4' }),
+  person('PRO09', 'Mira Sterling', 'PRO', 'legendary', 21, [324, 335, 346, 324, 415], 4050, ['launchCaptain', 'studioLegend'], { secret: 'SEC-STAFF-L5' }),
+  person('PRG10', 'Zero Lin', 'PRG', 'secret', 24, [522, 453, 431, 442, 453], 5700, ['systemsThinker', 'impossibleBuild'], { secret: 'SEC-STAFF-S1' }),
+  person('DSN10', 'Pixel Grey', 'DSN', 'secret', 24, [449, 507, 438, 449, 427], 5700, ['featureCutter', 'perfectLoop'], { secret: 'SEC-STAFF-S2' }),
+  person('ART10', 'Ghost Palette', 'ART', 'secret', 24, [456, 434, 525, 456, 434], 5700, ['threeDMaster', 'dreamRender'], { secret: 'SEC-STAFF-S3' }),
+  person('WRT10', 'Oracle Quill', 'WRT', 'secret', 24, [430, 441, 452, 510, 441], 5700, ['branchingMind', 'impossibleEnding'], { secret: 'SEC-STAFF-S4' }),
+  person('PRO10', 'One Kane', 'PRO', 'secret', 24, [437, 448, 426, 437, 528], 5700, ['launchCaptain', 'futureProof'], { secret: 'SEC-STAFF-S5' }),
 ];
+// Tiers that only arrive through a secret: never on a board, never hired before then (Milestone 14).
+export const PRESTIGE_TIERS = ['legendary', 'secret'];
+// The SEC-STAFF secrets (bible §41) the gated rows may name.
+export const STAFF_SECRETS = ['L1', 'L2', 'L3', 'L4', 'L5', 'S1', 'S2', 'S3', 'S4', 'S5'].map((k) => `SEC-STAFF-${k}`);
 // Everyone the game knows (start staff first). The five founders are Standard recruits too when not picked.
 export const ROSTER = [...START_STAFF.map((d) => ({ ...d, eligibility: { start: true } })), ...RECRUITS];
 export const staffDefById = (id) => ROSTER.find((d) => d.id === id) ?? null;

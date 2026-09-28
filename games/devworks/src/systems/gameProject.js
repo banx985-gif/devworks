@@ -29,6 +29,9 @@
 // first (the one the studio's card shows), decisionJob the first waiting for a Beta / Gold choice. Nobody can be on
 // two games at once (busyIds).
 //
+// Milestone 15: combos (src/systems/combos.js): fixed from the recipe when the game starts — output points at the end,
+// production cost, QA load (bugs) and the cover nudge; the finished game carries its combos and the launch effects.
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
@@ -39,6 +42,7 @@ import { PROJECT_BALANCE, FRANCHISE_BALANCE } from '../../data/balance.js';
 import { PHASE_NAMES, OUTPUTS } from '../../data/projects.js';
 import { STAT_KEYS } from '../../data/staff.js';
 import { coverFor, coverFamilyFor } from '../../data/covers.js';
+import { combosFor, comboEffects } from './combos.js';
 
 // --- the formulas (pure, tested in tests/devworks) -----------------------------------------------------
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -219,6 +223,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
     d.decision ??= null;
     d.decisions ??= [];
     d.hype ??= 0;
+    d.combos ??= []; // Milestone 15 (a game started before it keeps none)
     d.type ??= 'original'; // Milestone 10
     d.costMult ??= 1;
     return job;
@@ -276,7 +281,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
         const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct');
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
-        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0);
+        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct; // Milestone 15: QA load
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
         const behind = behindOf(job);
         withRng(job, (r) => {
@@ -313,6 +318,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         };
         add(founderIn(job.slots)?.perk.outputBonus);
         add(staff.groupEffectMap(team, 'outputBonus')); // Milestone 7: Good Feel, Strong Shapes, Sharp Dialogue
+        const cfx = comboEffects(d.combos); // Milestone 15
+        add(cfx.output);
         for (const id of job.slots) {
           const s = staff.get(id);
           if (s) s.assigned = false;
@@ -341,8 +348,10 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),
-          cover: coverFor(d.recipe), // the art key (a parked family shows its fallback's picture)
-          coverFamily: coverFamilyFor(d.recipe), // Milestone 6: one of the 30 families
+          cover: coverFor(d.recipe, cfx.cover), // the art key (a parked family shows its fallback's picture); Milestone 15: a combo's nudge
+          coverFamily: coverFamilyFor(d.recipe, cfx.cover), // Milestone 6: one of the 30 families
+          combos: [...d.combos], // Milestone 15: what the launch and the franchise read
+          comboFx: { casualPct: cfx.casualPct, corePct: cfx.corePct, tailPct: cfx.tailPct, trust: cfx.trust, franchisePct: cfx.franchisePct, artAwardScore: cfx.artAwardScore, hardwareDemandPct: cfx.hardwareDemandPct },
           reviewSeed: d.rng, // locked at Gold Master: reviews come from this, so a reload never changes them
           // Milestone 7: the schedule and the choices made.
           startedDay: d.startedDay,
@@ -486,6 +495,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       const T = FRANCHISE_BALANCE.types[type];
       const src = setup.source != null ? catalogue.get(setup.source) : null;
       const est = api.estimate(job.slots, setup.scope, type);
+      const combos = combosFor(setup.recipe); // Milestone 15
+      const cfx = comboEffects(combos);
       job.data = {
         scope: setup.scope,
         recipe: { ...setup.recipe },
@@ -499,7 +510,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         slip,
         workScale: (1 + slip) * T.workMult,
         type,
-        costMult: T.costMult,
+        costMult: +(T.costMult * (1 + cfx.costPct / 100)).toFixed(4), // Milestone 15: a combo's production cost
+        combos,
         ipId: setup.ipId ?? null,
         source: src ? src.number : null,
         sourceOutputs: src && T.floor ? { ...src.result.outputs } : null,

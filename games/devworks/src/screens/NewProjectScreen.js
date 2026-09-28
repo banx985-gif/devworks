@@ -12,6 +12,8 @@
 // Milestone 13: the core team lists everyone in the studio (by role); someone making another game or away on a course
 // can't be picked (why under their name). A role the studio has nobody for gets a hint (spec §9): how many more days
 // this game takes without one, and a button that puts that role's Start Candidate on the recruitment board.
+// Milestone 15: a recipe one slot away from a combo nobody has found yet gets a gentle hint under the recipe (which
+// slot to change — never the combo); a recipe that makes a known combo says so.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -20,6 +22,7 @@ import { text } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementById, needsProblem, recipeProblems } from '../../data/elements.js';
 import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '../../data/projects.js';
 import { ROLES, STATS } from '../../data/staff.js';
+import { portraitOf } from '../../data/portraits.js'; // Milestone 14: the same head crop everywhere
 import { PROJECT_TYPES, projectTypeById } from '../../data/franchises.js';
 
 const C = THEME.color;
@@ -28,7 +31,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [] }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -214,6 +217,19 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       if (!locked(f.id)) box(r, () => openPicker(f.id), f.id);
     });
     y += 3 * 170 + 30;
+    // Milestone 15: combo hints (a slot to change for an undiscovered combo; known combos by name).
+    const hintSlots = comboHints(setup.recipe).map((h) => FAMILIES.find((f) => f.id === h.slot)?.name).filter(Boolean);
+    const knownHere = combosIn(setup.recipe);
+    const hintLines = [
+      ...(knownHere.length ? [{ t: `Combo: ${knownHere.join(', ')}`, c: C.good }] : []),
+      ...(hintSlots.length ? [{ t: `✨ This recipe feels close to something special… try a different ${hintSlots.join(' or ')}.`, c: C.purple }] : []),
+    ];
+    for (const l of hintLines) {
+      if (ctx) text(ctx, l.t, PAD, y, { size: S.small, bold: true, color: l.c, maxWidth: cw });
+      if (rects) rects[l.c === C.purple ? 'comboHint' : 'comboKnown'] = { x: PAD, y, w: cw, h: 50 };
+      y += 60;
+    }
+    if (hintLines.length) y += 10;
 
     // Scope, audio, budget.
     // Scope: three to a row; locked ones greyed, why under them. Then this team's estimate and deadline.
@@ -286,7 +302,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         ctx.stroke();
         text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted });
         if (person) {
-          assets.drawCrop(ctx, person.art, { x: 0.15, y: 0, w: 0.7, h: 0.42 }, { x: r.x + r.w - 130, y: r.y + 10, w: 110, h: 110 });
+          assets.drawCrop(ctx, person.art, portraitOf(person.art), { x: r.x + r.w - 130, y: r.y + 10, w: 110, h: 110 });
           text(ctx, person.name, r.x + 24, r.y + 58, { size: S.body, bold: true });
           const main = STATS.find((st) => st.key === ROLES[role].primaryStat);
           text(ctx, `${main.label} ${person.stats[main.key]}`, r.x + 340, r.y + 62, { size: S.body, color: C.actionDark, bold: true });

@@ -16,7 +16,8 @@ const PAD = 32;
 const ROW_H = 330;
 const HEAD_H = 190;
 
-export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease, openArchive = null }) {
+// Milestone 15: "Discoveries" under Franchises opens the Discovery Archive.
+export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease, openArchive = null, openDiscoveries = null }) {
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -28,12 +29,14 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
   // Content rect of a game's row, and of its Release button (unreleased only).
   const rowRect = (i, w) => ({ x: PAD - 8, y: HEAD_H + i * (ROW_H + 20), w: w - PAD * 2 + 16, h: ROW_H });
   const releaseRect = (row) => ({ x: row.x + row.w - 260, y: row.y + row.h - 130, w: 240, h: 110 });
-  const archiveRect = (w) => ({ x: w - PAD - 330, y: PAD - 6, w: 330, h: 100 });
+  const archiveRect = (w) => ({ x: w - PAD - 290, y: PAD - 6, w: 290, h: 100 });
+  const discoveriesRect = (w) => ({ x: w - PAD - 290 - 16 - 290, y: PAD - 6, w: 290, h: 100 });
 
   function drawContent(ctx, w) {
     const cw = w - PAD * 2;
     text(ctx, 'Catalogue', PAD, PAD, { size: S.title, bold: true });
     if (openArchive) drawButton(ctx, archiveRect(w), 'Franchises', { accent: C.progress });
+    if (openDiscoveries) drawButton(ctx, discoveriesRect(w), 'Discoveries', { accent: C.purple });
     text(ctx, `Rank ${business.rank.id} · ${business.fame.toLocaleString('en-GB')} Fame · Fan Trust ${Math.round(business.state.fanTrust)}`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw });
     const list = games();
     if (!list.length) text(ctx, 'No games yet. Make one from Create → New Game.', PAD, HEAD_H, { size: S.body, color: C.textMuted, maxWidth: cw });
@@ -109,6 +112,7 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
       const q = scroll.toContent(p);
       const w = panelRect().w;
       if (openArchive && hitRect(q, archiveRect(w))) return openArchive();
+      if (openDiscoveries && hitRect(q, discoveriesRect(w))) return openDiscoveries();
       games().forEach((rec, i) => {
         const row = rowRect(i, w);
         if (!rec.release && !rec.cert && hitRect(q, row)) openRelease(rec.number);

@@ -8,8 +8,9 @@ export const SAVE = {
   localPrefix: 'devworks:',
   slots: ['devworks:campaign', 'devworks:campaign:2', 'devworks:campaign:3', 'devworks:campaign:4'],
   metaKey: 'devworks:meta',
+  accountKey: 'devworks:account', // Milestone 15: what every run shares (the combos discovered)
   rolling: 3, // each slot keeps its last 3 saves; a damaged newest copy falls back to the one before
   version: 2,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)
-  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp', 'studio:stage', 'marketing:run', 'research:start', 'research:complete'],
+  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp', 'studio:stage', 'marketing:run', 'research:start', 'research:complete', 'combo:found', 'staff:hired', 'staff:letGo', 'training:start', 'training:complete', 'mentor:start'],
 };

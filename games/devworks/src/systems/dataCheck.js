@@ -11,6 +11,7 @@ import { REVIEW_BALANCE, FAME, PLATFORM_BALANCE, SALES_BALANCE } from '../../dat
 import { PLATFORMS } from '../../data/platforms.js';
 import { OUTPUTS } from '../../data/projects.js';
 import { FACILITIES, STAGES } from '../../data/facilities.js';
+import { checkStaff } from './staffCheck.js';
 
 // Element icons parked in assets/images/_spares (shown as placeholders on purpose). None since the 27 Sept redraws.
 export const PARKED_ELEMENTS = [];
@@ -132,5 +133,6 @@ export function checkGameData({ fetchFn } = {}) {
   v.noCycles('research', RESEARCH); // Milestone 12: the tree has no loops
   for (const r of RESEARCH) for (const q of r.requires) v.ref(`research ${r.id}`, 'needs', q, researchIds);
   for (const st of STAGES) if (st.shell) v.art(`stage ${st.id}`, `assets/images/shells/${st.shell}.png`);
+  checkStaff(v); // Milestone 14: all 50 staff rows (career validation)
   return v;
 }

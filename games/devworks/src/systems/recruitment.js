@@ -18,13 +18,16 @@
 // games credited, genres and themes, franchises, awards (hook for Milestone 19), trainings, mentoring links; crunch
 // exposure is read from the projects (staffHistory). The founder's Founding Developer flag is shown from the profile.
 //
+// Milestone 14: all 50 staff. Legendary / Secret staff are gated by their SEC-STAFF secret (Milestones 28–29): never
+// in a pool, never a special arrival, never hired — not even by the debug spawn, which only previews their card.
+//
 // Events: core's 'recruit:*', plus 'staff:hired' (world) and 'staff:letGo' { id, name }.
 import { RecruitmentSystem } from '../../../../core/RecruitmentSystem.js';
 import { CareerRecords } from '../../../../core/CareerRecords.js';
 import { Rng } from '../../../../core/Rng.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 import { FAME } from '../../data/balance.js';
-import { ROSTER, staffDefById, ROLES, STAT_KEYS } from '../../data/staff.js';
+import { ROSTER, staffDefById, ROLES, STAT_KEYS, PRESTIGE_TIERS } from '../../data/staff.js';
 import { CHANNELS, channelById, RECRUIT, SPECIAL_DAYS, HINTS } from '../../data/recruitment.js';
 import { facilityById } from '../../data/facilities.js';
 import { estimateDays, phaseWeights } from './gameProject.js';
@@ -37,6 +40,7 @@ export const tierRank = (tier) => TIER_ORDER.indexOf(tier);
 // Why this person can't be found yet (null = eligible). ctx: { rankIndex, roleGames(role), hasFacility(id), major }.
 export function eligibilityWhy(def, ctx) {
   const e = def.eligibility ?? {};
+  if (e.secret || PRESTIGE_TIERS.includes(def.tier)) return 'Arrives only through a secret (later)'; // Milestone 14: gated
   if (e.start) return null;
   const why = [];
   if (e.rank && ctx.rankIndex < rankIndexOf(FAME.ranks, e.rank)) why.push(`Rank ${e.rank}`);
@@ -169,6 +173,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     if (full()) return { ok: false, why: `The studio is full (${world.staffSystem.staff.length} of ${cap()}): move up a stage for more room` };
     const w = why(def);
     if (w) return { ok: false, why: w };
+    if (PRESTIGE_TIERS.includes(def.tier)) return { ok: false, why: 'Arrives only through a secret (later)' };
     const seat = seatFor(def.role);
     if (seat.why) return { ok: false, why: seat.why, seat };
     return { ok: true, why: null, seat, def };
@@ -342,6 +347,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     cardDef: (card) => staffDefById(card?.personId),
     eligible,
     eligibilityWhy: (def) => why(def),
+    spawnable: (def) => !!def && !PRESTIGE_TIERS.includes(def.tier), // Milestone 14: the debug spawn
     pool: (channelId, tier) => pool(channelById(channelId), tier, new Set()),
     missingRoles,
     hireCheck,
@@ -358,7 +364,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     // ?debug=1 / tests: someone joins without the board or the rules (to try mentoring with an Elite early).
     debugJoin(personId) {
       const def = staffDefById(personId);
-      if (!def || employed(personId) || full()) return null;
+      if (!def || employed(personId) || full() || PRESTIGE_TIERS.includes(def.tier)) return null; // prestige: preview only
       let st = world.freeStationFor(def.role);
       for (const id of [RECRUIT.roleStations[def.role], ...Object.values(RECRUIT.roleStations), 'F10', 'F09', 'F07', 'F12', 'F11']) st ??= world.addStation(id);
       if (!st) return null;

@@ -17,7 +17,8 @@ const PAD = 32;
 const ROW_H = 230;
 const STATE = { done: ['Done', C.good], active: ['Researching', C.progress], available: ['Open', C.action], locked: ['Locked', C.textMuted] };
 
-export function createResearchScreen({ layout, assets, research, topBar, debugFinish = null }) {
+// Milestone 15: "Discoveries" (top right) opens the Discovery Archive.
+export function createResearchScreen({ layout, assets, research, topBar, debugFinish = null, openDiscoveries = null }) {
   let branch = BRANCHES[0].id;
   let hits = { tabs: [], rows: [], stop: null, debug: null };
   const panelRect = () => {
@@ -35,8 +36,12 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
   function drawContent(ctx, w) {
     const cw = w - PAD * 2;
     let y = PAD;
-    hits = { tabs: [], rows: [], stop: null, debug: null };
+    hits = { tabs: [], rows: [], stop: null, debug: null, discoveries: null };
     text(ctx, 'Research', PAD, y, { size: S.title, bold: true });
+    if (openDiscoveries) {
+      hits.discoveries = { x: w - PAD - 360, y: y - 6, w: 360, h: 100 };
+      drawButton(ctx, hits.discoveries, 'Discoveries', { accent: C.purple });
+    }
     y += 84;
     assets.drawContained(ctx, 'dev_reward_03', { x: PAD, y: y - 8, w: 56, h: 56 });
     text(ctx, `${research.rp.toLocaleString('en-GB')} RP · about +${research.dailyRp().toFixed(1)} a day, more from each release`, PAD + 68, y, { size: S.body, color: C.textMuted, maxWidth: cw - 68 });
@@ -135,6 +140,7 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
     tabRect: (id) => toScreen(hits.tabs[BRANCHES.findIndex((b) => b.id === id)]),
     startButton: (id) => toScreen(hits.rows.find((x) => x.id === id && x.ok)?.button),
     stopButton: () => toScreen(hits.stop),
+    discoveriesButton: () => toScreen(hits.discoveries),
     scrollTo(id) {
       const h = hits.rows.find((x) => x.id === id);
       if (h) {
@@ -151,6 +157,7 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
         return;
       }
       if (hits.stop && hitRect(q, hits.stop)) return research.stop();
+      if (hits.discoveries && hitRect(q, hits.discoveries)) return openDiscoveries();
       if (hits.debug && hitRect(q, hits.debug)) return debugFinish(branch);
       const h = hits.rows.find((x) => x.ok && hitRect(q, x.button));
       if (h) research.start(h.id);

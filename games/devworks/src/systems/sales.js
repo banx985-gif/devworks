@@ -77,15 +77,18 @@ export const netPerCopy = (R = RELEASE, price = R.price) => (price * (100 - R.st
 // Milestone 7: salesMult (bigger scopes reach more players) and price come from the game's scope.
 // Milestone 9: hype (frozen at launch) and the review shape the curve and add sales; clash = the share of the launch
 // week lost to a same-genre competitor release ({ days, pct }) or null.
-export function startSales({ score, fit, trust, demand, platform, reviewSeed, day, salesMult = 1, price = RELEASE.price, audience = S.platforms[platform]?.audience ?? 0, hype = 0, clash = null }, S = SALES_BALANCE) {
+// Milestone 15: tailPct (a combo's long tail): that many % more copies in the tail part only — the lifetime grows by
+// tail share × tailPct and the curve's shares are re-weighted so the extra is all in the tail.
+export function startSales({ score, fit, trust, demand, platform, reviewSeed, day, salesMult = 1, price = RELEASE.price, audience = S.platforms[platform]?.audience ?? 0, hype = 0, clash = null, tailPct = 0 }, S = SALES_BALANCE) {
   const a = appeal({ score, fit, trust, demand }, S);
+  const curve = withTail(curveFor({ score, hype }, S), tailPct);
   return {
     platform,
     releasedDay: day,
     appeal: +a.toFixed(6),
-    lifetime: +(lifetimeCopies(audience, a) * salesMult * marketingSalesMult(score, hype)).toFixed(3),
+    lifetime: +(lifetimeCopies(audience, a) * salesMult * marketingSalesMult(score, hype) * curve.grow).toFixed(3),
     price,
-    curve: curveFor({ score, hype }, S),
+    curve: curve.curve,
     clash: clash ? { days: clash.days, pct: clash.pct } : null,
     rng: new Rng(`${reviewSeed}|sales`).getState(),
     carry: 0,
@@ -93,6 +96,15 @@ export function startSales({ score, fit, trust, demand, platform, reviewSeed, da
     revenue: 0,
     days: 0, // days on sale
   };
+}
+
+// A curve with tailPct % more in its tail: { curve (shares still add up to 1), grow (lifetime multiplier) }.
+export function withTail(curve, tailPct = 0) {
+  if (!tailPct || !curve.tail?.share) return { curve, grow: 1 };
+  const grow = 1 + (curve.tail.share * tailPct) / 100;
+  const out = {};
+  for (const [k, p] of Object.entries(curve)) out[k] = { ...p, share: +((k === 'tail' ? p.share * (1 + tailPct / 100) : p.share) / grow).toFixed(6) };
+  return { curve: out, grow };
 }
 
 // One day of sales for a released game (mutates its sales state). Returns { copies, revenue }.

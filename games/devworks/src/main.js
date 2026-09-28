@@ -27,6 +27,10 @@
 // Milestone 13: recruitment (the Recruitment Desk and Staff → Hire: channels, the board of 3, free refresh every 56
 // days, hiring up to the stage cap, letting go), training courses and mentoring (Staff card → Train / Mentor), careers
 // on the staff card, the missing-role hints on New Game, and the second game lane at S2+.
+// Milestone 14: all 50 staff (portrait crops, the career validator in the ?debug=1 data check, the Staff book).
+// Milestone 15: the 24 normal combos (src/systems/combos.js): rewards when a recipe matches, discovery when the game is
+// finished (RP once a run; the archive is kept for the whole account, SAVE.accountKey), near-miss hints on New Game,
+// the Discovery Archive (Research and Catalogue).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -64,6 +68,9 @@ import { founderById } from '../data/setup.js';
 import { startStaffById, staffDefById } from '../data/staff.js';
 import { createRecruitment } from './systems/recruitment.js';
 import { createTraining } from './systems/training.js';
+import { createCombos, combosFor } from './systems/combos.js';
+import { comboById } from '../data/combos.js';
+import { createDiscoveryScreen } from './screens/DiscoveryScreen.js';
 import { TRAITS, STATS } from '../data/staff.js';
 import { createStudioProfile, migrateToV2, slotSummary } from './systems/studioProfile.js';
 import { createTitleScreen } from './screens/TitleScreen.js';
@@ -106,7 +113,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -135,6 +142,8 @@ const shop = createFacilityShop({ bus, world, business, clock, projects, researc
 const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop }); // Milestone 13
 const training = createTraining({ bus, clock, world, business, projects, research, recruitment });
 const lanes = () => stageById(world.stage).lanes;
+let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
+const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
 const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: research.researched(), stage: world.stage }) }); // Milestone 11: stages; Milestone 12: research
@@ -319,6 +328,7 @@ const menus = createStudioMenus({
     sheet.close();
     if (!r.ok) showTip(r.reason);
   },
+  debugSpawn: new URLSearchParams(window.location.search).has('debug') ? (id) => (recruitment.debugJoin(id) ? sheet.close() : showTip('Can\'t join: gated, or no room')) : null, // Milestone 14
   debugHire: new URLSearchParams(window.location.search).has('debug') ? () => (['PRG07', 'DSN07', 'ART07', 'WRT07', 'PRO07'].some((id) => recruitment.debugJoin(id)) ? sheet.close() : showTip('No room for an Elite')) : null,
   decide: (id) => decideNow(id),
   dateOf: (d) => clock.shortLabel(d),
@@ -450,7 +460,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -464,6 +474,12 @@ autosave.installBackground();
 
 async function prepareSaves() {
   const adapter = await createStorageAdapter({ dbName: SAVE.dbName, prefix: SAVE.localPrefix });
+  accountStore = adapter;
+  try {
+    combos.loadAccount(await adapter.get(SAVE.accountKey)); // Milestone 15: combos found in any slot
+  } catch (err) {
+    console.error('[DEVWORKS] account record unreadable', err);
+  }
   slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2 }, rolling: SAVE.rolling, bus });
   await refreshSlots();
 }
@@ -521,6 +537,8 @@ async function playSlot(i) {
   elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
   recruitment.load(data.staff?.recruit ?? null); // Milestone 13 (a save from before it: a fresh board, careers rebuilt)
   training.load(data.staff?.training ?? null);
+  combos.load(data.combos ?? null); // Milestone 15 (a save from before it: nothing found in this run)
+  combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -540,6 +558,7 @@ async function startStudio(i, setup) {
   elements.newGame();
   recruitment.newGame(); // Milestone 13: the first board (Start Candidates) and everyone's career
   training.newGame();
+  combos.newRun(); // Milestone 15: the account's archive stays
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -751,6 +770,8 @@ const newProject = createNewProjectScreen({
     openMenu('recruit');
   },
   laneWhy: () => (projects.jobs.length >= lanes() ? 'a free game lane' : null),
+  comboHints: (recipe) => combos.hints(recipe), // Milestone 15
+  combosIn: (recipe) => combosFor(recipe).filter((id) => combos.known(id)).map((id) => comboById(id).name),
   dateLabel: (d) => clock.shortLabel(d),
   today: () => clock.totalDays,
   costPerDay: (scope, focus, type) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100) * (FRANCHISE_BALANCE.types[type]?.costMult ?? 1)),
@@ -775,6 +796,7 @@ bus.on('project:complete', ({ record }) => {
     drawFn: (ctx, t) => drawFinished(ctx, t, g),
     onAck: () => {
       afterFeedback();
+      if (comboBeat) [beat, comboBeat] = [comboBeat, null]; // Milestone 15: the combo banner after the big moment
       if (router.currentName === 'project') router.go('studio');
       openMenu('release', record.number); // Milestone 4: straight on to releasing it
     },
@@ -813,6 +835,14 @@ bus.on('research:complete', ({ node, fired }) => {
   const names = (fired ?? []).map((a) => (a.type === 'element' ? elementName(a.id)?.name : facilityById(a.id)?.name)).filter(Boolean);
   beat = { entry: { title: `Research done: ${node.name}`, body: names.length ? `Opens ${names.join(', ')}` : 'The studio knows more now.' }, age: 0 };
   debug.log(`research done: ${node.id}`);
+});
+// A combo found in a finished game (Milestone 15): a short banner (RP the first time in this run).
+// It comes with "Game finished!", so it waits until that is tapped away (comboBeat).
+let comboBeat = null;
+bus.on('combo:found', ({ combo, firstInRun, rp }) => {
+  if (!firstInRun) return;
+  comboBeat = { entry: { title: `Combo discovered: ${combo.name}!`, body: `+${rp} RP · see it in Research → Discoveries` }, age: 0 };
+  debug.log(`combo: ${combo.id}`);
 });
 // A marketing action starts: a short banner.
 bus.on('marketing:run', ({ action, gain, title }) => {
@@ -1134,8 +1164,9 @@ function skipYear() {
 bus.on('game:certifying', ({ record }) => {
   beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
 });
-const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive') });
-const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
+const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive'), openDiscoveries: () => router.go('discoveries') });
+const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: subTopBar }); // Milestone 15
+const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
 
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
@@ -1158,7 +1189,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1176,6 +1207,7 @@ router
   .register('marketing', marketingScreen)
   .register('archive', archiveScreen)
   .register('research', researchScreen)
+  .register('discoveries', discoveryScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

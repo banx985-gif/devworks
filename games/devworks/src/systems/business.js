@@ -22,6 +22,9 @@
 // Milestone 11: facility effects — fanTrustGainPct on Fan Trust gains, certFailPct on certification fail chances,
 // launchSalesPct on sales.
 //
+// Milestone 15: a combo game's launch effects (result.comboFx): casual / core audience sales on platforms of that
+// audience group, a longer sales tail, Fan Trust.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -37,6 +40,8 @@ import { reviewGame } from './reviews.js';
 import { startSales, sellDay, statusOn } from './sales.js';
 import { createMarketing, launchTrust, fanExpectationFor } from './marketing.js';
 import { createFranchises, typeOf } from './franchises.js';
+import { AUDIENCE_GROUPS } from '../../data/combos.js';
+import { platformById as platformOf } from '../../data/platforms.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -194,12 +199,18 @@ export function createBusiness({ bus, clock, world, projects }) {
       certFailed: plan.platforms.filter((x) => x.cert?.failed).map((x) => x.id),
     };
     const byPlatform = {};
+    const cfx = g.comboFx ?? {}; // Milestone 15
+    const audiencePct = (id) => {
+      const grp = platformOf(id)?.group;
+      return (AUDIENCE_GROUPS.casual.includes(grp) ? cfx.casualPct ?? 0 : 0) + (AUDIENCE_GROUPS.core.includes(grp) ? cfx.corePct ?? 0 : 0);
+    };
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100), price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100), price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
     const trust = launchTrust({ score: review.score, fanExpectation, hype, bugs: g.bugs + plan.extraBugs });
+    if (cfx.trust) trust.total = +(trust.total + cfx.trust).toFixed(4), (trust.combo = cfx.trust); // Milestone 15
     record.release.trust = trust;
     const gain = trust.total > 0 ? trust.total * (1 + (world.effect?.('fanTrustGainPct') ?? 0) / 100) : trust.total; // Community Room
     state.fanTrust = +clamp(state.fanTrust + gain, 0, 100).toFixed(2);

@@ -69,7 +69,9 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
     const rel = releasedOf(ip);
     const copies = rel.reduce((t, r) => t + copiesOf(r), 0);
     const reviewAvg = rel.length ? rel.reduce((t, r) => t + r.release.score, 0) / rel.length : 0;
-    const points = (copies * reviewAvg) / F.pointsReviewRef;
+    // Milestone 15: a combo's "franchise potential" (the best of its released games) makes the points count more.
+    const potential = Math.max(0, ...rel.map((r) => r.result.comboFx?.franchisePct ?? 0));
+    const points = ((copies * reviewAvg) / F.pointsReviewRef) * (1 + potential / 100);
     const status = statusFor({ points, entries: rel.length, reviewAvg });
     return {
       entries: ip.entries.length,

@@ -20,11 +20,14 @@
 //   Milestone 13: recruit (the Recruitment Desk / Staff → Hire: channels, the 3 cards, refresh), candidate (one card:
 //   stats, trait, salary, where they'd work, Hire), train (courses for one worker), mentor (an Elite's mentee); Create
 //   lists every game in the works (two lanes at S2+) and New Game while a lane is free
+//   Milestone 14: staff buttons show the head crop (data/portraits.js); ?debug=1 adds the Staff book (all 50: preview any
+//   card; spawn Standard / Rare / Elite — Legendary / Secret stay gated)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
 import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
-import { ROLES, STATS, TIERS, TRAITS } from '../../data/staff.js';
+import { ROLES, STATS, TIERS, TRAITS, ROSTER, staffDefById } from '../../data/staff.js';
+import { portraitOf } from '../../data/portraits.js';
 import { MENTORING } from '../../data/recruitment.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
@@ -37,7 +40,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -315,7 +318,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
               columns: 1,
               buttons: cards.map((c) => {
                 const d = r.cardDef(c);
-                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : ''}`, icon: d.art, accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
+                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
               }),
             }
           : { lines: [{ text: 'Nobody new on this board. Refresh, or try another channel when it opens.', color: C.textMuted }] },
@@ -324,6 +327,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           buttons: [
             { id: 'refresh', label: `Refresh now: ${ch.name}`, sub: b.credits >= cost ? `${cost.toLocaleString('en-GB')} Credits (the price doubles for each refresh this month)` : `Needs ${cost.toLocaleString('en-GB')} Credits`, disabled: b.credits < cost, onTap: () => r.refresh() },
             ...(debugHire ? [{ id: 'debugElite', label: 'Debug: an Elite joins', sub: 'Adds an Elite (for mentoring checks)', accent: C.purple, onTap: () => debugHire() }] : []),
+            ...(debugSpawn ? [{ id: 'staffBook', label: 'Debug: Staff book', sub: 'All 50: preview any card, spawn Standard / Rare / Elite', accent: C.purple, onTap: () => open('staffBook') }] : []),
           ],
         },
       ],
@@ -405,7 +409,48 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       subtitle: `${TIERS[s.tier].name} staff can mentor one person of a lower tier.`,
       art: s.art,
       accent: C.progress,
-      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}` : o.why, icon: o.staff.art, disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
+      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}` : o.why, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
+    };
+  });
+
+  // Milestone 14 (?debug=1): every one of the 50, and one card.
+  menus.register('staffBook', () => {
+    if (!debugSpawn) return null;
+    const w = world();
+    return {
+      title: 'Staff book',
+      subtitle: 'All 50 staff (bible §10). Legendary and Secret staff arrive only through their secrets, later.',
+      accent: C.purple,
+      sections: Object.keys(ROLES).map((role) => ({
+        title: ROLES[role].name,
+        columns: 2,
+        buttons: ROSTER.filter((d) => d.role === role).map((d) => ({ id: `book:${d.id}`, label: d.name, sub: `${TIERS[d.tier].name}${w.staffSystem.get(d.id) ? ' · here' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: ['legendary', 'secret'].includes(d.tier) ? C.gold : C.progress, onTap: () => open('staffPreview', d.id) })),
+      })),
+    };
+  });
+  menus.register('staffPreview', (id) => {
+    const d = staffDefById(id);
+    const r = recruitment?.();
+    if (!d || !debugSpawn || !r) return null;
+    const here = !!world().staffSystem.get(id);
+    const can = r.spawnable(d);
+    const lines = [
+      { text: statLine(d.stats), color: C.actionDark },
+      `Level ${d.startLevel} · salary ${d.salary.toLocaleString('en-GB')} Credits a month`,
+      ...d.traits.map((t) => ({ text: `${TRAITS[t]?.signature ? '★ ' : ''}${TRAITS[t]?.name ?? t}: ${TRAITS[t]?.text ?? ''}`, color: TRAITS[t]?.signature ? C.gold : C.purple })),
+      { text: `Found by: ${r.eligibilityWhy(d) ?? 'eligible now'}`, color: C.textMuted },
+    ];
+    return {
+      title: d.name,
+      subtitle: `${ROLES[d.role].name} · ${TIERS[d.tier].name} (cap ${TIERS[d.tier].statCap}, ${TIERS[d.tier].traitSlots} trait slot${TIERS[d.tier].traitSlots > 1 ? 's' : ''}${TIERS[d.tier].signature ? ' + signature' : ''})`,
+      art: d.art,
+      sections: [
+        { lines },
+        { columns: 2, buttons: [
+          { id: 'spawn', label: 'Debug: spawn', sub: here ? 'Already in the studio' : can ? 'Joins now (skips the rules)' : 'Gated: arrives through a secret', disabled: here || !can, accent: C.purple, onTap: () => debugSpawn(id) },
+          { id: 'back', label: 'Back', sub: 'To the Staff book', accent: C.progress, onTap: () => open('staffBook') },
+        ] },
+      ],
     };
   });
 
