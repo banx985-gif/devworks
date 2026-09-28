@@ -40,6 +40,8 @@ export const ASSETS = {
   // Milestone 23: the 36 hardware parts, the Hardware / parts icons, the prototype and its moment.
   ...Object.fromEntries(COMPONENTS.map((c) => art('hardware', c.art))),
   ...Object.fromEntries([art('ui', 'dev_ui_26'), art('ui', 'dev_ui_27'), art('consoles', HARDWARE.prototypeArt), art('events', HARDWARE.firstPrototypeEvent)]),
+  // Milestone 24: the console pictures, dev kit / manufacturing icons, the launch moment and the defect smoke.
+  ...Object.fromEntries([art('consoles', 'console_visual_01'), art('consoles', 'console_visual_02'), art('ui', 'dev_ui_28'), art('ui', 'dev_ui_29'), art('events', 'dev_event_11'), art('vfx', 'dev_vfx_10'), art('vfx', 'dev_vfx_11')]),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

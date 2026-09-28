@@ -15,7 +15,7 @@ const checkLines = (v) => [
   ...v.capabilities.filter((c) => !c.ok).map((c) => ({ text: `– ${c.why}`, color: C.textMuted })),
 ];
 
-export function createHardwareScreen({ layout, assets, topBar, hardware, dateLabel, openPick, openBuild, onRename }) {
+export function createHardwareScreen({ layout, assets, topBar, hardware, dateLabel, openPick, openBuild, onRename, openConsoles = null }) {
   return createCardListScreen({
     layout,
     assets,
@@ -65,7 +65,7 @@ export function createHardwareScreen({ layout, assets, topBar, hardware, dateLab
           title: `${p.name} · ${p.validation.passed ? 'passed validation' : 'failed validation'}`,
           highlight: p.validation.passed,
           lines: [HW_SLOTS.map((s) => componentById(p.parts[s.id])?.name).join(' · '), ...ratingLines(p.ratings), ...checkLines(p.validation), { text: `Built ${dateLabel(p.builtDay)} · ${fmt(p.cost)} Credits · ${fmt(p.ratings.unitCost)} a unit`, color: C.textMuted }],
-          buttons: [],
+          buttons: p.validation.passed && openConsoles ? [{ id: 'launch', label: 'Plan a launch', accent: C.good, onTap: () => openConsoles(p.id) }] : [], // Milestone 24
         })),
       });
       return {

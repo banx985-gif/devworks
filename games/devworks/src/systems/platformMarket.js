@@ -6,7 +6,7 @@
 // own seed; they are saved and never rolled again, so a reload never changes a platform's fortunes. Everything else is
 // a pure function of those rolls and the day.
 import { Rng } from '../../../../core/Rng.js';
-import { PLATFORMS, platformById } from '../../data/platforms.js';
+import { PLATFORMS, platformById, allPlatforms } from '../../data/platforms.js';
 import { PLATFORM_BALANCE, CALENDAR } from '../../data/balance.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -61,8 +61,12 @@ export function platformState(id, day, roll = { success: 1, shift: 0 }, P = PLAT
 // A platform you can release on: out, and not dead yet.
 export const releasable = (status) => status === 'Growing' || status === 'Peak' || status === 'Declining';
 
+// Milestone 24: custom platforms (the player's console): setCustom({ has(id), state(id, day) → { base, status } }).
 export function createPlatformMarket({ P = PLATFORM_BALANCE } = {}) {
   let rolls = null;
+  let custom = null;
+  const stateOf = (id, day) => (custom?.has(id) ? custom.state(id, day) : platformState(id, day, rolls?.[id], P));
+  const every = () => allPlatforms().filter((p) => PLATFORMS.includes(p) || custom?.has(p.id));
   const api = {
     get rolls() {
       return rolls;
@@ -70,10 +74,13 @@ export function createPlatformMarket({ P = PLATFORM_BALANCE } = {}) {
     newGame(seed) {
       rolls = rollPlatforms(seed, P);
     },
-    state: (id, day) => platformState(id, day, rolls?.[id], P),
-    // Every platform on a day, in catalogue order: { platform, base, status }.
-    list: (day) => PLATFORMS.map((p) => ({ platform: p, ...platformState(p.id, day, rolls?.[p.id], P) })),
-    active: (day) => PLATFORMS.filter((p) => releasable(platformState(p.id, day, rolls?.[p.id], P).status)),
+    setCustom(c) {
+      custom = c;
+    },
+    state: (id, day) => stateOf(id, day),
+    // Every platform on a day, in catalogue order (the player's console last): { platform, base, status }.
+    list: (day) => every().map((p) => ({ platform: p, ...stateOf(p.id, day) })),
+    active: (day) => every().filter((p) => releasable(stateOf(p.id, day).status)),
     serialize: () => ({ rolls: JSON.parse(JSON.stringify(rolls)) }),
     // A save from before Milestone 8 has no rolls: they are made once from a fixed seed and then saved like any other.
     load(data) {

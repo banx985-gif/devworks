@@ -48,6 +48,9 @@
 // them, three game lanes; the big moment shows the stage's event picture; ?debug=1 adds __dw.debugFullStudio().
 // Milestone 23: hardware foundation (optional): Create → Hardware — a console design (six parts, a family name), a
 // prototype built at the Hardware Prototype Lab, its seven ratings and its validation; the first prototype's moment.
+// Milestone 24: console launch and market — Create → Consoles (Console Portfolio): the launch plan from a validated
+// prototype, then the console as a platform (install base, third-party games, royalties, defects, failure reasons,
+// recovery); spending never passes the Emergency Credit line.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -100,6 +103,9 @@ import { createGlobalBusiness } from './systems/globalBusiness.js';
 import { createHardware } from './systems/hardware.js';
 import { createHardwareScreen } from './screens/HardwareScreen.js';
 import { HARDWARE } from '../data/hardware.js';
+import { createConsoles } from './systems/consoles.js';
+import { createConsoleScreen } from './screens/ConsoleScreen.js';
+import { CONSOLE } from '../data/consoles.js';
 import { createLicensingScreen, createPublishingOfficeScreen, createAcquisitionsScreen } from './screens/GlobalScreens.js';
 import { LOCALISATION } from '../data/global.js';
 import { supportOptionById as SUPPORT_OPTION_BY_ID } from '../data/support.js';
@@ -151,7 +157,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -188,7 +194,7 @@ engines = createEngines({ bus, clock, world, business, projects, research, studi
 const sponsors = createSponsors({ bus, clock, world, business }); // Milestone 18
 world.addEffectSource((key) => sponsors.effect(key));
 // Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
-const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).map((p) => p.id) });
+const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).filter((p) => !p.own).map((p) => p.id) }); // Milestone 24: not on your console
 const awards = createAwards({ bus, clock, business, projects, rivals, seed: () => business.marketing.seed, studioName: () => profile.name || 'Your studio', hasEngine: () => !!engines?.engines.length });
 // Milestone 20: post-launch support (takes a game lane while it runs).
 let support = null;
@@ -198,6 +204,7 @@ contracts = createContracts({ bus, clock, world, business, engines: () => engine
 const lanes = () => stageById(world.stage).lanes;
 // Milestone 21: global business (after the business, research, engines, recruitment and publishers).
 hardware = createHardware({ bus, clock, world, business, research, studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
+const consoles = createConsoles({ bus, clock, world, business, projects, hardware, engines: () => engines, studioName: () => profile.name || 'Studio', seed: () => business.marketing.seed }); // Milestone 24
 const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
@@ -391,6 +398,7 @@ const menus = createStudioMenus({
   support: () => support, // Milestone 20
   global: () => global, // Milestone 21
   hardware: () => hardware, // Milestone 23
+  consoles: () => consoles, // Milestone 24
   pickPart: (slot, id) => {
     hardware.pick(slot, id);
     sheet.close();
@@ -555,7 +563,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -642,6 +650,7 @@ async function playSlot(i) {
   support.load(data.support ?? null); // Milestone 20
   global.load(data.global ?? null); // Milestone 21
   hardware.load(data.hardware ?? null); // Milestone 23
+  consoles.load(data.consoles ?? null); // Milestone 24
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -672,6 +681,7 @@ async function startStudio(i, setup) {
   support.newGame(); // Milestone 20
   global.newGame(); // Milestone 21
   hardware.newGame(); // Milestone 23
+  consoles.newGame(); // Milestone 24
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -1049,6 +1059,40 @@ bus.on('hardware:prototype', ({ prototype, first }) => {
     onAck: afterFeedback,
   });
 });
+// Consoles (Milestone 24): the launch moment, defect waves (warning smoke over the studio), the verdict.
+bus.on('console:launched', ({ console: c }) => {
+  feedback.show({
+    title: `${c.name} launches!`,
+    subtitle: `Your ${CONSOLE.forms[c.form].name.toLowerCase()} is on sale for ${c.price} Credits. Release your games on it; third-party studios follow when it sells.`,
+    accent: COL.gold,
+    onShow: () => {
+      const H = renderer.height;
+      celebrate.confetti('screen', W / 2, H * 0.72, { count: 40, speed: 900, spreadX: 120 });
+    },
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const s = Math.min(1, t / 0.35);
+      const size = 560 * (0.6 + 0.4 * s);
+      ctx.save();
+      ctx.globalAlpha = s;
+      assets.drawContained(ctx, CONSOLE.launchArt, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.28 - size / 2, w: size, h: size });
+      const v = 220 * (0.5 + 0.5 * s); // the launch sparkle under the picture
+      assets.drawContained(ctx, CONSOLE.launchVfx, { x: W / 2 - v / 2, y: sr.y + sr.h * 0.28 + size / 2 + 10, w: v, h: v });
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
+});
+bus.on('console:defects', ({ console: c, cost }) => {
+  beat = { entry: { title: `${c.name}: a wave of faulty consoles`, body: `Repairs ${cost.toLocaleString('en-GB')} Credits · Fan Trust −${CONSOLE.defects.trustHit}` }, age: 0 };
+  if (router.currentName === 'studio') {
+    const p = studio.screenPointOf(makerId);
+    vfx.sprite('screen', CONSOLE.defectVfx, p.x, p.y - 160, { size: 260, life: 1.6, from: 0.4, to: 1, rise: 60, hold: 0.6 });
+  }
+});
+bus.on('console:verdict', ({ console: c, verdict }) => {
+  beat = { entry: { title: `${c.name} after a year: ${verdict === 'hit' ? 'a hit!' : verdict === 'flop' ? 'a flop' : 'steady'}`, body: `${c.installBase.toLocaleString('en-GB')} players · see Create → Consoles` }, age: 0 };
+});
 // Global business banners (Milestone 21).
 bus.on('licence:signed', ({ licence }) => {
   beat = { entry: { title: `Engine licensed to ${licence.customer}`, body: `${licence.label}: fees every month for a year` }, age: 0 };
@@ -1423,11 +1467,17 @@ const hardwareScreen = createHardwareScreen({
   dateLabel: (d) => clock.shortLabel(d),
   openPick: (slot) => openMenu('hwPick', slot),
   openBuild: () => openMenu('hwBuild'),
+  openConsoles: (id) => {
+    consoles.setPlan('prototypeId', id);
+    router.go('consoles');
+  },
   onRename: () => {
     const rect = hardwareScreen.buttonRect('design:rename');
     if (rect) textPrompt.open({ rect, value: hardware.draft.family, maxLength: 24, placeholder: 'Console family', onDone: (v) => hardware.rename(v) });
   },
 });
+// Milestone 24: the Console Portfolio.
+const consoleScreen = createConsoleScreen({ layout, assets, topBar: subTopBar, consoles, projects, dateLabel: (d) => clock.shortLabel(d), onLaunch: () => { const r = consoles.launch(); if (!r.ok) showTip(r.why); }, onRecover: (id) => { const r = consoles.recover(id); if (!r.ok) showTip(r.why); } });
 // Milestone 21: the global business screens.
 const licensingScreen = createLicensingScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = global.signLicence(id); if (!r.ok) showTip(r.why); }, onDecline: (id) => global.declineLicence(id) });
 const publishingOfficeScreen = createPublishingOfficeScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onChoose: (id, choice) => { const r = global.fund(id, choice); if (!r.ok) showTip(r.why); } });
@@ -1463,7 +1513,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1493,6 +1543,7 @@ router
   .register('publishingOffice', publishingOfficeScreen)
   .register('acquisitions', acquisitionsScreen)
   .register('hardware', hardwareScreen)
+  .register('consoles', consoleScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

@@ -19,7 +19,20 @@ export const PLATFORMS = [
   { id: 'P11', name: 'PocketBox Fusion', holder: 'PocketForge', era: { from: 15, to: null }, audienceLabel: 'All-Ages', group: 'allAges', friendliness: 'High', identity: 'Hybrid handheld / home', art: 'platform_device_11' },
   { id: 'P12', name: 'NovaCloud', holder: 'NovaPlay', era: { from: 18, to: null }, audienceLabel: 'Casual / Core', group: 'casualCore', friendliness: 'Very High', identity: 'Late cloud-assisted platform', art: 'platform_device_12' },
 ];
-export const platformById = (id) => PLATFORMS.find((p) => p.id === id) ?? null;
+// Milestone 24: the player's own console joins the market as an extra platform (registered by src/systems/consoles.js;
+// its install base comes from that system, not a committed curve). The 12 above never change.
+const EXTRA = [];
+export function registerPlatform(def) {
+  const i = EXTRA.findIndex((p) => p.id === def.id);
+  if (i >= 0) EXTRA[i] = def;
+  else EXTRA.push(def);
+}
+export const unregisterPlatform = (id) => {
+  const i = EXTRA.findIndex((p) => p.id === id);
+  if (i >= 0) EXTRA.splice(i, 1);
+};
+export const allPlatforms = () => [...PLATFORMS, ...EXTRA];
+export const platformById = (id) => PLATFORMS.find((p) => p.id === id) ?? EXTRA.find((p) => p.id === id) ?? null;
 
 // The five states a platform's install-base curve goes through (bible §17: launch → growth → peak → decline).
 export const PLATFORM_STATUS = ['Upcoming', 'Growing', 'Peak', 'Declining', 'Dead'];

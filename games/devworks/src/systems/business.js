@@ -43,7 +43,7 @@ import { MarketSystem } from '../../../../core/MarketSystem.js';
 import { Rng } from '../../../../core/Rng.js';
 import { PROJECT_BALANCE, ECONOMY, RELEASE, REVIEW_BALANCE, SALES_BALANCE, FAME, FAN_TRUST, SPEED_UNLOCKS } from '../../data/balance.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
-import { PLATFORMS, platformById } from '../../data/platforms.js';
+import { PLATFORMS, platformById, allPlatforms } from '../../data/platforms.js';
 import { PLATFORM_BALANCE } from '../../data/balance.js';
 import { createPlatformMarket, releasable } from './platformMarket.js';
 import { reviewGame } from './reviews.js';
@@ -126,7 +126,7 @@ export function createBusiness({ bus, clock, world, projects }) {
     const g = record.result;
     const P = PLATFORM_BALANCE;
     const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny;
-    ids = PLATFORMS.map((p) => p.id).filter((id) => ids.includes(id)); // catalogue order, no repeats
+    ids = allPlatforms().map((p) => p.id).filter((id) => ids.includes(id)); // catalogue order, no repeats (Milestone 24: your console too)
     if (!ids.length) return { ok: false, why: 'Pick at least one platform' };
     const list = ids.map((id, i) => {
       const p = platformById(id);
@@ -142,6 +142,7 @@ export function createBusiness({ bus, clock, world, projects }) {
         base: st.base,
         buyers: Math.round(st.base * P.buyerPct),
         fit: P.genreFit[g.recipe?.genre]?.[p.group] ?? 1,
+        own: !!p.own, // Milestone 24: your own console
         niche: st.status === 'Declining' ? 1 + P.nicheBonusPct / 100 : 1,
         cert: p.open ? null : { days: f.certDays + delay, fee: f.certFee, failed, delay },
         port: i === 0 ? 0 : Math.round(sc.baseCostPerDay * P.portDays * f.portMult),
