@@ -37,6 +37,8 @@ export const ASSETS = {
   // Milestone 11: every facility (the shop and Build Mode) and the stage pictures.
   ...Object.fromEntries(FACILITIES.map((f) => art('facilities', f.art))),
   ...Object.fromEntries(STAGES.filter((s) => s.shell).map((s) => art('shells', s.shell))),
+  // Milestone 12: the RP icon (Research Token).
+  ...Object.fromEntries([art('rewards', 'dev_reward_03')]),
   // Milestone 0 loader test (?screen=test): the placeholder PWA icon as the real image, and one deliberately missing file.
   m0Real: 'assets/branding/pwa/icon-192.png',
   m0Missing: 'assets/m0-missing-test.png',

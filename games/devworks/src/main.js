@@ -22,6 +22,8 @@
 // Milestone 11: facilities — the 35 in data/facilities.js with their effects (world.effect), Build Mode's Shop (buy) and
 // tap-to-sell, Business → Studio (stages S1–S3: a bigger floor, staff cap and game lanes; Standard scope at S2, Large at
 // S3) and Business → Build Mode.
+// Milestone 12: the research tree (36 topics, core ResearchSystem): the Research button opens the Research screen; RP
+// in the top bar; a finished topic opens the elements and facilities that waited on it.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -78,6 +80,12 @@ import { createMarketingScreen } from './screens/MarketingScreen.js';
 import { createFranchiseArchiveScreen } from './screens/FranchiseArchiveScreen.js';
 import { openStations } from './systems/stationUnlocks.js';
 import { createFacilityShop } from './systems/facilityShop.js';
+import { createResearch } from './systems/research.js';
+import { createResearchScreen } from './screens/ResearchScreen.js';
+import { RESEARCH } from '../data/research.js';
+const RESEARCH_LIST = () => RESEARCH;
+import { elementById as elementName } from '../data/elements.js';
+import { facilityById } from '../data/facilities.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -92,7 +100,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -116,10 +124,11 @@ const profile = createStudioProfile({ bus, clock }); // studio name, director, c
 // three are created in that order.
 const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
 const business = createBusiness({ bus, clock, world, projects });
-const shop = createFacilityShop({ bus, world, business, clock, projects }); // Milestone 11 (research: Milestone 12)
+const research = createResearch({ bus, clock, world }); // Milestone 12
+const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched() }); // Milestone 11
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
-const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: new Set(), stage: world.stage }) }); // Milestone 11: studio stages S1–S3
+const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: research.researched(), stage: world.stage }) }); // Milestone 11: stages; Milestone 12: research
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -350,9 +359,10 @@ const topBarOptions = {
   clock,
   stats: () => [
     { icon: TOP_ICONS.credits, text: business.credits.toLocaleString('en-GB'), color: business.inDebt ? COL.bad : COL.text },
-    { icon: TOP_ICONS.tokens, text: String(business.tokens), gap: 20 },
-    { icon: 'dev_ui_19', text: String(Math.round(business.state.fanTrust)), gap: 20 }, // Fan Trust (Milestone 9)
-    { text: `Rank ${business.rank.id}` },
+    ...(business.tokens ? [{ icon: TOP_ICONS.tokens, text: String(business.tokens), gap: 20 }] : []), // Studio Tokens once there are any (Milestone 12: room for RP)
+    { icon: 'dev_ui_19', iconSize: 44, text: String(Math.round(business.state.fanTrust)), gap: 10 }, // Fan Trust (Milestone 9)
+    { icon: 'dev_reward_03', iconSize: 44, text: research.rp >= 10000 ? `${Math.floor(research.rp / 1000)}k` : String(research.rp), gap: 10 }, // RP (Milestone 12)
+    { text: `Rank ${business.rank.id}`, gap: 10 },
   ],
   statsBad: () => business.inDebt, // Emergency Credit
   onStats: () => openMenu('business'),
@@ -367,7 +377,7 @@ const bottomBar = createBottomBar({
   layout,
   assets,
   items: BOTTOM_SLOTS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, badge: () => badgeFor(s.id) })),
-  open: (id) => (id === 'staff' ? router.go('roster') : openMenu(id)),
+  open: (id) => (id === 'staff' ? router.go('roster') : id === 'research' ? router.go('research') : openMenu(id)),
 });
 
 // The sheet is asked before the screen; a tap on the top bar still reaches it (Inbox / Help replace the sheet).
@@ -415,7 +425,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -481,6 +491,7 @@ async function playSlot(i) {
   projects.load(data.games); // a Milestone 2 save has none: nothing in the works, an empty catalogue
   business.load(data.business); // a Milestone 3 save has none: the books start now (starting Credits)
   profile.load(data.studio);
+  research.load(data.research); // Milestone 12 (a save from before it: nothing researched)
   clock.load(data.clock); // the saved speed is checked against the unlocks just loaded
   elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
@@ -498,6 +509,7 @@ async function startStudio(i, setup) {
   const founder = founderById(setup.founder);
   world.newGame(founder.team.map(startStaffById));
   business.newGame({ seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // the run's platform market seed
+  research.newGame();
   elements.newGame();
   profile.create(setup);
   slot = slots.slot(i);
@@ -755,6 +767,13 @@ function drawCrown(ctx, t) {
   assets.drawContained(ctx, 'dev_reward_08', { x: W / 2 - size / 2, y: sr.y + sr.h * 0.33 - size / 2, w: size, h: size });
   ctx.restore();
 }
+// A topic researched (Milestone 12): what it opened, and the element pickers / shop see it at once.
+bus.on('research:complete', ({ node, fired }) => {
+  elements.check();
+  const names = (fired ?? []).map((a) => (a.type === 'element' ? elementName(a.id)?.name : facilityById(a.id)?.name)).filter(Boolean);
+  beat = { entry: { title: `Research done: ${node.name}`, body: names.length ? `Opens ${names.join(', ')}` : 'The studio knows more now.' }, age: 0 };
+  debug.log(`research done: ${node.id}`);
+});
 // A marketing action starts: a short banner.
 bus.on('marketing:run', ({ action, gain, title }) => {
   beat = { entry: { title: `${action.name} started`, body: `${title}: +${Math.round(gain)} Hype over ${action.days} days` }, age: 0 };
@@ -1031,6 +1050,7 @@ bus.on('game:certifying', ({ record }) => {
   beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
 });
 const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive') });
+const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
 
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
@@ -1053,7 +1073,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1070,6 +1090,7 @@ router
   .register('platforms', platformScreen)
   .register('marketing', marketingScreen)
   .register('archive', archiveScreen)
+  .register('research', researchScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

@@ -112,6 +112,7 @@ export function createResearch({ bus, clock, world, R = RP_BALANCE }) {
     researched: () => new Set(system.done),
     // Why a topic can't start now (null = it can).
     why(id) {
+      if (system.status(id) === 'locked') return `Needs ${system.missing(id).nodes.map((x) => system.node(x).name).join(' and ')}`;
       const c = system.canStart(0, id);
       if (c.ok) return null;
       if (c.reason === 'Locked') return `Needs ${system.missing(id).nodes.map((x) => system.node(x).name).join(' and ')}`;

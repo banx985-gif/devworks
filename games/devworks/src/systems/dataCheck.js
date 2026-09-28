@@ -129,6 +129,8 @@ export function checkGameData({ fetchFn } = {}) {
     v.check(fc.size.w >= 1 && fc.size.h >= 1 && fc.cost > 0, `${o}: size and cost`);
     v.art(o, `assets/images/facilities/${fc.art}.png`);
   }
+  v.noCycles('research', RESEARCH); // Milestone 12: the tree has no loops
+  for (const r of RESEARCH) for (const q of r.requires) v.ref(`research ${r.id}`, 'needs', q, researchIds);
   for (const st of STAGES) if (st.shell) v.art(`stage ${st.id}`, `assets/images/shells/${st.shell}.png`);
   return v;
 }
