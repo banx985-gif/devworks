@@ -4,6 +4,8 @@
 //   buy(id)    → { ok, why, station }: placed on its home spot or the first free one, then paid; move it in Build Mode
 //   sell(id)   → { ok, why, refund }: 50% back; the desks and the Break Area stay; not while someone works there
 //   next()     → the next stage, with its requirements [{ label, ok }], ok and why; upgrade() moves up (and pays)
+// Milestone 22: S4 Corporate HQ (Rank A + 3 major awards) and S5 Global Campus (Rank S + Year 16); facilities with a
+// stage unlock wait for it.
 // Research is Milestone 12 (researched() is empty until then) and awards Milestone 19 (state.awards, with a debug
 // award so S3 can be reached before then). Secret facilities (F34 / F35) stay hidden.
 //
@@ -17,6 +19,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
   const rankIndex = () => business.reputation.highestRankIndex;
   const released = () => projects.catalogue.list().filter((r) => r.release);
   const awards = () => business.state.awards ?? 0;
+  const majorAwards = () => business.state.majorAwards ?? 0; // Milestone 22: S4
   const trophies = awards; // awards and trophies are the same thing until Milestone 19
 
   // Why a facility can't be bought yet (null = it can), from its unlock rule.
@@ -28,6 +31,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     for (const id of u.research ?? []) if (!researched().has(id)) why.push(`Research ${researchById(id)?.name ?? id}`);
     if (u.trophies && trophies() < u.trophies) why.push(u.trophies === 1 ? 'a first trophy' : `${u.trophies} trophies`);
     if (u.story && !released().some((r) => (r.result.outputs?.story ?? 0) >= u.story)) why.push(`a released game with Story ${u.story}+`);
+    if (u.stage && world.stage < u.stage) why.push(`the ${stageById(u.stage).name}`); // Milestone 22
     return why.length ? `Needs ${why.join(' + ')}` : null;
   }
 
@@ -78,6 +82,8 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     if (u.rank) reqs.push({ label: `Rank ${u.rank}`, ok: rankIndex() >= rankIndexOf(FAME.ranks, u.rank) });
     if (u.released) reqs.push({ label: `${u.released} released games (${Math.min(u.released, released().length)} so far)`, ok: released().length >= u.released });
     if (u.awards) reqs.push({ label: u.awards === 1 ? 'An award won (Compete → Awards)' : `${u.awards} awards won`, ok: awards() >= u.awards }); // Milestone 19: real awards
+    if (u.majorAwards) reqs.push({ label: `${u.majorAwards} major awards (C04 and up; ${Math.min(u.majorAwards, majorAwards())} so far)`, ok: majorAwards() >= u.majorAwards }); // Milestone 22
+    if (u.year) reqs.push({ label: `Year ${u.year}`, ok: clock.year >= u.year });
     reqs.push({ label: `${st.cost.toLocaleString('en-GB')} Credits`, ok: business.credits >= st.cost });
     const miss = reqs.find((r) => !r.ok);
     return { stage: st, reqs, ok: !miss, why: miss ? `Needs ${miss.label}` : null };

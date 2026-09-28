@@ -13,7 +13,7 @@ export const PHASE_NAMES = {
 // Scopes (bible §12; Milestone 7). team = the usual core team: fewer than min still works, just slower (spec §9:
 // never hard-block); more than max is not allowed. Only the five lead slots exist until hiring (Milestone 13).
 // stage = the studio stage that opens it (bible §35: S2 Indie Loft … S5 Global Campus). Stages arrive in Milestones
-// 11 / 22, so for now Standard and up show locked with the reason (?debug=1 "Unlock all" opens them).
+// 11 / 22 (Blockbuster at S4 Corporate HQ, Mega at S5 Global Campus).
 export const SCOPES = [
   { id: 'tiny', name: 'Tiny', team: { min: 2, max: 3 }, stage: 1, line: 'Very short, low cost: a first experiment.' },
   { id: 'small', name: 'Small', team: { min: 3, max: 5 }, stage: 1, line: 'Short, low cost: indie bread and butter.' },

@@ -225,8 +225,11 @@ export function createStudioWorld({ bus, rng, debug }) {
     return p === 'toWork' || p === 'working';
   };
   // Milestone 13: a work station = one with a seat that isn't the Break Area; free = nobody works there.
+  // Milestone 22: from the Corporate HQ a work station holds deskShare people (its seats, or deskShare if more), so a
+  // studio of 24–32 fits; they stand side by side (workSeat).
   const isWorkStation = (st) => st.def.seats?.length > 0 && !st.def.rest;
-  const freeStations = () => stations.filter((st) => isWorkStation(st) && !workers.some((w) => w.station === st));
+  const placesAt = (st) => (stageById(stage).deskShare ? Math.max(st.def.seats.length, stageById(stage).deskShare) : 1);
+  const freeStations = () => stations.filter((st) => isWorkStation(st) && workers.filter((w) => w.station === st).length < placesAt(st));
   // Where a new hire of this role would sit: their role's station if it is free, else the first free work station.
   function freeStationFor(role) {
     const free = freeStations();
@@ -249,8 +252,26 @@ export function createStudioWorld({ bus, rng, debug }) {
     if (phaseLog.length > 120) phaseLog.shift();
   }
 
+  // Where a worker stands at their station (Milestone 22: a big studio shares stations, so people spread out): the
+  // n-th worker at a station takes its n-th seat; past the last seat, the walkable cells beside the first one along its
+  // front row (right, left, further out…), so nobody stands on top of anyone else when there is room.
+  function workSeat(w) {
+    const seats = seatsOf(w.station);
+    const n = workers.filter((x) => x.station === w.station).indexOf(w);
+    if (n < seats.length) return seats[Math.max(0, n)];
+    const s0 = seats[0];
+    const taken = new Set([...workers.filter((x) => x !== w && x.seatCell).map((x) => `${x.seatCell.col},${x.seatCell.row}`), ...stations.flatMap((st) => seatsOf(st).map((s) => `${s.col},${s.row}`))]); // anyone's spot, any station's seat
+    for (let k = 1; k <= 6; k++) {
+      for (const dc of [k, -k]) {
+        const c = { col: s0.col + dc, row: s0.row };
+        if (grid.inBounds(c.col, c.row) && grid.isWalkable(c.col, c.row) && !taken.has(`${c.col},${c.row}`)) return c;
+      }
+    }
+    return s0;
+  }
   function goToWork(w) {
-    const seat = seatsOf(w.station)[0];
+    const seat = workSeat(w);
+    w.seatCell = seat;
     setPhase(w, 'toWork');
     w.agent.walkTo(grid, seat.col, seat.row, () => {
       setPhase(w, 'working');

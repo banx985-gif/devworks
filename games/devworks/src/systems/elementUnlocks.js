@@ -4,8 +4,9 @@
 // nothing is researched, so research-locked elements stay locked (the picker shows why) unless ?debug=1's
 // "Unlock all" opens everything.
 //
-// Milestone 7: project scopes too. A scope opens with its studio stage (data/projects.js SCOPES.stage; stages come in
-// Milestones 11 / 22, so the studio is stage 1 until then) or with the debug unlock-all (a 'scope' action, saved).
+// Milestone 7: project scopes too. A scope opens with its studio stage (data/projects.js SCOPES.stage). Milestone 22:
+// only the stage opens it (Blockbuster at S4, Mega at S5); the old debug unlock-all path for scopes is gone (a 'scope'
+// action in an old save is ignored).
 //
 // Events: 'elements:unlocked' { ids } (the ones that opened now, in catalogue order).
 import { UnlockRunner } from '../../../../core/UnlockActions.js';
@@ -61,15 +62,14 @@ export function createElementUnlocks({ bus = null, state }) {
     // Scopes (Milestone 7): open by studio stage, or by the debug unlock-all.
     scopeOpen: (id) => {
       const sc = scopeById(id);
-      return !!sc && ((state().stage ?? 1) >= sc.stage || runner.has('scope', id));
+      return !!sc && (state().stage ?? 1) >= sc.stage;
     },
     scopeReason: (id) => {
       const sc = scopeById(id);
       return sc && !api.scopeOpen(id) ? `Needs the ${STAGE_NAMES[sc.stage]} (studio stage ${sc.stage})` : null;
     },
-    // ?debug=1: open all 50 elements and every scope.
+    // ?debug=1: open all 50 elements (scopes open only with the studio stage, Milestone 22).
     unlockAll() {
-      runner.run(SCOPES.map((sc) => ({ type: 'scope', id: sc.id })), 'debug');
       const fired = runner.run(ELEMENTS.map((e) => ({ type: 'element', id: e.id })), 'debug');
       if (fired.length) bus?.emit('elements:unlocked', { ids: fired.map((a) => a.id) });
       return fired.length;

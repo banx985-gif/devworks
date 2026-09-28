@@ -14,6 +14,10 @@
 // and whenever the world's size differs). Build Mode's banner has a Shop button (buy a facility) and tapping a
 // station there opens its facility sheet (sell it).
 //
+// Milestone 22: S4 / S5 (bigger floors). Readability and speed with 24–32 staff: each stage has its own zoom-out limit
+// (zoomMin); name tags fade out as the view zooms far out (TAG_FADE) so a full studio stays clear; the cached floor
+// keeps at most ROOM_MAX_PX pixels (a bigger floor is a little softer at full zoom) and only the part on screen is drawn.
+//
 // Plan space lives in the world (studioWorld); only drawing and tapping go through the IsoProjection here.
 import { THEME, font } from '../../../../core/Theme.js';
 import { IsoProjection } from '../../../../core/IsoProjection.js';
@@ -34,6 +38,9 @@ let L = STUDIO_LOOK; // Milestone 11: the stage's colours over S1's
 const REFUSED_SEC = 2.5; // how long a refused move's reason stays in the banner
 const STATE_COLOR = { Walking: C.progress, Working: C.action, Resting: C.good };
 const TAG_H = 50; // name tags: small text (28), never smaller
+const TAG_FADE = { full: 0.85, gone: 0.6 }; // Milestone 22: tags fully shown at zoom ≥ full, hidden at ≤ gone
+const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes by zoom (was always full zoom)
+const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
 
 export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null }) {
@@ -61,7 +68,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   buildRoom();
 
   const camera = new Camera({ viewW: W, viewH: renderer.height, worldW, worldH });
-  camera.minZoom = STUDIO.zoom.min;
+  const zoomMin = () => stageById(world.stage).zoomMin ?? STUDIO.zoom.min;
+  camera.minZoom = zoomMin();
+  // The floor's cache scale: sharp up to full zoom, within the pixel budget.
+  const roomScale = () => Math.min(renderer.pixelScale * STUDIO.zoom.max, Math.sqrt(ROOM_MAX_PX / (worldW * worldH)));
   camera.maxZoom = STUDIO.zoom.max;
 
   // Where a station's or a prop's art is drawn (projected world): centred on the footprint, base just below its front
@@ -161,7 +171,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   function restage() {
     buildRoom();
     camera.setWorld(worldW, worldH);
-    room.setPixelScale(renderer.pixelScale * STUDIO.zoom.max);
+    camera.minZoom = zoomMin();
+    room.setPixelScale(roomScale());
     if (screen.viewSet) resetView();
   }
   bus?.on('studio:stage', () => restage());
@@ -342,7 +353,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     resize() {
       camera.pixelScale = renderer.pixelScale;
-      room.setPixelScale(renderer.pixelScale * STUDIO.zoom.max); // sharp up to full zoom
+      room.setPixelScale(roomScale()); // sharp up to full zoom (within the pixel budget)
       // Keep looking at the same spot in the new view.
       const cx = camera.x + camera.visibleW / 2;
       const cy = camera.y + camera.visibleH / 2;
@@ -456,14 +467,17 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
     render(ctx) {
       camera.apply(ctx);
-      room.render(ctx, 0, 0);
+      room.renderView(ctx, { x: camera.x, y: camera.y, w: camera.visibleW, h: camera.visibleH }); // only what is on screen
       drawSign(ctx);
       if (buildMode) drawBuildFloor(ctx);
       drawSelectionMark(ctx);
       drawShadows(ctx);
-      // Stations, props and staff, back to front. Sprites are cached at full-zoom size so they stay sharp when zoomed.
-      assets.detail = STUDIO.zoom.max;
-      const items = [...stations, ...props, ...onFloor()].sort((a, b) => depthOf(a) - depthOf(b));
+      // Stations, props and staff, back to front. Sprites are cached at the next zoom step up (DETAIL_STEPS), so they stay
+      // sharp without shrinking full-size copies far out. Milestone 22: only what is on screen is drawn.
+      assets.detail = DETAIL_STEPS.find((z) => z >= camera.zoom - 1e-6) ?? STUDIO.zoom.max;
+      const vis = { x: camera.x - 60, y: camera.y - 60, w: camera.visibleW + 120, h: camera.visibleH + 120 };
+      const seen = (r) => r.x < vis.x + vis.w && r.x + r.w > vis.x && r.y < vis.y + vis.h && r.y + r.h > vis.y;
+      const items = [...stations, ...props, ...onFloor()].filter((it) => it === moving?.station || seen(it.kind === 'worker' ? workerRect(it) : artRect(it))).sort((a, b) => depthOf(a) - depthOf(b));
       for (const it of items) {
         if (it.kind === 'worker') drawWorker(ctx, it);
         else if (it.kind === 'prop') drawProp(ctx, it);
@@ -476,7 +490,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (moving) drawMovingStation(ctx);
       assets.detail = 1;
       vfx?.render(ctx, 'world'); // the art pops, over the room but under the tags, so names always read
-      for (const w of onFloor()) drawNameTag(ctx, w);
+      for (const w of onFloor()) if (seen(workerRect(w))) drawNameTag(ctx, w);
       drawShelfTag(ctx);
       drawProjectCard(ctx);
       camera.restore(ctx);
@@ -747,6 +761,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   // Name tag over each worker's head (style guide §6): first name · state, in the state's colour, plus a status
   // icon when Energy or Morale is low. Small text (28), the smallest the game uses.
   function drawNameTag(ctx, w) {
+    const fade = Math.max(0, Math.min(1, (camera.zoom - TAG_FADE.gone) / (TAG_FADE.full - TAG_FADE.gone)));
+    if (fade <= 0) return;
     const st = WORK_STATE[w.phase];
     const r = workerRect(w);
     const label = `${w.staff.name.split(' ')[0]} · ${st.label}`;
@@ -760,6 +776,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const iconS = 56;
     const total = tagW + icons.length * (iconS + 6);
     fixedSize(ctx, r.x + r.w / 2, r.y - 10, () => {
+      ctx.globalAlpha = fade;
       const x = -total / 2;
       const y = -h;
       ctx.fillStyle = STATE_COLOR[st.label];

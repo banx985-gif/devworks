@@ -44,6 +44,8 @@
 // Milestone 21: global business — localisation on New Game (PRO3 / Localisation Suite), Global publisher deals at Rank A,
 // engine licensing (Business → Engine Licensing), publishing other studios (Business → Publishing Office, or tap the
 // Publishing Office), acquisitions (Business → Acquisitions); passive income capped at a share of each year's income.
+// Milestone 22: studio stages S4 Corporate HQ and S5 Global Campus (Business → Studio), Blockbuster / Mega scopes with
+// them, three game lanes; the big moment shows the stage's event picture; ?debug=1 adds __dw.debugFullStudio().
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -129,7 +131,7 @@ import { createResearchScreen } from './screens/ResearchScreen.js';
 import { RESEARCH } from '../data/research.js';
 const RESEARCH_LIST = () => RESEARCH;
 import { elementById as elementName } from '../data/elements.js';
-import { facilityById, stageById } from '../data/facilities.js';
+import { facilityById, stageById, FACILITIES } from '../data/facilities.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -798,7 +800,8 @@ bus.on('studio:stage', ({ stage }) => {
       const size = 560 * (0.6 + 0.4 * s);
       ctx.save();
       ctx.globalAlpha = s;
-      if (stage.shell) assets.drawContained(ctx, stage.shell, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.3 - size / 2, w: size, h: size });
+      const pic = stage.event ?? stage.shell; // Milestone 22: the Professional Studio / Global Campus event pictures
+      if (pic) assets.drawContained(ctx, pic, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.3 - size / 2, w: size, h: size });
       ctx.restore();
     },
     onAck: afterFeedback,
@@ -1395,7 +1398,14 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  // Milestone 22: a full Global Campus (every facility that fits, 32 staff) for the readability checks.
+  const debugFullStudio = () => {
+    world.setStage(5);
+    for (const fac of FACILITIES) if (!fac.unlock?.secret) world.addStation(fac.id);
+    for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
+    return { staff: world.workers.length, stations: world.stations.length };
+  };
+  window.__dw = { debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

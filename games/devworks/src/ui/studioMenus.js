@@ -105,7 +105,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                     .map((r) => ({ id: `release${r.number}`, label: `Release "${r.result.title}"`, sub: 'Finished and waiting', icon: r.result.cover, onTap: () => open('release', r.number) })),
                   ...(projects().decision ? [{ id: 'decision', label: `${DECISION_POINTS[projects().decision.point]} decision needed`, sub: 'Your game waits for you', icon: 'dev_ui_07', accent: C.action, onTap: () => open('decision') }] : []),
                   ...projects().jobs.map((job, i) => ({ id: i ? `current${i + 1}` : 'current', label: projects().jobs.length > 1 ? `Game in the works: ${job.name}` : 'Current project', sub: projectLine(job), icon: 'dev_ui_07', onTap: () => (openProjectById ? openProjectById(job.id) : openProject()) })),
-                  ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? 'New Game (second lane)' : 'New Game', sub: projects().jobs.length ? 'Your studio can make two games at once' : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
+                  ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? `New Game (lane ${projects().jobs.length + 1})` : 'New Game', sub: projects().jobs.length ? `Your studio can make ${lanes()} games at once` : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
                   ...(business().marketing.targets().length ? [{ id: 'marketing', label: 'Marketing', sub: marketingLine(), icon: 'business_ui_05', accent: C.progress, onTap: () => openScreen('marketing') }] : []),
                   ...(engines ? [{ id: 'engines', label: 'Engines', sub: engineLine(), icon: 'dev_ui_11', accent: C.purple, onTap: () => openScreen('engines') }] : []),
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
@@ -288,7 +288,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     if (n) {
       sections.push({ title: `Next: ${n.stage.name}`, lines: [...n.reqs.map((r) => ({ text: `${r.ok ? '✓' : '✗'} ${r.label}`, color: r.ok ? C.good : C.bad })), { text: `Staff cap ${n.stage.staffCap} · game lanes ${n.stage.lanes} · floor ${n.stage.cols} × ${n.stage.rows}`, color: C.textMuted }] });
       sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `${n.stage.cost.toLocaleString('en-GB')} Credits. Everything stays where it is.` : n.why, disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }] });
-    } else sections.push({ lines: [{ text: 'The Corporate HQ and the Global Campus come in a later update.', color: C.textMuted }] });
+    } else sections.push({ lines: [{ text: 'The Global Campus is the biggest studio. Secret R&D spaces come later.', color: C.textMuted }] });
     return { title: `Studio: ${st.name}`, subtitle: `Stage ${st.id} of 5`, art: st.shell ?? 'facility_f01', sections };
   });
 
