@@ -44,7 +44,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -120,6 +120,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             ...(buildMode ? [{ id: 'buildMode', label: 'Build Mode', sub: 'Buy, move and sell facilities', icon: 'facility_f02', accent: C.progress, onTap: () => buildMode() }] : []),
             { id: 'marketing', label: 'Marketing Planner', sub: marketingLine() || 'Hype and the release calendar', icon: 'business_ui_05', onTap: () => openScreen('marketing') },
             ...(publishers ? [{ id: 'publishers', label: 'Publishers', sub: `${publishers().offers.length} offer${publishers().offers.length === 1 ? '' : 's'} · ${publishers().active.length} signed`, icon: 'business_ui_01', accent: C.purple, onTap: () => openScreen('publishers') }] : []),
+            ...(sponsors ? [{ id: 'sponsors', label: 'Sponsors', sub: `${sponsors().deals.length} of ${sponsors().slots()} slots · ${sponsors().offers.length} offer${sponsors().offers.length === 1 ? '' : 's'}`, icon: 'business_ui_02', accent: C.purple, onTap: () => openScreen('sponsors') }] : []),
             ...(contracts ? [{ id: 'contracts', label: 'Contract Board', sub: `${contracts().offers.length} jobs · ${contracts().active.length} of 2 active`, icon: 'business_ui_03', accent: C.purple, onTap: () => openScreen('contracts') }] : []),
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),

@@ -180,7 +180,9 @@ export function createStudioWorld({ bus, rng, debug }) {
   }
 
   // The effect query (Milestone 11): the sum of one effect over every facility in the studio.
-  const effect = (key) => stations.reduce((t, st) => t + (st.def.effects?.[key] ?? 0), 0);
+  // Milestone 18: other sources (the sponsors' perks) add to it through addEffectSource(fn(key) → number).
+  const effectSources = [];
+  const effect = (key) => stations.reduce((t, st) => t + (st.def.effects?.[key] ?? 0), 0) + effectSources.reduce((t, f) => t + (f(key) ?? 0), 0);
 
   // Studio stage (Milestone 11): a bigger floor. The grid is rebuilt at the new size; every station is checked again
   // where it stands (settle keeps a legal one exactly where it is; only an illegal one moves, to its home spot or the
@@ -406,6 +408,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     setStage,
     removeStation,
     effect,
+    addEffectSource: (fn) => effectSources.push(fn),
     stations,
     stationPool: pool,
     props,

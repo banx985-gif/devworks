@@ -285,7 +285,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         }
         const bestCode = Math.max(...team.map((s) => s.stats.code ?? 0));
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
-        const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct');
+        const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct') + (['FEA02', 'FEA03'].includes(d.recipe.feature) ? fx('onlineQaPct') : 0); // Milestone 18: NovaNet
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
         const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0); // Milestone 15: QA load; Milestone 16: engine Stability
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
@@ -526,7 +526,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         source: src ? src.number : null,
         sourceOutputs: src && T.floor ? { ...src.result.outputs } : null,
         rng: new Rng(seed).getState(),
-        cost: B.audio[setup.audio]?.cost ?? 0,
+        cost: Math.round((B.audio[setup.audio]?.cost ?? 0) * (1 + fx(`audioCostPct.${setup.audio}`) / 100)), // Milestone 18: EchoSound
         bugs: 0,
         bonus: {},
         breakthroughs: [],

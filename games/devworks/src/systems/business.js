@@ -90,7 +90,7 @@ export function createBusiness({ bus, clock, world, projects }) {
 
   const platforms = createPlatformMarket(); // Milestone 8: the 12 platforms' committed curves
   // Milestone 9: campaigns, Hype and the release calendar.
-  const marketing = createMarketing({ bus, clock, projects, economy, state, hypeEffect: () => world.effect?.('hypePct') ?? 0, rankIndex: () => reputation.highestRankIndex });
+  const marketing = createMarketing({ bus, clock, projects, economy, state, hypeEffect: () => world.effect?.('hypePct') ?? 0, rankIndex: () => reputation.highestRankIndex, costPct: () => world.effect?.('marketingCostPct') ?? 0 }); // Milestone 18: Crown Finance
   const franchises = createFranchises({ bus, clock, projects, marketing }); // Milestone 10
 
   // seed: the run's own seed for the platform market (committed, saved). Tests pass a fixed one.

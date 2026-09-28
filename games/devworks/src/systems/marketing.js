@@ -66,7 +66,9 @@ export function launchTrust({ score, fanExpectation, hype = 0, bugs = 0 }, M = M
 // --- the system ------------------------------------------------------------------------------------------------
 // hypeEffect() → the facilities' Hype % (Milestone 11: the Marketing Wall and the Media Studio, world.effect('hypePct')).
 // rankIndex() → the highest rank reached.
-export function createMarketing({ bus, clock, projects, economy, state, hypeEffect = () => 0, rankIndex = () => 0, M = MARKETING_BALANCE }) {
+// Milestone 18: costPct() → Crown Finance's marketing cost change (%).
+export function createMarketing({ bus, clock, projects, economy, state, hypeEffect = () => 0, rankIndex = () => 0, costPct = () => 0, M = MARKETING_BALANCE }) {
+  const costOf = (a) => Math.round(a.cost * (1 + costPct() / 100));
   let seed = 'devworks-run';
   let campaigns = {};
   const today = () => clock.totalDays;
@@ -104,8 +106,8 @@ export function createMarketing({ bus, clock, projects, economy, state, hypeEffe
       else if (a.rank && rankIndex() < rankIndexOf(FAME.ranks, a.rank)) why = `Opens at Rank ${a.rank}`;
       else if (t.stage < a.from) why = `From ${['Prototype', 'Vertical Slice', 'Production', 'Alpha / Beta', 'Gold Master', 'the finished game'][a.from]}`;
       else if (a.months && !a.months.includes(monthOfYear())) why = `Shows in Months ${a.months.slice(0, -1).join(', ')} and ${a.months.at(-1)}`;
-      else if (credits < a.cost) why = `Needs ${a.cost.toLocaleString('en-GB')} Credits`;
-      return { action: a, ok: !why, why, cost: a.cost, gain: r4(a.hype * (1 + boost / 100)), days: a.days };
+      else if (credits < costOf(a)) why = `Needs ${costOf(a).toLocaleString('en-GB')} Credits`;
+      return { action: a, ok: !why, why, cost: costOf(a), gain: r4(a.hype * (1 + boost / 100)), days: a.days };
     });
   }
 
@@ -115,12 +117,12 @@ export function createMarketing({ bus, clock, projects, economy, state, hypeEffe
     const o = options(key).find((x) => x.action.id === actionId);
     if (!t || !o?.ok) return false;
     const a = o.action;
-    economy.spend('credits', a.cost, `Marketing: ${a.name} (${t.title})`, 'marketing');
+    economy.spend('credits', costOf(a), `Marketing: ${a.name} (${t.title})`, 'marketing');
     const c = campaign(key);
     c.done.push(a.id);
     c.running.push({ id: a.id, startDay: today(), days: a.days, gain: o.gain, given: 0 });
-    c.log.push({ id: a.id, day: today(), cost: a.cost, gain: o.gain });
-    bus?.emit('marketing:run', { key, action: a, cost: a.cost, gain: o.gain, title: t.title });
+    c.log.push({ id: a.id, day: today(), cost: costOf(a), gain: o.gain });
+    bus?.emit('marketing:run', { key, action: a, cost: costOf(a), gain: o.gain, title: t.title });
     return true;
   }
 

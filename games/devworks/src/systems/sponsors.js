@@ -65,7 +65,7 @@ export function createSponsors({ bus, clock, world, business }) {
     const why = signWhy(id);
     if (why) return { ok: false, why };
     offers = offers.filter((o) => o.id !== id);
-    const deal = { id, startDay: today(), endDay: today() + S.dealMonths * month(), count: 0, monthsChecked: 0, monthsPassed: 0, lastCheckDay: today(), tier: tierOf(id) };
+    const deal = { id, startDay: today(), endDay: today() + S.dealMonths * month(), count: 0, monthsChecked: 0, monthsPassed: 0, lastCheckDay: today(), lastLine: business.economy.nextLine, tier: tierOf(id) };
     deals.push(deal);
     bus.emit('sponsor:signed', { deal });
     return { ok: true, deal };
@@ -96,7 +96,9 @@ export function createSponsors({ bus, clock, world, business }) {
       const st = world.staffSystem.staff;
       return st.length ? st.reduce((t, s) => t + s.morale, 0) / st.length >= S.morale : false;
     },
-    positiveCash: (d) => business.economy.ledger.filter((l) => l.currency === 'credits' && l.day > d.lastCheckDay && l.day <= today() && l.category !== 'sponsor').reduce((t, l) => t + l.amount, 0) > 0,
+    // The month's net: every Credits line since the last check (by ledger line number, so nothing is counted twice or
+    // missed), without the sponsors' own stipends.
+    positiveCash: (d) => business.economy.ledger.filter((l) => l.currency === 'credits' && l.n >= d.lastLine && l.category !== 'sponsor').reduce((t, l) => t + l.amount, 0) > 0,
   };
   function monthEnd() {
     for (const d of [...deals]) {
@@ -108,6 +110,7 @@ export function createSponsors({ bus, clock, world, business }) {
         bus.emit('sponsor:progress', { deal: d });
       }
       d.lastCheckDay = today();
+      d.lastLine = business.economy.nextLine;
       business.economy.add('credits', stipendOf(d.id, d.tier), `Sponsor stipend: ${def.name}`, 'sponsor');
       if (def.perk.moraleMonthly) for (const s of world.staffSystem.staff) world.staffSystem.changeMorale(s, def.perk.moraleMonthly);
       if (today() >= d.endDay) end(d);

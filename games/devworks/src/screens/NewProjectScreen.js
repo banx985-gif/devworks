@@ -35,7 +35,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0 }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -292,7 +292,10 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     }
     y += 24;
     heading('Audio package', AUDIO_PACKAGES.find((a) => a.id === setup.audio).line);
-    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + i * 260, y, w: 240, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
+    // Milestone 18: four packages, two to a row, with their price.
+    const halfA = (cw - 20) / 2;
+    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, audioCost(a.id) ? `${a.name} · ${audioCost(a.id).toLocaleString('en-GB')}` : a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
+    y += (Math.ceil(AUDIO_PACKAGES.length / 2) - 1) * 130;
     y += 150; // chips are button height (110)
     heading('Budget focus');
     BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));

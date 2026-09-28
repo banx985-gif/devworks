@@ -147,6 +147,8 @@ export const PROJECT_BALANCE = {
   audio: {
     none: { value: 5, cost: 0 },
     basic: { value: 35, cost: 300 },
+    standard: { value: 60, cost: 1200 }, // Milestone 18 (placeholders)
+    premium: { value: 82, cost: 3000 },
   },
   bugs: {
     lowCodeRef: 150, // low-Code factor = clamp(1.6 − best Code ÷ this, 0.6, 1.6)

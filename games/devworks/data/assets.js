@@ -4,6 +4,7 @@ import { STATIONS, PROPS, DEV_POPS } from './studio.js';
 import { FACILITIES, STAGES } from './facilities.js';
 import { ROSTER } from './staff.js';
 import { PUBLISHERS } from './publishers.js';
+import { SPONSORS } from './sponsors.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
 import { FILED_COVERS } from './covers.js';
@@ -22,6 +23,9 @@ export const ASSETS = {
   ...Object.fromEntries(PUBLISHERS.map((p) => art('logos', p.logo))),
   ...Object.fromEntries(['business_ui_01', 'business_ui_03'].map((k) => art('business', k))),
   ...Object.fromEntries([art('ui', 'dev_ui_24')]),
+  // Milestone 18: the sponsors' logos and icons.
+  ...Object.fromEntries(SPONSORS.map((s) => art('logos', s.logo))),
+  ...Object.fromEntries([art('business', 'business_ui_02'), art('ui', 'dev_ui_25')]),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

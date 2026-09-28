@@ -44,6 +44,7 @@ export function createTraining({ bus, clock, world, business, projects, research
         const job = onGame(id);
         return job ? `Making ${job.name}` : extraBusy(id); // Milestone 16: or the engine
       },
+      durationPct: () => world.effect?.('trainingDaysPct') ?? 0, // Milestone 18: PixelDesk
       canPay: (c) => (business.credits < c.cost ? `Needs ${c.cost.toLocaleString('en-GB')} Credits` : null),
       pay: (c, s) => business.economy.spend('credits', c.cost, `Training: ${c.name} (${s.name})`, 'training'),
       now: () => ({ day: today(), year: clock.year }),

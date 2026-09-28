@@ -72,7 +72,7 @@ export function createPublishers({ bus, clock, world, business, projects, elemen
     const genres = pub.control === 'genre' && ctx.genres.length > 3 ? rng.shuffle([...ctx.genres]).slice(0, 3) : null;
     const sc = PROJECT_BALANCE.scopes[scope];
     const rec = ctx.short ? DEALS.recovery.advanceMult : 1;
-    const advance = Math.max(500, Math.round((sc.baseCostPerDay * est * (DEALS.advanceDaysPct / 100) * pub.advance * rec) / 50) * 50);
+    const advance = Math.max(500, Math.round((sc.baseCostPerDay * est * (DEALS.advanceDaysPct / 100) * pub.advance * rec * (1 + (world.effect?.('advancePct') ?? 0) / 100)) / 50) * 50); // Milestone 18: Crown Finance
     return {
       publisher: pub.id,
       scope,

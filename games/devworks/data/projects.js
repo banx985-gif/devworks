@@ -29,6 +29,8 @@ export const scopeById = (id) => SCOPES.find((s) => s.id === id) ?? null;
 export const AUDIO_PACKAGES = [
   { id: 'none', name: 'None', line: 'Silent, or free sounds.' },
   { id: 'basic', name: 'Basic', line: 'A few tunes and sound effects.' },
+  { id: 'standard', name: 'Standard', line: 'A proper soundtrack and effects.' }, // Milestone 18 (bible §12)
+  { id: 'premium', name: 'Premium', line: 'Studio-recorded music and sound.' },
 ];
 
 // Budget focus (bible §12; Milestone 7). The numbers are in balance.js (PROJECT_BALANCE.budgetFocus).
