@@ -10,13 +10,19 @@
 // Mode) and sold. effect(key) sums the facilities' effects (the effect query every system asks). Studio stages S1–S3
 // grow the floor away from the back walls (setStage): the grid is rebuilt bigger and every placement is checked again,
 // so a legal one never moves (migration); the stage is saved.
+//
+// Milestone 13: hiring and letting go. A hire walks in from the door to a free work station (freeStationFor: their
+// role's station first, else any station with a seat that nobody uses); each worker's station is saved with them. A
+// worker on a training course is away (off the floor, not on duty) until it ends. Anyone from the roster
+// (data/staff.js ROSTER) can be loaded, not only the start staff.
 import { Grid } from '../../../../core/Grid.js';
 import { Agent } from '../../../../core/Agent.js';
 import { StaffSystem } from '../../../../core/StaffSystem.js';
 import { STUDIO, STATIONS, PROPS, DOORWAY, WALKER } from '../../data/studio.js';
 import { STAFF_BALANCE } from '../../data/balance.js';
 import { FACILITIES, stageById } from '../../data/facilities.js';
-import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS, startStaffById } from '../../data/staff.js';
+import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS, staffDefById } from '../../data/staff.js';
+import { RECRUIT } from '../../data/recruitment.js';
 
 const inArea = (a, col, row) => col >= a.col && row >= a.row && col < a.col + a.w && row < a.row + a.h;
 const overlaps = (a, b) => a.col < b.col + b.w && b.col < a.col + a.w && a.row < b.row + b.h && b.row < a.row + a.h;
@@ -216,13 +222,21 @@ export function createStudioWorld({ bus, rng, debug }) {
     const p = workerById(id)?.phase;
     return p === 'toWork' || p === 'working';
   };
+  // Milestone 13: a work station = one with a seat that isn't the Break Area; free = nobody works there.
+  const isWorkStation = (st) => st.def.seats?.length > 0 && !st.def.rest;
+  const freeStations = () => stations.filter((st) => isWorkStation(st) && !workers.some((w) => w.station === st));
+  // Where a new hire of this role would sit: their role's station if it is free, else the first free work station.
+  function freeStationFor(role) {
+    const free = freeStations();
+    return free.find((st) => st.id === RECRUIT.roleStations[role]) ?? free[0] ?? null;
+  }
   const phaseLog = []; // recent phase changes (tests / debug)
   let simTime = 0;
 
-  function makeWorker(staff, def, i) {
+  function makeWorker(staff, def, i, stationId = def.station) {
     const agent = new Agent({ id: staff.id, name: staff.name, speed: WALKER.speed });
     // tiredIcon: shown from "tired" until Energy is back above tiredIconUntil (Milestone 4), not only on the walk.
-    const w = { kind: 'worker', id: staff.id, staff, def, agent, station: stationById(def.station), breakSeat: i, phase: 'toWork', tiredIcon: false };
+    const w = { kind: 'worker', id: staff.id, staff, def, agent, station: stationById(stationId) ?? stationById(def.station) ?? freeStationFor(staff.role) ?? stationById('F01'), breakSeat: i, phase: 'toWork', tiredIcon: false, away: false };
     workers.push(w);
     return w;
   }
@@ -257,6 +271,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     staffSystem.dailyTick();
     // Decided by duty, never by where the walk has got to, so the day comes out the same at any speed.
     for (const w of workers) {
+      if (w.away) continue; // on a course (Milestone 13)
       if (w.staff.status.tired) w.tiredIcon = true;
       else if (w.staff.energy >= STAFF_BALANCE.tiredIconUntil) w.tiredIcon = false;
       if (onDuty(w.id) && w.staff.status.tired) goToBreak(w);
@@ -282,12 +297,48 @@ export function createStudioWorld({ bus, rng, debug }) {
     });
   }
 
+  // --- hiring / letting go / away (Milestone 13) ---------------------------------------------------------------------
+  // A new member of staff (def from data/staff.js ROSTER) walks in from the door to stationId.
+  function hire(def, stationId) {
+    const staff = staffSystem.addFromDefinition(def);
+    const w = makeWorker(staff, def, workers.length, stationId);
+    w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row + (workers.length % DOORWAY.h));
+    goToWork(w);
+    bus.emit('staff:hired', { staff, station: w.station });
+    debug?.log(`${staff.name} hired: ${w.station.def.name}`);
+    return w;
+  }
+  // They leave: off the floor and off the roster (core emits 'staff:removed').
+  function fire(id) {
+    const w = workerById(id);
+    if (!w) return null;
+    workers.splice(workers.indexOf(w), 1);
+    return staffSystem.remove(id);
+  }
+  // Away on a course (off the floor, not on duty), or back: they walk in from the door.
+  function setAway(id, away) {
+    const w = workerById(id);
+    if (!w || w.away === away) return false;
+    w.away = away;
+    if (away) {
+      w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row);
+      w.agent.setState('idle');
+      setPhase(w, 'away');
+      bus.emit('staff:away', { staff: w.staff, away: true });
+    } else {
+      w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row);
+      goToWork(w);
+      bus.emit('staff:away', { staff: w.staff, away: false });
+    }
+    return true;
+  }
+
   function serialize() {
     return {
       stage, // Milestone 11
       stations: stations.map((s) => ({ id: s.id, fp: { ...s.fp } })),
       staff: staffSystem.serialize(),
-      workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing, tiredIcon: w.tiredIcon })),
+      workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing, tiredIcon: w.tiredIcon, station: w.station?.id ?? null, away: w.away })),
       rng: rng.getState(),
     };
   }
@@ -298,19 +349,29 @@ export function createStudioWorld({ bus, rng, debug }) {
     // This studio's stations: the saved ones, the "always" ones (a pre-Milestone 5 save gains the shelf) and each
     // member of staff's own station.
     for (const st of pool) st.fp = { ...st.def.fp };
-    setStations(stationIdsFor((data.staff ?? []).map((s) => startStaffById(s.id)), (data.stations ?? []).map((s) => s.id)));
+    // A hire's own station is in the saved stations; the start staff keep theirs (data), as before.
+    setStations(stationIdsFor((data.staff ?? []).map((s) => staffDefById(s.id)).filter((d) => d?.station), (data.stations ?? []).map((s) => s.id)));
     for (const s of data.stations ?? []) {
       const st = stationById(s.id);
       if (st) st.fp = { ...st.fp, col: s.fp.col, row: s.fp.row };
     }
+    // Milestone 13: in the saved order (a new hire takes the first free station, so the order is part of the state).
+    const order = (data.stations ?? []).map((s) => s.id);
+    const at = (st) => (order.includes(st.id) ? order.indexOf(st.id) : order.length + pool.indexOf(st));
+    stations.sort((a, b) => at(a) - at(b));
     settle();
     staffSystem.load(data.staff ?? []);
     workers.length = 0;
     staffSystem.staff.forEach((staff, i) => {
-      const def = startStaffById(staff.id);
-      if (!def) return;
-      const w = makeWorker(staff, def, i);
+      const def = staffDefById(staff.id) ?? { id: staff.id, role: staff.role };
       const saved = (data.workers ?? []).find((x) => x.id === staff.id);
+      const w = makeWorker(staff, def, i, saved?.station ?? def.station);
+      if (saved?.away) {
+        w.away = true;
+        w.phase = 'away';
+        w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row);
+        return;
+      }
       if (!saved) {
         w.agent.placeAtTile(grid, DOORWAY.col, DOORWAY.row);
         goToWork(w);
@@ -362,6 +423,15 @@ export function createStudioWorld({ bus, rng, debug }) {
     goToWork,
     goToBreak,
     newGame,
+    hire,
+    fire,
+    setAway,
+    freeStations,
+    freeStationFor,
+    isWorkStation,
+    get staffCap() {
+      return stageById(stage).staffCap;
+    },
     serialize,
     load,
     setEnergyLossMultiplier(fn) {
@@ -371,7 +441,7 @@ export function createStudioWorld({ bus, rng, debug }) {
       return simTime;
     },
     // What a save stamp needs: changes whenever anyone moves or anything changes.
-    stamp: () => workers.map((w) => `${w.phase}${Math.round(w.agent.x)},${Math.round(w.agent.y)},${w.staff.energy}`).join('|') + stations.map((s) => `${s.fp.col},${s.fp.row}`).join(''),
+    stamp: () => workers.map((w) => `${w.id}${w.phase}${Math.round(w.agent.x)},${Math.round(w.agent.y)},${w.staff.energy}`).join('|') + stations.map((s) => `${s.fp.col},${s.fp.row}`).join(''),
     // Game-time seconds (already scaled by the speed; 0 while paused).
     update(gdt) {
       if (gdt <= 0) return;
@@ -380,6 +450,7 @@ export function createStudioWorld({ bus, rng, debug }) {
     },
     // The "Working at the Starter Desks" line.
     stateLine(w, text) {
+      if (w.away) return 'Away on a training course';
       const name = w.phase === 'toWork' || w.phase === 'working' ? w.station.def.name : breakArea.def.name;
       return text.replace('{station}', name);
     },

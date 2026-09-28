@@ -101,10 +101,15 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   };
   syncStations();
   bus?.on('world:moved', () => syncStations()); // Milestone 11: bought / sold while the studio is on screen
+  // Milestone 13: staff come and go (hired, let go, away on a course): only those on the floor can be tapped.
   const syncWorkers = () => {
-    for (const it of [...selection.items]) if (it.kind === 'worker' && !workers.includes(it)) selection.remove(it);
-    for (const w of workers) selection.add(w);
+    for (const it of [...selection.items]) if (it.kind === 'worker' && (!workers.includes(it) || it.away)) selection.remove(it);
+    for (const w of workers) if (!w.away) selection.add(w);
   };
+  const onFloor = () => workers.filter((w) => !w.away);
+  bus?.on('staff:hired', () => syncWorkers());
+  bus?.on('staff:removed', () => syncWorkers());
+  bus?.on('staff:away', () => syncWorkers());
 
   // --- how each worker moves (Milestone 5) ---------------------------------------------------------------------
   // stride: plan distance walked (the walking clock, so hops keep pace with the feet at any speed); flip: the way
@@ -458,7 +463,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       drawShadows(ctx);
       // Stations, props and staff, back to front. Sprites are cached at full-zoom size so they stay sharp when zoomed.
       assets.detail = STUDIO.zoom.max;
-      const items = [...stations, ...props, ...workers].sort((a, b) => depthOf(a) - depthOf(b));
+      const items = [...stations, ...props, ...onFloor()].sort((a, b) => depthOf(a) - depthOf(b));
       for (const it of items) {
         if (it.kind === 'worker') drawWorker(ctx, it);
         else if (it.kind === 'prop') drawProp(ctx, it);
@@ -471,7 +476,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (moving) drawMovingStation(ctx);
       assets.detail = 1;
       vfx?.render(ctx, 'world'); // the art pops, over the room but under the tags, so names always read
-      for (const w of workers) drawNameTag(ctx, w);
+      for (const w of onFloor()) drawNameTag(ctx, w);
       drawShelfTag(ctx);
       drawProjectCard(ctx);
       camera.restore(ctx);
@@ -579,7 +584,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       isoPath(ctx, iso.outline(it.fp.col + 0.08, it.fp.row + 0.08, it.fp.w - 0.16, it.fp.h - 0.16));
       ctx.fill();
     }
-    for (const w of workers) {
+    for (const w of onFloor()) {
       const f = feetOf(w);
       ctx.beginPath();
       ctx.ellipse(f.x, f.y - 4, 44, 16, 0, 0, Math.PI * 2);

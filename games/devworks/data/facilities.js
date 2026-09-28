@@ -34,7 +34,7 @@ export const FACILITIES = [
   { id: 'F06', name: 'Producer Desk', role: 'Thinker', unlock: { start: true }, cost: 1300, line: 'Schedule variance -5%', effects: { scheduleVariancePct: -5 } },
   { id: 'F07', name: 'Test Bench', role: 'Specialist', unlock: { rank: 'D' }, cost: 1600, line: 'QA bug removal +8%', effects: { bugFixPct: 8 }, size: { w: 2, h: 2 } },
   { id: 'F08', name: 'Break Area', role: 'Rest', unlock: { start: true }, cost: 1000, line: 'Energy recovery +20%', effects: { restEnergyPct: 20 } },
-  { id: 'F09', name: 'Recruitment Desk', role: 'Front desk', unlock: { start: true }, cost: 1100, line: 'Hiring/recruitment access', effects: {}, later: 'Milestone 13 (hiring)', size: { w: 2, h: 1 } },
+  { id: 'F09', name: 'Recruitment Desk', role: 'Front desk', unlock: { start: true }, cost: 1100, line: 'Hiring/recruitment access', effects: {}, size: { w: 2, h: 1 } }, // Milestone 13: tap it for the board
   { id: 'F10', name: 'Meeting Table', role: 'Thinker', unlock: { start: true }, cost: 1000, line: 'Prototype knowledge +5', effects: { 'phasePct.prototype': 5 }, size: { w: 2, h: 2 } },
   { id: 'F11', name: 'Server Rack', role: 'Support', unlock: { research: ['ENG1'] }, cost: 1800, line: 'Build/compile speed +6%', effects: { progressPct: 6 }, size: { w: 1, h: 1 } },
   { id: 'F12', name: 'Recording Booth', role: 'Specialist', unlock: { rank: 'D' }, cost: 2200, line: 'Audio package quality +5', effects: { 'output.audio': 5 }, size: { w: 2, h: 2 } },

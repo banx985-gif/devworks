@@ -79,8 +79,7 @@ export function createMarketing({ bus, clock, projects, economy, state, hypeEffe
   // Each: { key, title, stage (0–5), job | record, genre }.
   function targets() {
     const out = [];
-    const job = projects.active;
-    if (job) out.push({ key: job.id, title: job.name, stage: job.phaseIndex, job, genre: job.data.recipe?.genre });
+    for (const job of projects.jobs ?? [projects.active].filter(Boolean)) out.push({ key: job.id, title: job.name, stage: job.phaseIndex, job, genre: job.data.recipe?.genre }); // Milestone 13: every lane
     for (const r of projects.catalogue.list()) if (!r.release) out.push({ key: r.jobId, title: r.result.title, stage: 5, record: r, genre: r.result.recipe?.genre });
     return out;
   }

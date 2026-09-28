@@ -2,7 +2,7 @@
 // Art not drawn yet shows its stand-in (src/ui/placeholders.js) until the file is filed here.
 import { STATIONS, PROPS, DEV_POPS } from './studio.js';
 import { FACILITIES, STAGES } from './facilities.js';
-import { START_STAFF } from './staff.js';
+import { ROSTER } from './staff.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
 import { FILED_COVERS } from './covers.js';
@@ -14,7 +14,8 @@ const art = (folder, key) => [key, `assets/images/${folder}/${key}.png`];
 export const ASSETS = {
   // Studio: the starting stations (with the Showcase Shelf, Milestone 5) and the five start staff (Milestone 5b).
   ...Object.fromEntries(STATIONS.map((s) => art('facilities', s.art))),
-  ...Object.fromEntries(START_STAFF.map((d) => art('staff', d.art))),
+  ...Object.fromEntries(ROSTER.map((d) => art('staff', d.art))), // Milestone 13: everyone recruitment can find
+  ...Object.fromEntries([art('vfx', 'dev_vfx_02')]), // Milestone 13: training courses
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

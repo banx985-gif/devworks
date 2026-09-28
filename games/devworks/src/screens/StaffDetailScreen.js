@@ -2,7 +2,11 @@
 // level / XP, salary, what they are doing now, Energy / Morale, the five work stats (bar against the tier's cap;
 // the role's main stat is marked) and traits with what they do. Drag scrolls when it does not fit.
 // Milestone 5b: the Founding Developer gets their flag, founder perk and history (years, games credited) at the end.
+// Milestone 13: the career (continuous employment, games credited, genres and themes, franchises, awards, trainings,
+// mentoring links) and the actions: Train, Mentor (Elite and up), Let go (asks first).
 import { THEME, font } from '../../../../core/Theme.js';
+import { drawButton, hitRect } from '../../../../core/ui/Button.js';
+import { elementById } from '../../data/elements.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
 import { STATS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
@@ -13,7 +17,10 @@ const S = THEME.size;
 const PAD = 36;
 
 // history(id) → { crunchDays, crunches } (Milestone 7: crunch exposure) or null.
-export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null }) {
+// career(id) → the record from recruitment.careerOf (Milestone 13) or null; actions(id) → [{ id, label, sub, disabled,
+// accent, onTap }]; dateLabel(day) for "since".
+export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null, career = () => null, actions = () => [], dateLabel = (d) => `day ${d}`, nameOf = (id) => id }) {
+  let buttons = []; // screen rects of this frame's action buttons
   let id = null;
   let scrollY = 0;
   let drag = null;
@@ -127,8 +134,47 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       y += lines.length * S.body * 1.3 + 24;
     }
 
-    // Crunch exposure (Milestone 7): only shown once they have crunched.
-    const h = history(s.id);
+    // Career (Milestone 13).
+    const cr = career(s.id);
+    if (cr) {
+      y = heading(ctx, 'Career', x, y);
+      const top = (map) => Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, n]) => `${elementById(id)?.name ?? id}${n > 1 ? ` ×${n}` : ''}`).join(', ');
+      const yrs = cr.daysEmployed / 336;
+      const lines = [
+        `${cr.continuous ? 'Here without a break' : `${cr.record.stints.length} spells here`} since ${dateLabel(cr.since)} · ${yrs.toFixed(1)} years`,
+        `Games credited: ${cr.games.length}${cr.games.length ? ` (${cr.games.slice(-3).map((g) => g.title).join(', ')}${cr.games.length > 3 ? ', …' : ''})` : ''}`,
+        ...(Object.keys(cr.genres).length ? [`Genres: ${top(cr.genres)}`] : []),
+        ...(Object.keys(cr.themes).length ? [`Themes: ${top(cr.themes)}`] : []),
+        ...(cr.franchises.length ? [`Franchises: ${cr.franchises.join(', ')}`] : []),
+        `Awards: ${cr.awards.length}`,
+        `Training courses: ${cr.trainings}`,
+        `Crunch: ${cr.crunchDays ? `${cr.crunchDays} day${cr.crunchDays === 1 ? '' : 's'} over ${cr.crunches} crunch${cr.crunches === 1 ? '' : 'es'}` : 'none'}`,
+        ...(cr.mentors.length ? [`Mentored by ${cr.mentors.map(nameOf).join(', ')}`] : []),
+        ...(cr.mentees.length ? [`Mentor to ${cr.mentees.map(nameOf).join(', ')}`] : []),
+      ];
+      for (const line of lines) {
+        y += para(ctx, line, x, y, cw, { color: C.text }) + 10;
+      }
+      y += 20;
+    }
+
+    // Actions (Milestone 13): Train, Mentor, Let go.
+    const acts = actions(s.id);
+    if (acts.length) {
+      const bw = (cw - 20 * (acts.length - 1)) / acts.length;
+      acts.forEach((a, i) => {
+        const r = { x: x + i * (bw + 20), y, w: bw, h: THEME.button.minH };
+        drawButton(ctx, r, a.label, { disabled: a.disabled, accent: a.accent ?? C.progress, font: font(S.body, true) });
+        buttons.push({ ...a, r });
+      });
+      y += THEME.button.minH + 12;
+      const subs = acts.filter((a) => a.sub).map((a) => a.sub);
+      for (const t of subs) y += para(ctx, t, x, y, cw, { color: C.textMuted, size: S.small }) + 6;
+      y += 30;
+    }
+
+    // Crunch exposure (Milestone 7): only shown once they have crunched (Milestone 13: in the career above).
+    const h = cr ? null : history(s.id);
     if (h?.crunchDays) {
       y = heading(ctx, 'Crunch', x, y);
       text(ctx, `${h.crunchDays} crunch day${h.crunchDays === 1 ? '' : 's'} over ${h.crunches} crunch${h.crunches === 1 ? '' : 'es'}`, x, y, { color: C.bad, bold: true, maxWidth: cw });
@@ -187,7 +233,18 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       drag = null;
     },
     onTap(p) {
-      topBar.handleTap(p);
+      if (topBar.handleTap(p)) return;
+      const r = areaRect();
+      if (p.y < r.y || p.y > r.y + r.h) return;
+      const b = buttons.find((x) => hitRect(p, x.r));
+      if (b && !b.disabled) b.onTap();
+    },
+    // Screen rect of an action button (tests): 'train', 'mentor', 'letGo'.
+    buttonRect(bid) {
+      return buttons.find((b) => b.id === bid)?.r ?? null;
+    },
+    scrollToEnd() {
+      scrollY = maxScroll();
     },
     render(ctx) {
       const w = world.workerById(id);
@@ -201,6 +258,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       ctx.fill();
       ctx.stroke();
       ctx.clip();
+      buttons = [];
       if (w) contentH = drawContent(ctx, r, r.y - scrollY, w);
       ctx.restore();
       topBar.render(ctx);

@@ -17,11 +17,15 @@
 //   Milestone 11: shop (Build Mode → Shop: every facility, open ones first, locked ones with why), facility (Build Mode
 //   → tap a station: what it does, Sell for 50%), studio (Business → Studio: the stage, staff cap, game lanes, the
 //   next stage's needs and Upgrade; ?debug=1 adds an award); Business → Build Mode
+//   Milestone 13: recruit (the Recruitment Desk / Staff → Hire: channels, the 3 cards, refresh), candidate (one card:
+//   stats, trait, salary, where they'd work, Hire), train (courses for one worker), mentor (an Elite's mentee); Create
+//   lists every game in the works (two lanes at S2+) and New Game while a lane is free
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
 import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
-import { ROLES } from '../../data/staff.js';
+import { ROLES, STATS, TIERS, TRAITS } from '../../data/staff.js';
+import { MENTORING } from '../../data/recruitment.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
 import { RELEASE, ECONOMY, PROJECT_BALANCE, PLATFORM_BALANCE } from '../../data/balance.js';
@@ -33,7 +37,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -44,8 +48,10 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         const here = w.workers.filter((x) => x.phase === 'resting' || x.phase === 'toBreak');
         lines.push(here.length ? `Resting now: ${here.map((x) => x.staff.name.split(' ')[0]).join(', ')}` : 'Nobody is resting right now.');
       } else {
-        const v = def.role === 'Maker' ? projects().view() : null;
-        if (v) lines.push({ text: `Making: ${v.title} · ${v.phaseName} ${Math.floor(v.phaseFrac * 100)}%`, color: C.progress });
+        for (const job of def.role === 'Maker' ? projects().jobs : []) {
+          const v = projects().view(job);
+          lines.push({ text: `Making: ${v.title} · ${v.phaseName} ${Math.floor(v.phaseFrac * 100)}%`, color: C.progress });
+        }
         for (const x of w.workers.filter((x) => x.station === st)) {
           lines.push({ text: `${x.staff.name} (${ROLES[x.staff.role].name}): ${w.stateLine(x, WORK_STATE[x.phase].line)}`, color: C.actionDark });
         }
@@ -72,9 +78,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                     .unreleased()
                     .map((r) => ({ id: `release${r.number}`, label: `Release "${r.result.title}"`, sub: 'Finished and waiting', icon: r.result.cover, onTap: () => open('release', r.number) })),
                   ...(projects().decision ? [{ id: 'decision', label: `${DECISION_POINTS[projects().decision.point]} decision needed`, sub: 'Your game waits for you', icon: 'dev_ui_07', accent: C.action, onTap: () => open('decision') }] : []),
-                  projects().active
-                    ? { id: 'current', label: 'Current project', sub: projectLine(), icon: 'dev_ui_07', onTap: openProject }
-                    : { id: 'newGame', label: 'New Game', sub: 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame },
+                  ...projects().jobs.map((job, i) => ({ id: i ? `current${i + 1}` : 'current', label: projects().jobs.length > 1 ? `Game in the works: ${job.name}` : 'Current project', sub: projectLine(job), icon: 'dev_ui_07', onTap: () => (openProjectById ? openProjectById(job.id) : openProject()) })),
+                  ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? 'New Game (second lane)' : 'New Game', sub: projects().jobs.length ? 'Your studio can make two games at once' : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
                   ...(business().marketing.targets().length ? [{ id: 'marketing', label: 'Marketing', sub: marketingLine(), icon: 'business_ui_05', accent: C.progress, onTap: () => openScreen('marketing') }] : []),
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
@@ -237,7 +242,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const lines = [
       { text: `${st.line}`, color: C.text },
       { text: `Staff ${w.staffSystem.staff.length} of ${st.staffCap} · game lanes ${st.lanes} · floor ${w.cols} × ${w.rows}`, color: C.actionDark },
-      { text: 'Hiring comes in a later update; the cap is how many this studio can hold.', color: C.textMuted },
+      { text: 'Hire at the Recruitment Desk or Staff → Hire. The cap is how many this studio can hold.', color: C.textMuted },
     ];
     const sections = [{ lines }];
     if (n) {
@@ -250,14 +255,14 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
   // The Beta / Gold decision (Milestone 7).
   menus.register('decision', () => {
     const p = projects();
-    const job = p.active;
+    const job = p.decisionJob;
     const dec = p.decision;
     if (!job || !dec) return null;
-    const v = p.view();
+    const v = p.view(job);
     const late = v.deadlineDay == null ? '' : v.status === 'onTrack' ? 'On schedule' : `Due ${dateOf(v.deadlineDay)}: ${v.status === 'late' ? 'already late' : 'running behind'}`;
     const D = PROJECT_BALANCE.decisions;
     const extra = { outsource: ` Costs ${(PROJECT_BALANCE.scopes[v.scope].baseCostPerDay * D.outsource.costDays).toLocaleString('en-GB')} Credits.` };
-    const opts = p.options();
+    const opts = p.options(job);
     return {
       title: `${DECISION_POINTS[dec.point]}: ${v.title}`,
       subtitle: dec.point === 'beta' ? 'Alpha / Beta is done. How do you want to finish?' : 'Gold Master is done. Ship it, or keep working?',
@@ -272,6 +277,135 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           }),
         },
       ],
+    };
+  });
+
+  // --- Milestone 13: recruitment, one candidate, training, mentoring ------------------------------------------------
+  const statLine = (st) => STATS.map((x) => `${x.label} ${st[x.key]}`).join(' · ');
+  const mainStat = (d) => {
+    const k = ROLES[d.role].primaryStat;
+    return `${STATS.find((x) => x.key === k).label} ${d.stats[k]}`;
+  };
+  menus.register('recruit', () => {
+    const r = recruitment?.();
+    if (!r) return null;
+    const w = world();
+    const b = business();
+    const ch = r.channels.find((c) => c.id === r.state.channel);
+    const free = r.freeInDays();
+    const cards = r.cards;
+    const cost = r.refreshCost();
+    return {
+      title: 'Recruitment',
+      subtitle: `Staff ${w.staffSystem.staff.length} of ${w.staffCap} · the board refreshes itself for free in ${free} day${free === 1 ? '' : 's'}.`,
+      art: 'facility_f09',
+      accent: C.progress,
+      sections: [
+        {
+          title: 'Channel',
+          columns: 2,
+          buttons: r.channels.map((c) => {
+            const why = r.channelWhy(c.id);
+            return { id: `channel:${c.id}`, label: c.id === ch.id ? `✓ ${c.name}` : c.name, sub: why ?? c.line, locked: !!why, accent: c.id === ch.id ? C.good : C.progress, onTap: () => r.setChannel(c.id) };
+          }),
+        },
+        cards.length
+          ? {
+              title: 'Candidates',
+              columns: 1,
+              buttons: cards.map((c) => {
+                const d = r.cardDef(c);
+                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : ''}`, icon: d.art, accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
+              }),
+            }
+          : { lines: [{ text: 'Nobody new on this board. Refresh, or try another channel when it opens.', color: C.textMuted }] },
+        {
+          columns: 1,
+          buttons: [
+            { id: 'refresh', label: `Refresh now: ${ch.name}`, sub: b.credits >= cost ? `${cost.toLocaleString('en-GB')} Credits (the price doubles for each refresh this month)` : `Needs ${cost.toLocaleString('en-GB')} Credits`, disabled: b.credits < cost, onTap: () => r.refresh() },
+            ...(debugHire ? [{ id: 'debugElite', label: 'Debug: an Elite joins', sub: 'Adds an Elite (for mentoring checks)', accent: C.purple, onTap: () => debugHire() }] : []),
+          ],
+        },
+      ],
+    };
+  });
+  menus.register('candidate', (cardId) => {
+    const r = recruitment?.();
+    const c = r?.board.get(cardId);
+    const d = c && r.cardDef(c);
+    if (!d) return null;
+    const chk = r.hireCheck(cardId);
+    const seat = chk.seat;
+    const where = seat?.station ? `Works at the ${seat.name}` : seat?.build ? `A ${seat.name} is built for them: ${seat.cost.toLocaleString('en-GB')} Credits` : null;
+    const lines = [
+      { text: statLine(d.stats), color: C.actionDark },
+      `Salary ${d.salary.toLocaleString('en-GB')} Credits a month · Level ${d.startLevel}`,
+      ...d.traits.map((t) => ({ text: `${TRAITS[t]?.name ?? t}: ${TRAITS[t]?.text ?? ''}`, color: C.purple })),
+    ];
+    if (where) lines.push({ text: where, color: C.text });
+    if (c.special?.note) lines.push({ text: `${c.special.note}. On the board until ${dateOf(c.special.until)}.`, color: C.gold });
+    if (!chk.ok) lines.push({ text: chk.why, color: C.bad });
+    return {
+      title: d.name,
+      subtitle: `${ROLES[d.role].name} · ${TIERS[d.tier].name}`,
+      art: d.art,
+      sections: [
+        { lines },
+        {
+          columns: 2,
+          buttons: [
+            { id: 'hire', label: `Hire ${d.name.split(' ')[0]}`, sub: chk.ok ? (seat.build ? `${seat.cost.toLocaleString('en-GB')} Credits now, then the salary` : 'Salary paid each month') : chk.why, disabled: !chk.ok, accent: C.good, onTap: () => hireCard?.(cardId) },
+            { id: 'back', label: 'Back', sub: 'To the board', accent: C.progress, onTap: () => open('recruit') },
+          ],
+        },
+      ],
+    };
+  });
+  menus.register('train', (staffId) => {
+    const t = training?.();
+    const s = world().staffSystem.get(staffId);
+    if (!t || !s) return null;
+    const now = t.trainingOf(staffId);
+    const opts = t.options(staffId);
+    const gainText = (p) => p.map((x) => `${STATS.find((st) => st.key === x.key).label} +${x.min === x.max ? x.min : `${x.min}–${x.max}`}`).join(', ');
+    return {
+      title: `Training: ${s.name}`,
+      subtitle: now ? `On ${t.courses.course(now.courseId).name}: back in ${t.daysLeft(staffId)} days.` : 'Away from work for the course, then better stats (never past the tier cap). Each course once a year.',
+      art: s.art,
+      accent: C.progress,
+      sections: [
+        {
+          columns: 1,
+          buttons: opts.map((o) => ({ id: `course:${o.course.id}`, label: `${o.course.name} · ${o.course.cost.toLocaleString('en-GB')}`, sub: o.ok ? `${gainText(o.preview)} · ${o.course.days} days away` : o.why, locked: !o.ok && /^Needs Research|^Needs a franchise/.test(o.why ?? ''), disabled: !o.ok, icon: o.course.art, onTap: () => startCourse?.(o.course.id, staffId) })),
+        },
+      ],
+    };
+  });
+  menus.register('mentor', (mentorId) => {
+    const t = training?.();
+    const s = world().staffSystem.get(mentorId);
+    if (!t || !s) return null;
+    const p = t.pairOfMentor(mentorId);
+    if (p) {
+      const e = world().staffSystem.get(p.mentee);
+      const trait = p.tag ? TRAITS[p.tag]?.name : null;
+      const next = t.tagFor(p);
+      return {
+        title: `${s.name} mentors ${e?.name ?? ''}`,
+        subtitle: 'Each day both work on the same game, the mentee gains XP; after enough shared days they learn one of the mentor’s traits.',
+        art: s.art,
+        sections: [
+          { lines: [{ text: `${p.sharedDays} shared day${p.sharedDays === 1 ? '' : 's'} · +${MENTORING.xpPerDay} XP each`, color: C.actionDark }, { text: trait ? `Learned: ${trait}` : `A specialty tag after ${MENTORING.tagDays} shared days${next ? ` (${TRAITS[next]?.name})` : ' (they already have a specialty, or nothing new to learn)'}`, color: trait ? C.good : C.textMuted }] },
+          { columns: 1, buttons: [{ id: 'stopMentor', label: 'Stop mentoring', sub: 'They keep what they learned', accent: C.bad, onTap: () => t.stopMentoring(mentorId) }] },
+        ],
+      };
+    }
+    return {
+      title: `Mentor: ${s.name}`,
+      subtitle: `${TIERS[s.tier].name} staff can mentor one person of a lower tier.`,
+      art: s.art,
+      accent: C.progress,
+      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}` : o.why, icon: o.staff.art, disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
     };
   });
 
@@ -299,8 +433,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const t = business().marketing.targets()[0];
     return t ? `Hype ${Math.round(business().marketing.hypeOf(t.key))} · ${t.title}` : '';
   };
-  const projectLine = () => {
-    const v = projects().view();
+  const projectLine = (job) => {
+    const v = projects().view(job);
     return v ? `${v.title} · ${v.phaseName} ${Math.floor(v.phaseFrac * 100)}%` : '';
   };
 

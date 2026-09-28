@@ -18,6 +18,8 @@ const S = THEME.size;
 const PAD = 32;
 
 export function createProjectScreen({ layout, assets, world, projects, topBar, dateLabel = (d) => `day ${d}`, openDecision = () => {} }) {
+  let jobId = null;
+  const job = () => (jobId && projects.jobById(jobId)) || projects.active;
   let rects = {}; // content-space tappable rects from the last drawn frame: id → { r, onTap }
   const STATUS = { onTrack: ['On track', C.good], behind: ['Running behind', C.bad], late: ['Late', C.bad], none: ['No deadline (an older project)', C.textMuted] };
   const panelRect = () => {
@@ -98,7 +100,7 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
       const now = v.focus === b.id;
       const next = v.pendingFocus === b.id;
       drawButton(ctx, r, now ? `✓ ${b.name}` : next ? `→ ${b.name}` : b.name, { selected: now || next, accent: next ? C.action : C.progress, font: font(S.body, true) });
-      rects[`focus:${b.id}`] = { r, onTap: () => projects.setFocus(b.id) };
+      rects[`focus:${b.id}`] = { r, onTap: () => projects.setFocus(b.id, job()) };
     });
     y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
     const nowF = BUDGET_FOCUS.find((b) => b.id === v.focus);
@@ -132,8 +134,13 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
     onDrag: (p) => scroll.drag(p),
     onDragEnd: (p) => scroll.endDrag(p),
     onUp: (p) => scroll.endDrag(p),
-    enter() {
+    // Milestone 13: which game (two lanes); none given = the first one in the works.
+    enter(params) {
+      jobId = params?.id ?? null;
       scroll.scrollY = 0;
+    },
+    get jobId() {
+      return job()?.id ?? null;
     },
     onTap(p) {
       if (topBar.handleTap(p) || !scroll.contains(p)) return;
@@ -162,7 +169,7 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
       ctx.roundRect(r.x, r.y, r.w, r.h, THEME.panel.radius);
       ctx.fill();
       ctx.stroke();
-      const v = projects.view();
+      const v = job() ? projects.view(job()) : null;
       scroll.begin(ctx);
       rects = {};
       if (v) scroll.contentHeight = drawContent(ctx, v, r.w);

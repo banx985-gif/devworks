@@ -233,6 +233,7 @@ export const WORK_STATE = {
   working: { label: 'Working', line: 'Working at the {station}' },
   toBreak: { label: 'Walking', line: 'Going to the Break Area' },
   resting: { label: 'Resting', line: 'Resting in the Break Area' },
+  away: { label: 'Training', line: 'Away on a training course' }, // Milestone 13: off the floor
 };
 
 // Why a spot is refused in Build Mode.

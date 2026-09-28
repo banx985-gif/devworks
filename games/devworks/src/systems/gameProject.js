@@ -25,6 +25,10 @@
 // and phasePct.<phase> on progress, bugFixPct on fixing, output.* / outputLarge.* points and outputPct.graphics on the
 // finished game.
 //
+// Milestone 13: game lanes (bible §35: S2 / S3 have 2). Every job runs on its own; jobs lists them, active is the
+// first (the one the studio's card shows), decisionJob the first waiting for a Beta / Gold choice. Nobody can be on
+// two games at once (busyIds).
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
@@ -367,7 +371,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
   }
 
   // The choices open at the current decision point: [{ id, ok, why }].
-  function options(job = api.active) {
+  function options(job = api.decisionJob ?? api.active) {
     const d = job?.data;
     if (!d?.decision) return [];
     const point = d.decision.point;
@@ -382,7 +386,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
   }
 
   // The player's choice at a decision point. Returns true when it was applied.
-  function decide(choice, job = api.active) {
+  function decide(choice, job = api.decisionJob ?? api.active) {
     const d = job?.data;
     if (!d?.decision) return false;
     const opt = options(job).find((o) => o.id === choice);
@@ -431,8 +435,8 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
 
   // Energy: Push Quality and Crunch make the team's work more tiring (the studio asks every working day).
   world.setEnergyLossMultiplier?.((s) => {
-    const job = api.active;
-    if (!job || !job.slots.includes(s.id)) return 1;
+    const job = system.jobs.find((j) => j.slots.includes(s.id)); // Milestone 13: their own game
+    if (!job) return 1;
     const f = focusOf(job.data.focus, B);
     return (1 + (f.energyPct ?? 0) / 100) * (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.energyPct / 100 : 1);
   });
@@ -446,9 +450,18 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
     get active() {
       return system.jobs[0] ?? null;
     },
-    get decision() {
-      return api.active?.data.decision ?? null;
+    // Milestone 13: every game in the works (one per lane), the first one waiting for a choice, and who is busy.
+    get jobs() {
+      return system.jobs;
     },
+    get decisionJob() {
+      return system.jobs.find((j) => j.data.decision) ?? null;
+    },
+    get decision() {
+      return api.decisionJob?.data.decision ?? null;
+    },
+    busyIds: () => system.jobs.flatMap((j) => j.slots),
+    jobById: (id) => system.jobs.find((j) => j.id === id) ?? null,
     get staffHistory() {
       return staffHistory;
     },
@@ -533,6 +546,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       // Projected finish from the pace so far (the first days have no pace yet: the deadline stands in).
       const projected = done > 0.02 ? d.startedDay + Math.round(elapsed / done) : d.deadlineDay;
       return {
+        id: job.id,
         title: job.name,
         scope: d.scope,
         phaseIndex: job.phaseIndex,

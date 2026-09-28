@@ -24,6 +24,9 @@
 // S3) and Business → Build Mode.
 // Milestone 12: the research tree (36 topics, core ResearchSystem): the Research button opens the Research screen; RP
 // in the top bar; a finished topic opens the elements and facilities that waited on it.
+// Milestone 13: recruitment (the Recruitment Desk and Staff → Hire: channels, the board of 3, free refresh every 56
+// days, hiring up to the stage cap, letting go), training courses and mentoring (Staff card → Train / Mentor), careers
+// on the staff card, the missing-role hints on New Game, and the second game lane at S2+.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -58,7 +61,10 @@ import { FAMILIES, elementById } from '../data/elements.js';
 import { SCOPES } from '../data/projects.js';
 import { STATIONS, DEV_POPS, BIG_SALES } from '../data/studio.js';
 import { founderById } from '../data/setup.js';
-import { startStaffById } from '../data/staff.js';
+import { startStaffById, staffDefById } from '../data/staff.js';
+import { createRecruitment } from './systems/recruitment.js';
+import { createTraining } from './systems/training.js';
+import { TRAITS, STATS } from '../data/staff.js';
 import { createStudioProfile, migrateToV2, slotSummary } from './systems/studioProfile.js';
 import { createTitleScreen } from './screens/TitleScreen.js';
 import { createSetupScreen } from './screens/SetupScreen.js';
@@ -85,7 +91,7 @@ import { createResearchScreen } from './screens/ResearchScreen.js';
 import { RESEARCH } from '../data/research.js';
 const RESEARCH_LIST = () => RESEARCH;
 import { elementById as elementName } from '../data/elements.js';
-import { facilityById } from '../data/facilities.js';
+import { facilityById, stageById } from '../data/facilities.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -126,6 +132,9 @@ const projects = createGameProjects({ bus, world, clock, charge: (amount, reason
 const business = createBusiness({ bus, clock, world, projects });
 const research = createResearch({ bus, clock, world }); // Milestone 12
 const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched() }); // Milestone 11
+const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop }); // Milestone 13
+const training = createTraining({ bus, clock, world, business, projects, research, recruitment });
+const lanes = () => stageById(world.stage).lanes;
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
 const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: research.researched(), stage: world.stage }) }); // Milestone 11: stages; Milestone 12: research
@@ -296,6 +305,21 @@ const menus = createStudioMenus({
   },
   newGame: () => router.go('newProject'),
   openProject: () => router.go('project'),
+  openProjectById: (id) => router.go('project', { id }), // Milestone 13: two lanes
+  lanes,
+  recruitment: () => recruitment,
+  training: () => training,
+  hireCard: (cardId) => {
+    const r = recruitment.hire(cardId);
+    sheet.close();
+    if (!r.ok) showTip(r.why);
+  },
+  startCourse: (courseId, staffId) => {
+    const r = training.start(courseId, staffId);
+    sheet.close();
+    if (!r.ok) showTip(r.reason);
+  },
+  debugHire: new URLSearchParams(window.location.search).has('debug') ? () => (['PRG07', 'DSN07', 'ART07', 'WRT07', 'PRO07'].some((id) => recruitment.debugJoin(id)) ? sheet.close() : showTip('No room for an Elite')) : null,
   decide: (id) => decideNow(id),
   dateOf: (d) => clock.shortLabel(d),
   isUnlocked: (id) => elements.isOpen(id),
@@ -337,6 +361,7 @@ const openStation = (id) => {
   if (id === makerId && projects.active) router.go('project');
   else if (id === shelfId) router.go('catalogue');
   else if (world.stationById(id)?.def.planner) router.go('marketing'); // the Marketing Wall (Milestone 9)
+  else if (id === 'F09') openMenu('recruit'); // the Recruitment Desk (Milestone 13)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -425,7 +450,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -494,6 +519,8 @@ async function playSlot(i) {
   research.load(data.research); // Milestone 12 (a save from before it: nothing researched)
   clock.load(data.clock); // the saved speed is checked against the unlocks just loaded
   elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
+  recruitment.load(data.staff?.recruit ?? null); // Milestone 13 (a save from before it: a fresh board, careers rebuilt)
+  training.load(data.staff?.training ?? null);
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -511,6 +538,8 @@ async function startStudio(i, setup) {
   business.newGame({ seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // the run's platform market seed
   research.newGame();
   elements.newGame();
+  recruitment.newGame(); // Milestone 13: the first board (Start Candidates) and everyone's career
+  training.newGame();
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -711,6 +740,17 @@ const newProject = createNewProjectScreen({
   scopeReason: (id) => elements.scopeReason(id),
   estimate: (team, scope, type) => projects.estimate(team, scope, type),
   franchises: business.franchises, // Milestone 10: project types
+  // Milestone 13: nobody on two games or on a course; the missing-role hints; the lanes.
+  unavailable: (id) => {
+    const job = projects.jobs.find((j) => j.slots.includes(id));
+    return job ? `Making ${job.name}` : training.trainingOf(id) ? 'Away on a course' : null;
+  },
+  hints: (team, scope) => recruitment.hints(team, scope),
+  onFindRole: (role) => {
+    recruitment.surface(role);
+    openMenu('recruit');
+  },
+  laneWhy: () => (projects.jobs.length >= lanes() ? 'a free game lane' : null),
   dateLabel: (d) => clock.shortLabel(d),
   today: () => clock.totalDays,
   costPerDay: (scope, focus, type) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100) * (FRANCHISE_BALANCE.types[type]?.costMult ?? 1)),
@@ -1023,13 +1063,58 @@ function drawFinished(ctx, t, g) {
   drawOutputs(ctx, g.outputs, g.bugs, x + 40, yy, w - 80, { rowH: FIN.rowH });
   ctx.restore();
 }
-const roster = createRosterScreen({ renderer, layout, assets, world, topBar: subTopBar, openStaff });
+const roster = createRosterScreen({ renderer, layout, assets, world, topBar: subTopBar, openStaff, onHire: () => openMenu('recruit') });
+// The staff card's actions (Milestone 13): Train, Mentor (Elite and up), Let go (asks first).
+function staffActions(id) {
+  const s = world.staffSystem.get(id);
+  if (!s) return [];
+  const t = training.trainingOf(id);
+  const letWhy = recruitment.letGoWhy(id);
+  return [
+    { id: 'train', label: t ? `Training (${training.daysLeft(id)}d)` : 'Train', onTap: () => openMenu('train', id) },
+    ...(training.canMentor(s) ? [{ id: 'mentor', label: training.pairOfMentor(id) ? 'Mentoring' : 'Mentor', accent: COL.purple, onTap: () => openMenu('mentor', id) }] : []),
+    { id: 'letGo', label: 'Let go', accent: COL.bad, disabled: !!letWhy, sub: letWhy ? `Let go: ${letWhy.charAt(0).toLowerCase()}${letWhy.slice(1)}.` : null, onTap: () => confirmLetGo(id) },
+  ];
+}
+function confirmLetGo(id) {
+  const s = world.staffSystem.get(id);
+  if (!s) return;
+  dialog.confirm({
+    title: `Let ${s.name} go?`,
+    body: profile.isFounder(id) ? `${s.name} founded this studio. Their Founding Developer run of continuous employment ends here.` : `${s.name} leaves the studio. They may turn up on the recruitment board again one day.`,
+    yes: 'Let go',
+    danger: true,
+    onYes: () => {
+      const r = recruitment.letGo(id);
+      if (!r.ok) return showTip(r.why);
+      if (router.currentName === 'staff') router.back();
+    },
+  });
+}
+// Short banners for the staff events (Milestone 13).
+bus.on('staff:hired', ({ staff, station }) => {
+  beat = { entry: { title: `${staff.name} joined!`, body: `They're walking in to the ${station?.def.name ?? 'studio'}.` }, age: 0 };
+});
+bus.on('staff:letGo', ({ name }) => {
+  beat = { entry: { title: `${name} left the studio`, body: 'Their career record stays in the studio history.' }, age: 0 };
+});
+bus.on('training:complete', ({ staff, course, gains }) => {
+  const g = Object.entries(gains).map(([k, v]) => `${STATS.find((x) => x.key === k)?.label ?? k} +${v}`).join(', ');
+  beat = { entry: { title: `${staff.name} finished ${course.name}`, body: g || 'Already at the tier cap' }, age: 0 };
+});
+bus.on('mentor:tag', ({ mentor, mentee, trait }) => {
+  beat = { entry: { title: `${mentee.name} learned ${TRAITS[trait]?.name ?? trait}`, body: `From their mentor ${mentor.name}.` }, age: 0 };
+});
 const staffDetail = createStaffDetailScreen({
   layout,
   assets,
   world,
   topBar: subTopBar,
   history: (id) => projects.staffHistory[id] ?? null,
+  career: (id) => recruitment.careerOf(id), // Milestone 13
+  actions: (id) => staffActions(id),
+  dateLabel: (d) => clock.shortLabel(d),
+  nameOf: (id) => staffDefById(id)?.name ?? world.staffSystem.get(id)?.name ?? id,
   founderInfo: () => {
     const f = profile.founder();
     return f ? { ...f, flag: profile.data.founder.flag, history: profile.data.founder, years: profile.yearsEmployed() } : null;
@@ -1073,7 +1158,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

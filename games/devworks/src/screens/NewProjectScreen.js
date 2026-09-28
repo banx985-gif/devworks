@@ -9,6 +9,9 @@
 // Milestone 10: the project type first — Original, Sequel, Spin-off, Remake, Remaster (locked ones greyed with why).
 // A Sequel / Spin-off picks a franchise, a Remake / Remaster picks an old game; the slots they fix are locked (a
 // Spin-off must change the genre; a Remaster keeps the scope too).
+// Milestone 13: the core team lists everyone in the studio (by role); someone making another game or away on a course
+// can't be picked (why under their name). A role the studio has nobody for gets a hint (spec §9): how many more days
+// this game takes without one, and a button that puts that role's Start Candidate on the recruitment board.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -25,7 +28,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -83,6 +86,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const n = setup.team.length;
     const { max } = scope().team;
     if (!scopeOpen(setup.scope)) out.push('an open scope');
+    if (laneWhy()) out.push(laneWhy()); // Milestone 13: every game lane busy
     if (n < HARD_MIN) out.push(`${HARD_MIN - n} more lead${HARD_MIN - n > 1 ? 's' : ''}`);
     if (n > max) out.push(`${n - max} fewer lead${n - max > 1 ? 's' : ''}`);
     return out;
@@ -240,15 +244,40 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     if (ctx) text(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
     y += 72;
 
-    // Core team: one lead slot per role.
+    // Core team (Milestone 13: everyone, by role; busy people greyed; a missing role gets its hint).
     const { min, max } = scope().team;
     heading('Core team', `${scope().name}: ${min}–${max} leads · ${setup.team.length} chosen`);
+    const roleHints = hints(setup.team, setup.scope);
     for (const role of LEAD_ROLES) {
+      const people = world.staffSystem.staff.filter((s) => s.role === role);
+      if (!people.length) {
+        const h = roleHints.find((x) => x.role === role);
+        const r = { x: PAD, y, w: cw, h: h ? 200 : 130 };
+        if (ctx) {
+          ctx.fillStyle = C.panelDim;
+          ctx.strokeStyle = h ? C.warn : C.line;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.roundRect(r.x, r.y, r.w, r.h, 22);
+          ctx.fill();
+          ctx.stroke();
+          text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted });
+          text(ctx, h?.extraDays ? `No ${ROLES[role].name} yet: about ${h.extraDays} more day${h.extraDays === 1 ? '' : 's'} without one` : `No ${ROLES[role].name} yet (it still works, just slower)`, r.x + 24, r.y + 62, { size: S.body, color: h ? C.bad : C.textFaint, maxWidth: r.w - 48 });
+        }
+        if (h?.candidate && onFindRole) {
+          const b = { x: r.x + 24, y: r.y + 112, w: r.w - 48, h: 72 };
+          if (ctx) drawButton(ctx, b, `Meet ${h.candidate.name} at the Recruitment Desk`, { accent: C.progress, font: font(S.small, true) });
+          box(b, () => onFindRole(role), `find:${role}`);
+        }
+        y += r.h + 20;
+        continue;
+      }
+      for (const person of people) {
       const r = { x: PAD, y, w: cw, h: 130 };
-      const person = world.staffSystem.staff.find((s) => s.role === role);
-      const on = !!person && setup.team.includes(person.id);
+      const busy = setup.team.includes(person.id) ? null : unavailable(person.id);
+      const on = setup.team.includes(person.id);
       if (ctx) {
-        ctx.fillStyle = on ? C.panelInfo : person ? C.panel : C.panelDim;
+        ctx.fillStyle = on ? C.panelInfo : busy ? C.panelDim : C.panel;
         ctx.strokeStyle = on ? C.progress : C.line;
         ctx.lineWidth = on ? 5 : 3;
         ctx.beginPath();
@@ -261,11 +290,12 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
           text(ctx, person.name, r.x + 24, r.y + 58, { size: S.body, bold: true });
           const main = STATS.find((st) => st.key === ROLES[role].primaryStat);
           text(ctx, `${main.label} ${person.stats[main.key]}`, r.x + 340, r.y + 62, { size: S.body, color: C.actionDark, bold: true });
-          text(ctx, on ? '✓ In the team' : 'Tap to add', r.x + r.w - 150, r.y + r.h / 2, { size: S.small, bold: true, color: on ? C.progress : C.textMuted, align: 'right', baseline: 'middle' });
-        } else text(ctx, 'No one yet (hiring comes later)', r.x + 24, r.y + 62, { size: S.body, color: C.textFaint });
+          text(ctx, on ? '✓ In the team' : busy ?? 'Tap to add', r.x + r.w - 150, r.y + r.h / 2, { size: S.small, bold: true, color: on ? C.progress : busy ? C.bad : C.textMuted, align: 'right', baseline: 'middle', maxWidth: 300 });
+        }
       }
-      if (person) box(r, () => (setup.team = on ? setup.team.filter((id) => id !== person.id) : [...setup.team, person.id]), person.id);
+      if (person && !busy) box(r, () => (setup.team = on ? setup.team.filter((id) => id !== person.id) : [...setup.team, person.id]), person.id);
       y += 150;
+      }
     }
     return { height: y + PAD, hit };
   }
@@ -288,7 +318,11 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     },
     startRect,
     enter() {
-      setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: world.staffSystem.staff.map((s) => s.id).slice(0, SCOPES[0].team.max) };
+      setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: [] };
+      // Milestone 13: the free people, one per role first (the Milestone 3–12 default), up to the scope's usual team.
+      const free = world.staffSystem.staff.filter((s) => !unavailable(s.id));
+      const firsts = LEAD_ROLES.map((r) => free.find((s) => s.role === r)).filter(Boolean);
+      setup.team = [...firsts, ...free.filter((s) => !firsts.includes(s))].map((s) => s.id).slice(0, SCOPES[0].team.max);
       scroll.scrollY = 0;
     },
     exit() {

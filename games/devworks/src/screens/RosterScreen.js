@@ -1,8 +1,10 @@
 // The Roster (Milestone 2), from the Staff button: one card per worker — portrait, name, role, level, Energy /
 // Morale bars and what they are doing now (core/ui/StaffCard). Drag scrolls; tap a card for the staff detail.
 // The studio keeps running behind it at the top bar's speed.
+// Milestone 13: "Hire" (top right) opens the recruitment board; the count shows the stage cap.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollList } from '../../../../core/ui/ScrollList.js';
+import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { drawStaffCard, STAFF_CARD_HEIGHT } from '../../../../core/ui/StaffCard.js';
 import { WORK_STATE } from '../../data/studio.js';
 import { STATS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
@@ -30,7 +32,11 @@ export function staffCardView(world, w) {
   };
 }
 
-export function createRosterScreen({ renderer, layout, assets, world, topBar, openStaff }) {
+export function createRosterScreen({ renderer, layout, assets, world, topBar, openStaff, onHire = null }) {
+  const hireRect = () => {
+    const h = headRect();
+    return { x: h.x + h.w - 300, y: h.y, w: 300, h: h.h };
+  };
   const W = renderer.width;
   const headRect = () => {
     const t = topBar.rect();
@@ -71,8 +77,10 @@ export function createRosterScreen({ renderer, layout, assets, world, topBar, op
     onUp(p) {
       list.endDrag(p);
     },
+    hireRect,
     onTap(p) {
       if (topBar.handleTap(p)) return;
+      if (onHire && hitRect(p, hireRect())) return onHire();
       const hit = list.itemAt(p);
       if (hit) openStaff(hit.item.id);
     },
@@ -83,10 +91,14 @@ export function createRosterScreen({ renderer, layout, assets, world, topBar, op
       ctx.fillStyle = C.text;
       ctx.font = font(S.title, true);
       ctx.fillText('Staff', h.x, h.y + h.h / 2);
-      ctx.textAlign = 'right';
       ctx.fillStyle = C.textMuted;
       ctx.font = font(S.body);
-      ctx.fillText(`${world.workers.length} in the team · tap a card for details`, h.x + h.w, h.y + h.h / 2, W * 0.6);
+      ctx.fillText(`${world.workers.length} of ${world.staffCap ?? world.workers.length} · tap a card`, h.x + 150, h.y + h.h / 2, W * 0.45);
+      if (onHire) drawButton(ctx, hireRect(), 'Hire', { accent: C.good, font: font(S.button, true) });
+      else {
+        ctx.textAlign = 'right';
+        ctx.fillText('tap a card for details', h.x + h.w, h.y + h.h / 2, W * 0.4);
+      }
       list.render(ctx);
       topBar.render(ctx);
     },
