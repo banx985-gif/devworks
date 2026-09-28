@@ -54,7 +54,7 @@ export const FACILITIES = [
   { id: 'F25', name: 'Engine Build Farm', role: 'Specialist', unlock: { research: ['ENG5'] }, cost: 7600, line: 'Compile/project time -10%', effects: { progressPct: 10 }, size: { w: 2, h: 2 } },
   { id: 'F26', name: 'Publishing Office', role: 'Front desk', unlock: { rank: 'A' }, cost: 8200, line: 'Publish external pitches', effects: {}, size: { w: 3, h: 2 } },
   { id: 'F27', name: 'Executive Boardroom', role: 'Thinker', unlock: { rank: 'A', stage: 4 }, cost: 8500, line: 'Major deals +1 offer', effects: { dealOffers: 1 }, size: { w: 3, h: 2 } },
-  { id: 'F28', name: 'Hardware Prototype Lab', role: 'Maker', unlock: { year: 11, research: ['HW2'] }, cost: 10000, line: 'Unlock first console prototype', effects: {}, later: 'the hardware milestones', size: { w: 3, h: 3 } },
+  { id: 'F28', name: 'Hardware Prototype Lab', role: 'Maker', unlock: { year: 11, research: ['HW2'] }, cost: 10000, line: 'Unlock first console prototype', effects: {}, size: { w: 3, h: 3 } },
   { id: 'F29', name: 'Dev Kit Lab', role: 'Specialist', unlock: { research: ['HW3'] }, cost: 9000, line: 'Third-party support +10%', effects: { thirdPartyPct: 10 }, later: 'the hardware milestones', size: { w: 3, h: 2 } },
   { id: 'F30', name: 'Certification Lab', role: 'Specialist', unlock: { research: ['HW4'] }, cost: 9400, line: 'Console defect/certification risk -12%', effects: { certFailPct: -12 }, size: { w: 3, h: 2 } },
   { id: 'F31', name: 'Distribution Hub', role: 'Support', unlock: { rank: 'A', stage: 4 }, cost: 8000, line: 'Physical/digital launch efficiency +10%', effects: { launchSalesPct: 10 }, size: { w: 3, h: 2 } },

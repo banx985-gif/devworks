@@ -12,6 +12,7 @@ import { ELEMENTS } from './elements.js';
 import { FILED_COVERS } from './covers.js';
 import { PLATFORMS } from './platforms.js';
 import { TOP_ICONS } from './home.js';
+import { COMPONENTS, HARDWARE } from './hardware.js';
 
 const art = (folder, key) => [key, `assets/images/${folder}/${key}.png`];
 
@@ -36,6 +37,9 @@ export const ASSETS = {
   ...Object.fromEntries(['business_ui_10', 'business_ui_11', 'business_ui_12'].map((k) => art('business', k))), // Milestone 21: licensing, publishing, acquisitions
   ...Object.fromEntries([art('brand', 'dev_brand_03')]), // the title logo (redrawn 28 Sept)
   ...Object.fromEntries(STAGES.filter((s) => s.event).map((s) => art('events', s.event))), // Milestone 22: the stage moments
+  // Milestone 23: the 36 hardware parts, the Hardware / parts icons, the prototype and its moment.
+  ...Object.fromEntries(COMPONENTS.map((c) => art('hardware', c.art))),
+  ...Object.fromEntries([art('ui', 'dev_ui_26'), art('ui', 'dev_ui_27'), art('consoles', HARDWARE.prototypeArt), art('events', HARDWARE.firstPrototypeEvent)]),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

@@ -43,7 +43,7 @@ const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes b
 const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -485,6 +485,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
           const r = stationRect(it);
           assets.draw(ctx, it.def.art, r.x, r.y, r.w, r.h);
           if (it === shelf) drawShelfCovers(ctx, r);
+          if (it.id === 'F28' && labPrototype()) assets.drawContained(ctx, labPrototype(), { x: r.x + r.w * 0.3, y: r.y + r.h * 0.12, w: r.w * 0.4, h: r.h * 0.32 }); // Milestone 23: the prototype on the lab
         }
       }
       if (moving) drawMovingStation(ctx);

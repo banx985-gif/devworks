@@ -25,6 +25,10 @@ const ROWS = [
   ['contracts', 'Contract work'],
   ['sponsor', 'Sponsors'], // Milestone 18
   ['support', 'Post-launch'], // Milestone 20
+  ['licensing', 'Engine licensing'], // Milestone 21
+  ['external', 'Publishing other studios'],
+  ['acquisition', 'Acquisitions'],
+  ['hardware', 'Hardware'], // Milestone 23
   ['interest', 'Emergency Credit interest'],
 ];
 const money = (n) => `${n < 0 ? '−' : n > 0 ? '+' : ''}${Math.abs(n).toLocaleString('en-GB')}`;

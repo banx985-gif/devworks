@@ -30,6 +30,8 @@
 //   Milestone 20: support (catalogue number): Patch / Free Update / Expansion / DLC / Port / Move On with what each
 //   does, costs and why not; Remaster / Remake lead to New Game; supportTeam ({ number, option, platform }): the team
 //   Milestone 21: Business → Engine Licensing, Publishing Office and Acquisitions (screens)
+//   Milestone 23: Create → Hardware (screen); hwPick (slot): the six parts of a slot (open ones pick; locked ones with
+//   why); hwBuild: the prototype's team (Programmers and Producers first), Start
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -46,10 +48,11 @@ import { actionById, CONVENTIONS } from '../../data/marketing.js';
 import { elementById } from '../../data/elements.js';
 import { fanExpectationFor } from '../systems/marketing.js';
 import { facilityById, stageById } from '../../data/facilities.js';
+import { HW_SLOTS, componentsOf } from '../../data/hardware.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -108,6 +111,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? `New Game (lane ${projects().jobs.length + 1})` : 'New Game', sub: projects().jobs.length ? `Your studio can make ${lanes()} games at once` : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
                   ...(business().marketing.targets().length ? [{ id: 'marketing', label: 'Marketing', sub: marketingLine(), icon: 'business_ui_05', accent: C.progress, onTap: () => openScreen('marketing') }] : []),
                   ...(engines ? [{ id: 'engines', label: 'Engines', sub: engineLine(), icon: 'dev_ui_11', accent: C.purple, onTap: () => openScreen('engines') }] : []),
+                  ...(hardware ? [{ id: 'hardware', label: 'Hardware', sub: hardware().view() ? `Building: ${hardware().view().name}` : hardware().hardwareWhy() ? 'Needs a Hardware Prototype Lab' : `${hardware().prototypes.length} prototype${hardware().prototypes.length === 1 ? '' : 's'}`, icon: 'dev_ui_26', accent: C.purple, onTap: () => openScreen('hardware') }] : []), // Milestone 23
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
@@ -520,6 +524,54 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         { lines: [{ text: `${p.costPerDay} Credits a day · mostly CODE (Programmers) · tier now: ${en.tierNow()}`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
         { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
         { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
+      ],
+    };
+  });
+
+  // Milestone 23: pick a part for one hardware slot.
+  menus.register('hwPick', (slot) => {
+    const hw = hardware?.();
+    const s = HW_SLOTS.find((x) => x.id === slot);
+    if (!hw || !s) return null;
+    const now = hw.draft.parts[slot];
+    return {
+      title: `${s.name}`,
+      subtitle: 'Pick the part for this slot. Higher tiers need more hardware research.',
+      art: 'dev_ui_27',
+      accent: C.purple,
+      sections: [
+        {
+          columns: 1,
+          buttons: componentsOf(slot).map((c) => {
+            const why = hw.partWhy(c.id);
+            return { id: `part:${c.id}`, label: `${now === c.id ? '✓ ' : ''}${c.name} · ${c.cost} a unit`, sub: why ?? c.line, icon: c.art, locked: !!why, disabled: !!why, accent: now === c.id ? C.good : C.progress, onTap: () => pickPart?.(slot, c.id) };
+          }),
+        },
+      ],
+    };
+  });
+  // Milestone 23: build a prototype — pick who works on it.
+  const hwTeam = { ids: null };
+  menus.register('hwBuild', () => {
+    const hw = hardware?.();
+    if (!hw) return null;
+    const w = world();
+    const free = w.staffSystem.staff.filter((s) => !projects().jobs.some((j) => j.slots.includes(s.id)) && !w.workerById(s.id)?.away);
+    if (!hwTeam.ids) hwTeam.ids = free.filter((s) => s.role === 'PRG' || s.role === 'PRO').map((s) => s.id).slice(0, 3);
+    const team = hwTeam.ids.filter((id) => free.some((s) => s.id === id));
+    hwTeam.ids = team;
+    const why = hw.startWhy(team) ?? (team.length ? null : 'Pick at least one person');
+    const pv = hw.preview();
+    const toggle = (id) => (hwTeam.ids = team.includes(id) ? team.filter((x) => x !== id) : [...team, id]);
+    return {
+      title: `Build: ${pv.family} prototype`,
+      subtitle: 'At the Hardware Prototype Lab: Board Design, Prototype Build, Validation. Mostly Programmers and Producers.',
+      art: 'dev_ui_26',
+      accent: C.purple,
+      sections: [
+        { lines: [{ text: `${pv.costPerDay} Credits a day · ${pv.work} work`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
+        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `hwteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code} · PROD ${s.stats.prod ?? 0}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
+        { columns: 1, buttons: [{ id: 'hwGo', label: 'Start the prototype', sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { hwTeam.ids = null; startHardware?.(team); } }] },
       ],
     };
   });

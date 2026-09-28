@@ -46,6 +46,8 @@
 // Publishing Office), acquisitions (Business → Acquisitions); passive income capped at a share of each year's income.
 // Milestone 22: studio stages S4 Corporate HQ and S5 Global Campus (Business → Studio), Blockbuster / Mega scopes with
 // them, three game lanes; the big moment shows the stage's event picture; ?debug=1 adds __dw.debugFullStudio().
+// Milestone 23: hardware foundation (optional): Create → Hardware — a console design (six parts, a family name), a
+// prototype built at the Hardware Prototype Lab, its seven ratings and its validation; the first prototype's moment.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -95,6 +97,9 @@ import { createSponsors } from './systems/sponsors.js';
 import { createRivals } from './systems/rivals.js';
 import { createSupport } from './systems/support.js';
 import { createGlobalBusiness } from './systems/globalBusiness.js';
+import { createHardware } from './systems/hardware.js';
+import { createHardwareScreen } from './screens/HardwareScreen.js';
+import { HARDWARE } from '../data/hardware.js';
 import { createLicensingScreen, createPublishingOfficeScreen, createAcquisitionsScreen } from './screens/GlobalScreens.js';
 import { LOCALISATION } from '../data/global.js';
 import { supportOptionById as SUPPORT_OPTION_BY_ID } from '../data/support.js';
@@ -146,7 +151,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -175,7 +180,8 @@ const research = createResearch({ bus, clock, world }); // Milestone 12
 const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched() }); // Milestone 11
 // Busy elsewhere (Milestones 16–17): the engine, a contract.
 let contracts = null;
-const engineBusy = (id) => (engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null);
+const engineBusy = (id) => (engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : hardware?.jobOf(id) ? 'Building a console prototype' : null);
+let hardware = null; // Milestone 23 (made below)
 const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy: engineBusy }); // Milestone 13
 const training = createTraining({ bus, clock, world, business, projects, research, recruitment, extraBusy: engineBusy });
 engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio', extraBusy: (id) => (contracts?.jobOf(id) ? 'On a contract' : null) });
@@ -191,6 +197,7 @@ const publishers = createPublishers({ bus, clock, world, business, projects, ele
 contracts = createContracts({ bus, clock, world, business, engines: () => engines, isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : null) });
 const lanes = () => stageById(world.stage).lanes;
 // Milestone 21: global business (after the business, research, engines, recruitment and publishers).
+hardware = createHardware({ bus, clock, world, business, research, studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
 const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
@@ -383,6 +390,16 @@ const menus = createStudioMenus({
   sponsors: () => sponsors, // Milestone 18
   support: () => support, // Milestone 20
   global: () => global, // Milestone 21
+  hardware: () => hardware, // Milestone 23
+  pickPart: (slot, id) => {
+    hardware.pick(slot, id);
+    sheet.close();
+  },
+  startHardware: (team) => {
+    const r = hardware.start(team);
+    sheet.close();
+    if (!r.ok) showTip(r.why);
+  },
   startSupport: (id, number, team, platform = null) => {
     const r = support.start(id, number, team, platform);
     sheet.close();
@@ -449,6 +466,7 @@ const openStation = (id) => {
   else if (id === 'F09') openMenu('recruit'); // the Recruitment Desk (Milestone 13)
   else if (id === 'F15') router.go('awards'); // the Awards Cabinet (Milestone 19)
   else if (id === 'F26') router.go('publishingOffice'); // the Publishing Office (Milestone 21)
+  else if (id === 'F28') router.go('hardware'); // the Hardware Prototype Lab (Milestone 23)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -537,7 +555,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -623,6 +641,7 @@ async function playSlot(i) {
   awards.load(data.awards ?? null);
   support.load(data.support ?? null); // Milestone 20
   global.load(data.global ?? null); // Milestone 21
+  hardware.load(data.hardware ?? null); // Milestone 23
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -652,6 +671,7 @@ async function startStudio(i, setup) {
   awards.newGame();
   support.newGame(); // Milestone 20
   global.newGame(); // Milestone 21
+  hardware.newGame(); // Milestone 23
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -785,6 +805,7 @@ const studio = createStudioScreen({
   sign: () => (profile.data ? { name: profile.name, colour: profile.colour } : null),
   openShop: () => openMenu('shop'), // Milestone 11
   openFacility: (id) => openMenu('facility', id),
+  labPrototype: () => (hardware?.prototypes.length ? HARDWARE.prototypeArt : null), // Milestone 23: the prototype on the lab
 });
 // A new studio stage (Milestone 11): the big moment with the stage's picture; new scopes open.
 bus.on('studio:stage', ({ stage }) => {
@@ -1004,6 +1025,29 @@ bus.on('support:done', ({ job, record, effects }) => {
   const o = SUPPORT_OPTION_BY_ID(job.option);
   const bits = [effects.bugsFixed ? `${effects.bugsFixed} bugs fixed` : null, effects.playerScore ? `player score +${effects.playerScore}` : null, effects.trust ? `Fan Trust +${Math.round(effects.trust)}` : null, effects.tailPct ? `tail +${effects.tailPct}%` : null, effects.addonRevenue ? `add-on: ${effects.addonRevenue.toLocaleString('en-GB')} Credits over time` : null, effects.port?.ok ? `launches ${clock.shortLabel(effects.port.launchDay)}` : null].filter(Boolean);
   beat = { entry: { title: `${o.name} done: ${record.result.title}`, body: bits.join(' · ') || 'Done.' }, age: 0 };
+});
+// Hardware (Milestone 23): a banner when a prototype starts; the first prototype is a big moment.
+bus.on('hardware:start', ({ job }) => {
+  beat = { entry: { title: 'Console prototype started', body: job.name }, age: 0 };
+});
+bus.on('hardware:prototype', ({ prototype, first }) => {
+  const v = prototype.validation;
+  if (!first) return (beat = { entry: { title: `${prototype.name} built`, body: v.passed ? 'It passed validation.' : `Failed: ${v.required.find((c) => !c.ok).why}` }, age: 0 });
+  feedback.show({
+    title: 'Your first console prototype!',
+    subtitle: `${prototype.name} · ${v.passed ? 'passed validation' : `failed validation: ${v.required.find((c) => !c.ok).why}`}. See it in Create → Hardware.`,
+    accent: COL.purple,
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const s = Math.min(1, t / 0.35);
+      const size = 560 * (0.6 + 0.4 * s);
+      ctx.save();
+      ctx.globalAlpha = s;
+      assets.drawContained(ctx, HARDWARE.firstPrototypeEvent, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.3 - size / 2, w: size, h: size });
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
 });
 // Global business banners (Milestone 21).
 bus.on('licence:signed', ({ licence }) => {
@@ -1370,6 +1414,20 @@ const monthLabel = (m) => `Y${Math.floor(m / 12) + 1} M${(m % 12) + 1}`;
 const awardsScreen = createAwardsScreen({ layout, assets, topBar: subTopBar, awards, dateLabel: (d) => clock.shortLabel(d), monthLabel });
 const rivalsScreen = createRivalsScreen({ layout, assets, topBar: subTopBar, rivals, clock, monthLabel });
 const rankingsScreen = createRankingsScreen({ layout, assets, topBar: subTopBar, awards, rivals });
+// Milestone 23: the Hardware screen (Rename opens the text box over its button).
+const hardwareScreen = createHardwareScreen({
+  layout,
+  assets,
+  topBar: subTopBar,
+  hardware,
+  dateLabel: (d) => clock.shortLabel(d),
+  openPick: (slot) => openMenu('hwPick', slot),
+  openBuild: () => openMenu('hwBuild'),
+  onRename: () => {
+    const rect = hardwareScreen.buttonRect('design:rename');
+    if (rect) textPrompt.open({ rect, value: hardware.draft.family, maxLength: 24, placeholder: 'Console family', onDone: (v) => hardware.rename(v) });
+  },
+});
 // Milestone 21: the global business screens.
 const licensingScreen = createLicensingScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = global.signLicence(id); if (!r.ok) showTip(r.why); }, onDecline: (id) => global.declineLicence(id) });
 const publishingOfficeScreen = createPublishingOfficeScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onChoose: (id, choice) => { const r = global.fund(id, choice); if (!r.ok) showTip(r.why); } });
@@ -1405,7 +1463,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1434,6 +1492,7 @@ router
   .register('licensing', licensingScreen)
   .register('publishingOffice', publishingOfficeScreen)
   .register('acquisitions', acquisitionsScreen)
+  .register('hardware', hardwareScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 
