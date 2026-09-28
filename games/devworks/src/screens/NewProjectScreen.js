@@ -14,6 +14,8 @@
 // this game takes without one, and a button that puts that role's Start Candidate on the recruitment board.
 // Milestone 15: a recipe one slot away from a combo nobody has found yet gets a gentle hint under the recipe (which
 // slot to change — never the combo); a recipe that makes a known combo says so.
+// Milestone 16: "Engine": Licensed technology or one of the studio's own engine versions (those without strength for the
+// recipe's Technology greyed with why), with what it does to this game.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -31,7 +33,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [] }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -230,6 +232,21 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       y += 60;
     }
     if (hintLines.length) y += 10;
+
+    // Engine (Milestone 16): only once the studio has one.
+    const engs = engineChoices(setup.recipe.technology);
+    if (engs.length) {
+      if (setup.engine && !engs.some((e) => e.version.id === setup.engine && e.ok)) setup.engine = null;
+      heading('Engine', setup.engine ? engs.find((e) => e.version.id === setup.engine)?.label : 'Licensed technology');
+      const opts = [{ id: null, label: 'Licensed', ok: true }, ...engs.map((e) => ({ id: e.version.id, label: `${e.engine.name} ${e.version.label}`, ok: e.ok, why: e.why }))];
+      const half = (cw - 20) / 2;
+      opts.forEach((o, i) => chip({ x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.engine === o.id, () => (setup.engine = o.id), { id: `engine:${o.id ?? 'licensed'}`, locked: !o.ok }));
+      y += Math.ceil(opts.length / 2) * 130 + 10;
+      const fx = setup.engine ? engineEffects(setup.engine, setup.recipe.technology) : null;
+      const line = fx ? `Graphics ${fx.output.graphics >= 0 ? '+' : ''}${fx.output.graphics}, Polish ${fx.output.polish >= 0 ? '+' : ''}${fx.output.polish}, Innovation +${fx.output.innovation}, bugs ${fx.bugPct}%, progress +${fx.progressPct}%` : engs.find((e) => !e.ok)?.why ? `Some versions can't make this Technology: ${engs.find((e) => !e.ok).why.toLowerCase()}` : 'Licensed technology: no own-engine effects, no upkeep.';
+      if (ctx) text(ctx, line, PAD, y, { size: S.small, color: fx ? C.actionDark : C.textMuted, maxWidth: cw });
+      y += 70;
+    }
 
     // Scope, audio, budget.
     // Scope: three to a row; locked ones greyed, why under them. Then this team's estimate and deadline.

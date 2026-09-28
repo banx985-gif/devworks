@@ -43,7 +43,7 @@ export const FACILITIES = [
   { id: 'F15', name: 'Awards Cabinet', role: 'Arena link', unlock: { trophies: 1 }, cost: 1500, line: 'Award reputation +5%', effects: { awardFamePct: 5 }, later: 'Milestone 19 (awards)', size: { w: 1, h: 2 } },
   { id: 'F16', name: 'Motion Capture Corner', role: 'Specialist', unlock: { rank: 'C' }, cost: 5200, line: 'Large 3D project animation +8', effects: { 'outputLarge.graphics': 8 }, size: { w: 3, h: 2 } },
   { id: 'F17', name: 'QA Lab', role: 'Specialist', unlock: { rank: 'C' }, cost: 5500, line: 'Bug removal +15%', effects: { bugFixPct: 15 }, size: { w: 3, h: 2 } },
-  { id: 'F18', name: 'Engine Lab', role: 'Specialist', unlock: { research: ['ENG3'] }, cost: 6500, line: 'Own-engine research +15%', effects: { engineResearchPct: 15 }, later: 'the own-engine milestone', size: { w: 3, h: 2 } },
+  { id: 'F18', name: 'Engine Lab', role: 'Specialist', unlock: { research: ['ENG3'] }, cost: 6500, line: 'Own-engine research +15%', effects: { engineResearchPct: 15 }, size: { w: 3, h: 2 } }, // Milestone 16: engine projects go 15% faster
   { id: 'F19', name: 'Art Render Farm', role: 'Specialist', unlock: { research: ['ART3'] }, cost: 6200, line: 'Graphics production +12%', effects: { 'outputPct.graphics': 12 }, size: { w: 2, h: 2 } },
   { id: 'F20', name: 'Narrative Room', role: 'Specialist', unlock: { story: 70 }, cost: 5200, line: 'Story projects +10', effects: { 'output.story': 10 }, size: { w: 2, h: 2 } },
   { id: 'F21', name: 'User Research Lab', role: 'Thinker', unlock: { rank: 'B' }, cost: 5800, line: 'Audience Fit knowledge +10', effects: { 'output.audienceFit': 10 }, size: { w: 2, h: 2 } },

@@ -51,7 +51,7 @@ export function eligibilityWhy(def, ctx) {
   return why.length ? `Needs ${why.join(' + ')}` : null;
 }
 
-export function createRecruitment({ bus, clock, world, business, projects, profile, shop }) {
+export function createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy = () => null }) {
   const today = () => clock.totalDays;
   const released = () => projects.catalogue.list().filter((r) => r.release);
   const state = { channel: 'local', lastFreeDay: 0, paid: { month: -1, count: 0 } };
@@ -200,6 +200,8 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     if (!w) return 'Not in the studio';
     const job = busyWith(id);
     if (job) return `Making ${job.name}: finish it first`;
+    const other = extraBusy(id); // Milestone 16: building the engine
+    if (other) return `${other}: finish it first`;
     if (w.away) return 'Away on a training course';
     if (world.staffSystem.staff.length <= 1) return 'The studio needs someone';
     return null;

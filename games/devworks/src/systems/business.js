@@ -41,6 +41,7 @@ import { startSales, sellDay, statusOn } from './sales.js';
 import { createMarketing, launchTrust, fanExpectationFor } from './marketing.js';
 import { createFranchises, typeOf } from './franchises.js';
 import { AUDIENCE_GROUPS } from '../../data/combos.js';
+import { ENGINE_BALANCE } from '../../data/engines.js';
 import { platformById as platformOf } from '../../data/platforms.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -141,7 +142,8 @@ export function createBusiness({ bus, clock, world, projects }) {
       ok: !closed,
       why: closed ? `${closed.name} is ${closed.status === 'Dead' ? 'no longer sold' : 'not out yet'}` : null,
       platforms: list,
-      portCost: list.reduce((t, x) => t + x.port, 0),
+      // Milestone 16: an own engine's Portability makes porting cheaper.
+      portCost: Math.round(list.reduce((t, x) => t + x.port, 0) * Math.max(0, 1 + ((g.engine?.attrs?.portability ?? 0) * ENGINE_BALANCE.portCostPctPerPortability) / 100)),
       certFees: list.reduce((t, x) => t + (x.cert?.fee ?? 0), 0),
       extraBugs: extra ? Math.max(extra, Math.round((g.bugs * P.qaBugsPct * extra) / 100)) : 0,
       certDays: Math.max(0, ...list.map((x) => x.cert?.days ?? 0)),

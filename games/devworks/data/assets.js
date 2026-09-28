@@ -16,6 +16,7 @@ export const ASSETS = {
   ...Object.fromEntries(STATIONS.map((s) => art('facilities', s.art))),
   ...Object.fromEntries(ROSTER.map((d) => art('staff', d.art))), // Milestone 13: everyone recruitment can find
   ...Object.fromEntries([art('vfx', 'dev_vfx_02')]), // Milestone 13: training courses
+  ...Object.fromEntries([art('ui', 'dev_ui_11')]), // Milestone 16: the Engine icon
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

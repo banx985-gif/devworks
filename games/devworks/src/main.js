@@ -31,6 +31,8 @@
 // Milestone 15: the 24 normal combos (src/systems/combos.js): rewards when a recipe matches, discovery when the game is
 // finished (RP once a run; the archive is kept for the whole account, SAVE.accountKey), near-miss hints on New Game,
 // the Discovery Archive (Research and Catalogue).
+// Milestone 16: the own engine (src/systems/engines.js): engine projects (Create → Engines), versions with eight
+// attributes, New Game's engine pick, upkeep while games use it.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -71,6 +73,8 @@ import { createTraining } from './systems/training.js';
 import { createCombos, combosFor } from './systems/combos.js';
 import { comboById } from '../data/combos.js';
 import { createDiscoveryScreen } from './screens/DiscoveryScreen.js';
+import { createEngines } from './systems/engines.js';
+import { createEngineScreen } from './screens/EngineScreen.js';
 import { TRAITS, STATS } from '../data/staff.js';
 import { createStudioProfile, migrateToV2, slotSummary } from './systems/studioProfile.js';
 import { createTitleScreen } from './screens/TitleScreen.js';
@@ -113,7 +117,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -135,12 +139,15 @@ const world = createStudioWorld({ bus, rng: studioRng, debug: log });
 const profile = createStudioProfile({ bus, clock }); // studio name, director, colour, founder + history (Milestone 5b)
 // Each day: the studio settles Energy and breaks, projects work (and pay), then released games sell — so the
 // three are created in that order.
-const projects = createGameProjects({ bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
+let engines = null; // Milestone 16 (made below, after research)
+const projects = createGameProjects({ engineFor: (versionId, tech) => engines?.forGame(versionId, tech) ?? null, bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
 const business = createBusiness({ bus, clock, world, projects });
 const research = createResearch({ bus, clock, world }); // Milestone 12
 const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched() }); // Milestone 11
-const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop }); // Milestone 13
-const training = createTraining({ bus, clock, world, business, projects, research, recruitment });
+const engineBusy = (id) => (engines?.jobOf(id) ? 'Building the engine' : null); // Milestone 16
+const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy: engineBusy }); // Milestone 13
+const training = createTraining({ bus, clock, world, business, projects, research, recruitment, extraBusy: engineBusy });
+engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio' });
 const lanes = () => stageById(world.stage).lanes;
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
@@ -328,6 +335,12 @@ const menus = createStudioMenus({
     sheet.close();
     if (!r.ok) showTip(r.reason);
   },
+  engines: () => engines, // Milestone 16
+  startEngine: (kind, team) => {
+    const r = engines.start(kind, team);
+    sheet.close();
+    if (!r.ok) showTip(r.why);
+  },
   debugSpawn: new URLSearchParams(window.location.search).has('debug') ? (id) => (recruitment.debugJoin(id) ? sheet.close() : showTip('Can\'t join: gated, or no room')) : null, // Milestone 14
   debugHire: new URLSearchParams(window.location.search).has('debug') ? () => (['PRG07', 'DSN07', 'ART07', 'WRT07', 'PRO07'].some((id) => recruitment.debugJoin(id)) ? sheet.close() : showTip('No room for an Elite')) : null,
   decide: (id) => decideNow(id),
@@ -460,7 +473,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -538,6 +551,7 @@ async function playSlot(i) {
   recruitment.load(data.staff?.recruit ?? null); // Milestone 13 (a save from before it: a fresh board, careers rebuilt)
   training.load(data.staff?.training ?? null);
   combos.load(data.combos ?? null); // Milestone 15 (a save from before it: nothing found in this run)
+  engines.load(data.engines ?? null); // Milestone 16 (a save from before it: no engine)
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -559,6 +573,7 @@ async function startStudio(i, setup) {
   recruitment.newGame(); // Milestone 13: the first board (Start Candidates) and everyone's career
   training.newGame();
   combos.newRun(); // Milestone 15: the account's archive stays
+  engines.newGame(); // Milestone 16
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -762,7 +777,7 @@ const newProject = createNewProjectScreen({
   // Milestone 13: nobody on two games or on a course; the missing-role hints; the lanes.
   unavailable: (id) => {
     const job = projects.jobs.find((j) => j.slots.includes(id));
-    return job ? `Making ${job.name}` : training.trainingOf(id) ? 'Away on a course' : null;
+    return job ? `Making ${job.name}` : training.trainingOf(id) ? 'Away on a course' : engineBusy(id);
   },
   hints: (team, scope) => recruitment.hints(team, scope),
   onFindRole: (role) => {
@@ -770,6 +785,8 @@ const newProject = createNewProjectScreen({
     openMenu('recruit');
   },
   laneWhy: () => (projects.jobs.length >= lanes() ? 'a free game lane' : null),
+  engineChoices: (tech) => engines.choices(tech), // Milestone 16
+  engineEffects: (versionId, tech) => engines.forGame(versionId, tech)?.fx ?? null,
   comboHints: (recipe) => combos.hints(recipe), // Milestone 15
   combosIn: (recipe) => combosFor(recipe).filter((id) => combos.known(id)).map((id) => comboById(id).name),
   dateLabel: (d) => clock.shortLabel(d),
@@ -843,6 +860,13 @@ bus.on('combo:found', ({ combo, firstInRun, rp }) => {
   if (!firstInRun) return;
   comboBeat = { entry: { title: `Combo discovered: ${combo.name}!`, body: `+${rp} RP · see it in Research → Discoveries` }, age: 0 };
   debug.log(`combo: ${combo.id}`);
+});
+// Engine banners (Milestone 16).
+bus.on('engine:start', ({ job }) => {
+  beat = { entry: { title: `Engine project started`, body: job.name }, age: 0 };
+});
+bus.on('engine:complete', ({ job, version, kind }) => {
+  beat = { entry: { title: version ? `${job.data.name} ${version.label} ready!` : `${job.name} done`, body: version ? 'Pick it on New Game → Engine.' : kind === 'researchPrototype' ? 'Research points gained.' : '' }, age: 0 };
 });
 // A marketing action starts: a short banner.
 bus.on('marketing:run', ({ action, gain, title }) => {
@@ -1165,6 +1189,7 @@ bus.on('game:certifying', ({ record }) => {
   beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
 });
 const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive'), openDiscoveries: () => router.go('discoveries') });
+const engineScreen = createEngineScreen({ layout, assets, engines, topBar: subTopBar, textPrompt, openProject: (kind) => openMenu('engineStart', kind), dateLabel: (d) => clock.shortLabel(d) }); // Milestone 16
 const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: subTopBar }); // Milestone 15
 const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
@@ -1189,7 +1214,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1208,6 +1233,7 @@ router
   .register('archive', archiveScreen)
   .register('research', researchScreen)
   .register('discoveries', discoveryScreen)
+  .register('engines', engineScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

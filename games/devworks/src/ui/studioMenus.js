@@ -22,6 +22,8 @@
 //   lists every game in the works (two lanes at S2+) and New Game while a lane is free
 //   Milestone 14: staff buttons show the head crop (data/portraits.js); ?debug=1 adds the Staff book (all 50: preview any
 //   card; spawn Standard / Rare / Elite — Legendary / Secret stay gated)
+//   Milestone 16: Create → Engines (the Engine Catalogue); engineStart (kind): what it does, the team (Programmers
+//   first), Start
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -40,7 +42,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -84,6 +86,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   ...projects().jobs.map((job, i) => ({ id: i ? `current${i + 1}` : 'current', label: projects().jobs.length > 1 ? `Game in the works: ${job.name}` : 'Current project', sub: projectLine(job), icon: 'dev_ui_07', onTap: () => (openProjectById ? openProjectById(job.id) : openProject()) })),
                   ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? 'New Game (second lane)' : 'New Game', sub: projects().jobs.length ? 'Your studio can make two games at once' : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
                   ...(business().marketing.targets().length ? [{ id: 'marketing', label: 'Marketing', sub: marketingLine(), icon: 'business_ui_05', accent: C.progress, onTap: () => openScreen('marketing') }] : []),
+                  ...(engines ? [{ id: 'engines', label: 'Engines', sub: engineLine(), icon: 'dev_ui_11', accent: C.purple, onTap: () => openScreen('engines') }] : []),
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
@@ -450,6 +453,39 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           { id: 'spawn', label: 'Debug: spawn', sub: here ? 'Already in the studio' : can ? 'Joins now (skips the rules)' : 'Gated: arrives through a secret', disabled: here || !can, accent: C.purple, onTap: () => debugSpawn(id) },
           { id: 'back', label: 'Back', sub: 'To the Staff book', accent: C.progress, onTap: () => open('staffBook') },
         ] },
+      ],
+    };
+  });
+
+  // Milestone 16: one engine project — what it does, the team, Start.
+  const engineLine = () => {
+    const en = engines?.();
+    const v = en?.view();
+    if (v) return `Building: ${v.name} · ${Math.floor(v.totalFrac * 100)}%`;
+    const e = en?.engines[0];
+    return e ? `${e.name} ${en.current(e).label}` : 'Build your own engine';
+  };
+  const engineTeams = new Map(); // kind → [staff ids] while the sheet is open
+  menus.register('engineStart', (kind) => {
+    const en = engines?.();
+    const p = en?.projectTypes.find((x) => x.id === kind);
+    if (!p) return null;
+    const w = world();
+    const free = w.staffSystem.staff.filter((s) => !projects().jobs.some((j) => j.slots.includes(s.id)) && !w.workerById(s.id)?.away);
+    if (!engineTeams.has(kind)) engineTeams.set(kind, free.filter((s) => s.role === 'PRG').map((s) => s.id).slice(0, 2).concat(free.some((s) => s.role === 'PRG') ? [] : free.slice(0, 1).map((s) => s.id)));
+    const team = engineTeams.get(kind).filter((id) => free.some((s) => s.id === id));
+    engineTeams.set(kind, team);
+    const why = en.startWhy(kind, team) ?? (team.length ? null : 'Pick at least one person');
+    const toggle = (id) => engineTeams.set(kind, team.includes(id) ? team.filter((x) => x !== id) : [...team, id]);
+    return {
+      title: p.name,
+      subtitle: p.line,
+      art: 'dev_ui_11',
+      accent: C.purple,
+      sections: [
+        { lines: [{ text: `${p.costPerDay} Credits a day · mostly CODE (Programmers) · tier now: ${en.tierNow()}`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
+        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
+        { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
       ],
     };
   });

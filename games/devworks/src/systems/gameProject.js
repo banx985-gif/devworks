@@ -32,6 +32,10 @@
 // Milestone 15: combos (src/systems/combos.js): fixed from the recipe when the game starts — output points at the end,
 // production cost, QA load (bugs) and the cover nudge; the finished game carries its combos and the launch effects.
 //
+// Milestone 16: an own-engine version (setup.engine, engineFor → src/systems/engines.js forGame): fixed when the game
+// starts — Stability lowers bugs, Tooling speeds progress — and at the end its strength for the recipe's Technology
+// moves Graphics, Performance moves Polish, the tier adds Innovation. The finished game remembers the engine.
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
 // 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
@@ -160,7 +164,7 @@ export function founderStatMult(founder, staffId, statKey) {
 }
 
 // studioVariancePct() → the studio's own schedule effect (the Producer Desk while it stands).
-export function createGameProjects({ bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
+export function createGameProjects({ engineFor = () => null, bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
   const fx = (key) => world.effect?.(key) ?? 0; // Milestone 11: the facilities' effects
   // A worker's stats with the founder perk applied (outputs), and the perk's own numbers.
@@ -224,6 +228,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
     d.decisions ??= [];
     d.hype ??= 0;
     d.combos ??= []; // Milestone 15 (a game started before it keeps none)
+    d.engine ??= null; // Milestone 16
     d.type ??= 'original'; // Milestone 10
     d.costMult ??= 1;
     return job;
@@ -241,7 +246,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
       workerModifier: (job, phase, s) => (world.onDuty(s.id) && !decisionOpen(job) ? 1 : 0),
       // The milestone role weights for this scope and phase, and the founder perk.
       statModifier: (job, phase, s, k) => phaseWeights(job.data.scope, job.phaseIndex, B)[k] * founderStatMult(founder(), s.id, k) * (1 + fx(`statPct.${k}`) / 100),
-      progressModifier: (job) => (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1) * (1 + (fx('progressPct') + fx(`phasePct.${B.phases[job.phaseIndex].id}`)) / 100),
+      progressModifier: (job) => (1 + (job.data.engine?.fx.progressPct ?? 0) / 100) * (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1) * (1 + (fx('progressPct') + fx(`phasePct.${B.phases[job.phaseIndex].id}`)) / 100),
       onPhaseStart: (job) => {
         const d = job.data;
         if (d.pendingFocus) [d.focus, d.pendingFocus] = [d.pendingFocus, null];
@@ -281,7 +286,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
         const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct');
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
-        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct; // Milestone 15: QA load
+        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0); // Milestone 15: QA load; Milestone 16: engine Stability
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
         const behind = behindOf(job);
         withRng(job, (r) => {
@@ -320,6 +325,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         add(staff.groupEffectMap(team, 'outputBonus')); // Milestone 7: Good Feel, Strong Shapes, Sharp Dialogue
         const cfx = comboEffects(d.combos); // Milestone 15
         add(cfx.output);
+        add(d.engine?.fx.output); // Milestone 16: the own engine
         for (const id of job.slots) {
           const s = staff.get(id);
           if (s) s.assigned = false;
@@ -351,6 +357,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
           cover: coverFor(d.recipe, cfx.cover), // the art key (a parked family shows its fallback's picture); Milestone 15: a combo's nudge
           coverFamily: coverFamilyFor(d.recipe, cfx.cover), // Milestone 6: one of the 30 families
           combos: [...d.combos], // Milestone 15: what the launch and the franchise read
+          engine: d.engine ? { engineId: d.engine.engineId, versionId: d.engine.versionId, label: d.engine.label, tier: d.engine.tier, attrs: { ...d.engine.attrs } } : null, // Milestone 16
           comboFx: { casualPct: cfx.casualPct, corePct: cfx.corePct, tailPct: cfx.tailPct, trust: cfx.trust, franchisePct: cfx.franchisePct, artAwardScore: cfx.artAwardScore, hardwareDemandPct: cfx.hardwareDemandPct },
           reviewSeed: d.rng, // locked at Gold Master: reviews come from this, so a reload never changes them
           // Milestone 7: the schedule and the choices made.
@@ -512,6 +519,7 @@ export function createGameProjects({ bus, world, clock = null, charge = null, fo
         type,
         costMult: +(T.costMult * (1 + cfx.costPct / 100)).toFixed(4), // Milestone 15: a combo's production cost
         combos,
+        engine: setup.engine ? engineFor(setup.engine, setup.recipe.technology) : null, // Milestone 16: a snapshot
         ipId: setup.ipId ?? null,
         source: src ? src.number : null,
         sourceOutputs: src && T.floor ? { ...src.result.outputs } : null,
