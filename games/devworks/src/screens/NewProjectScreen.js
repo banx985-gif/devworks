@@ -18,6 +18,8 @@
 // recipe's Technology greyed with why), with what it does to this game.
 // Milestone 17: "Publisher": Self-publish or a signed deal (it sets the scope; its clauses must hold: the scope, the
 // genres under a control clause; a publisher-owned franchise needs that publisher's deal).
+// Milestone 21: "Localisation" Off / On (needs PRO3 research or a Localisation Suite): more work and cost, more sales
+// abroad; a Global publisher deal localises it for free.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -35,7 +37,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0 }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '' }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -50,7 +52,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
   // Milestone 10: project types.
   const ptype = () => projectTypeById(setup.type);
   const ip = () => (setup.ipId ? franchises?.byId(setup.ipId) : null);
-  const withReleased = () => (franchises?.list() ?? []).filter((x) => franchises.stats(x).released > 0);
+  const withReleased = () => (franchises?.list() ?? []).filter((x) => franchises.stats(x).released > 0 || x.acquired); // Milestone 21: a bought IP
   const typeWhy = (t) => {
     if (t.needs === 'ip' && !withReleased().length) return 'Needs a released game';
     if (t.needs === 'entry' && !(franchises?.eligible(t.id).length)) return `Needs a game out ${t.id === 'remake' ? '2 years' : '1 year'}`;
@@ -68,7 +70,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     setup.ipId = x.id;
     if (setup.type === 'sequel') {
       setup.recipe.genre = x.genre;
-      setup.title = trimTitle(`${x.name} ${x.entries.length + 1}`);
+      setup.title = trimTitle(`${x.name} ${x.entries.length + (x.acquired ? 2 : 1)}`);
     } else if (setup.type === 'spinoff') {
       setup.recipe.theme = x.theme;
       if (setup.recipe.genre === x.genre) delete setup.recipe.genre;
@@ -281,8 +283,8 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
     const lines = [{ t: scope().line, c: C.text }];
     if (estimate && setup.team.length) {
-      const e = estimate(setup.team, setup.scope, setup.type);
-      lines.push({ t: `This team: about ${Math.round(e.days)} days · due ${dateLabel(today() + e.deadlineDays)} · ${costPerDay(setup.scope, setup.budget, setup.type)} Credits a day`, c: C.actionDark });
+      const e = estimate(setup.team, setup.scope, setup.type, setup.localise !== 'off');
+      lines.push({ t: `This team: about ${Math.round(e.days)} days · due ${dateLabel(today() + e.deadlineDays)} · ${costPerDay(setup.scope, setup.budget, setup.type, setup.localise)} Credits a day`, c: C.actionDark });
     }
     if (setup.team.length < scope().team.min) lines.push({ t: `Short-staffed: ${scope().name} usually has ${scope().team.min}–${scope().team.max} people. It still works, just slower.`, c: C.bad });
     if (firstLocked) lines.push({ t: `${firstLocked.name} and up: ${scopeReason(firstLocked.id)?.replace('Needs', 'need') ?? 'locked'} and later stages.`, c: C.textMuted });
@@ -297,6 +299,17 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, audioCost(a.id) ? `${a.name} · ${audioCost(a.id).toLocaleString('en-GB')}` : a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
     y += (Math.ceil(AUDIO_PACKAGES.length / 2) - 1) * 130;
     y += 150; // chips are button height (110)
+    // Milestone 21: localisation. A Global deal pays it (always on); otherwise Off / On once it is open.
+    const globalDeal = setup.deal ? deals().find((d) => d.id === setup.deal)?.global : null;
+    const locWhy = localisationWhy();
+    if (globalDeal) setup.localise = 'publisher';
+    else if (setup.localise === 'publisher' || (setup.localise === 'on' && locWhy)) setup.localise = 'off';
+    heading('Localisation', globalDeal ? `Paid by ${globalDeal}` : setup.localise === 'on' ? 'On' : 'Off');
+    [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }].forEach((o, i) => chip({ x: PAD + i * (halfA + 20), y, w: halfA, h: 110 }, o.label, setup.localise === o.id || (o.id === 'on' && setup.localise === 'publisher'), () => (setup.localise = o.id), { id: `loc:${o.id}`, locked: !!globalDeal || (o.id === 'on' && !!locWhy) }));
+    y += 130;
+    const locText = globalDeal ? `${globalDeal} localises it for free: ${localisationLine('publisher')}` : locWhy ?? localisationLine(setup.localise);
+    if (ctx) text(ctx, locText, PAD, y, { size: S.small, color: globalDeal ? C.good : locWhy ? C.textMuted : C.actionDark, maxWidth: cw });
+    y += 72;
     heading('Budget focus');
     BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
     y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
@@ -377,7 +390,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     },
     startRect,
     enter() {
-      setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: [] };
+      setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: [], localise: 'off' };
       // Milestone 13: the free people, one per role first (the Milestone 3–12 default), up to the scope's usual team.
       const free = world.staffSystem.staff.filter((s) => !unavailable(s.id));
       const firsts = LEAD_ROLES.map((r) => free.find((s) => s.role === r)).filter(Boolean);

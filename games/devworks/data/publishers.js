@@ -14,13 +14,15 @@
 //   salesPct      the publisher's reach: extra launch sales (Atlas global, OpenGate on PC only)
 //   rank          earliest studio rank the publisher offers deals at
 //   weight        how often it offers (relative)
+//   globalReach   a global publisher (Milestone 21): Global deals from Rank A (data/global.js GLOBAL_DEALS); its reach
+//                 counts only up to the cap on a game that isn't localised
 export const PUBLISHERS = [
   { id: 'PUB01', name: 'Brightline Publishing', identity: 'Friendly indie funding', style: 'Low advance, fair royalty', rank: null, weight: 4, advance: 0.6, sharePct: 20, hype: 5, slack: 1.6, control: null, ipChance: 0.1, salesPct: 0, logo: 'publisher_logo_pub01' },
   { id: 'PUB02', name: 'Northstar Media', identity: 'Marketing muscle', style: 'Higher marketing, stricter milestones', rank: null, weight: 3, advance: 0.9, sharePct: 30, hype: 16, slack: 1.25, control: null, ipChance: 0.2, salesPct: 0, logo: 'publisher_logo_pub02' },
-  { id: 'PUB03', name: 'Atlas Interactive', identity: 'Global localisation', style: 'Strong global reach', rank: 'D', weight: 3, advance: 0.8, sharePct: 25, hype: 8, slack: 1.4, control: null, ipChance: 0.15, salesPct: 15, logo: 'publisher_logo_pub03' },
+  { id: 'PUB03', name: 'Atlas Interactive', identity: 'Global localisation', style: 'Strong global reach', rank: 'D', weight: 3, advance: 0.8, sharePct: 25, hype: 8, slack: 1.4, control: null, ipChance: 0.15, salesPct: 15, globalReach: true, logo: 'publisher_logo_pub03' },
   { id: 'PUB04', name: 'CrownArc', identity: 'Blockbusters', style: 'Huge advances, high control', rank: 'C', weight: 2, advance: 2.2, sharePct: 40, hype: 20, slack: 1.2, control: 'genre', ipChance: 0.6, salesPct: 0, logo: 'publisher_logo_pub04' },
   { id: 'PUB05', name: 'OpenGate Digital', identity: 'Digital-first', style: 'Low physical costs, PC strength', rank: null, weight: 3, advance: 0.7, sharePct: 22, hype: 6, slack: 1.5, control: null, ipChance: 0.1, salesPct: 10, pcOnly: true, logo: 'publisher_logo_pub05' },
-  { id: 'PUB06', name: 'Meridian Entertainment', identity: 'Premium partner', style: 'Top-tier deals after Rank A', rank: 'A', weight: 2, advance: 2.6, sharePct: 30, hype: 25, slack: 1.4, control: 'scope', ipChance: 0.3, salesPct: 10, logo: 'publisher_logo_pub06' },
+  { id: 'PUB06', name: 'Meridian Entertainment', identity: 'Premium partner', style: 'Top-tier deals after Rank A', rank: 'A', weight: 2, advance: 2.6, sharePct: 30, hype: 25, slack: 1.4, control: 'scope', ipChance: 0.3, salesPct: 10, globalReach: true, logo: 'publisher_logo_pub06' },
 ];
 export const publisherById = (id) => PUBLISHERS.find((p) => p.id === id) ?? null;
 

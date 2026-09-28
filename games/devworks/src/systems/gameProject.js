@@ -47,6 +47,7 @@ import { PHASE_NAMES, OUTPUTS } from '../../data/projects.js';
 import { STAT_KEYS } from '../../data/staff.js';
 import { coverFor, coverFamilyFor } from '../../data/covers.js';
 import { combosFor, comboEffects } from './combos.js';
+import { LOCALISATION } from '../../data/global.js';
 
 // --- the formulas (pure, tested in tests/devworks) -----------------------------------------------------
 export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -230,6 +231,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
     d.combos ??= []; // Milestone 15 (a game started before it keeps none)
     d.engine ??= null; // Milestone 16
     d.deal ??= null; // Milestone 17: a publisher deal (its id)
+    d.localised ??= null; // Milestone 21: null | 'studio' (paid by the studio) | 'publisher' (a global deal pays it)
     d.type ??= 'original'; // Milestone 10
     d.costMult ??= 1;
     return job;
@@ -370,6 +372,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
           decisions: d.decisions.map((x) => ({ ...x })),
           cut: d.cut,
           outsourced: d.outsourced,
+          localised: d.localised ?? null, // Milestone 21
           crunchDays: d.crunchDays,
           hypeDelta: d.hype, // Milestone 9 reads these (Hype)
           hypePct: Math.round(hypePcts.reduce((a, b) => a + b, 0) / Math.max(1, hypePcts.length)),
@@ -484,8 +487,8 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
     },
 
     // What a team would need for a scope (and project type, Milestone 10): { days, deadlineDays } (the New Game screen).
-    estimate(teamIds, scope, type = 'original') {
-      const days = estimateDays(teamIds.map((id) => staff.get(id)).filter(Boolean).map(statsOf), scope, B) * (FRANCHISE_BALANCE.types[type]?.workMult ?? 1);
+    estimate(teamIds, scope, type = 'original', localised = false) {
+      const days = estimateDays(teamIds.map((id) => staff.get(id)).filter(Boolean).map(statsOf), scope, B) * (FRANCHISE_BALANCE.types[type]?.workMult ?? 1) * (localised ? 1 + LOCALISATION.workPct / 100 : 1); // Milestone 21
       return { days, deadlineDays: Math.round(days * (1 + B.schedule.buffer)) };
     },
 
@@ -502,9 +505,13 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
       const type = FRANCHISE_BALANCE.types[setup.type] ? setup.type : 'original';
       const T = FRANCHISE_BALANCE.types[type];
       const src = setup.source != null ? catalogue.get(setup.source) : null;
-      const est = api.estimate(job.slots, setup.scope, type);
       const combos = combosFor(setup.recipe); // Milestone 15
       const cfx = comboEffects(combos);
+      // Milestone 21: localisation — more work; the studio pays more a day unless a global deal pays it.
+      const loc = setup.localise === 'publisher' ? 'publisher' : setup.localise === 'on' ? 'studio' : null;
+      const locWork = loc ? 1 + LOCALISATION.workPct / 100 : 1;
+      const locCost = loc === 'studio' ? 1 + (LOCALISATION.costPct * (1 + fx('localisationCostPct') / 100)) / 100 : 1;
+      const est = api.estimate(job.slots, setup.scope, type, !!loc);
       job.data = {
         scope: setup.scope,
         recipe: { ...setup.recipe },
@@ -516,9 +523,10 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         startedDay: today(),
         deadlineDay: today() + est.deadlineDays,
         slip,
-        workScale: (1 + slip) * T.workMult,
+        workScale: (1 + slip) * T.workMult * locWork,
+        localised: loc,
         type,
-        costMult: +(T.costMult * (1 + cfx.costPct / 100)).toFixed(4), // Milestone 15: a combo's production cost
+        costMult: +(T.costMult * (1 + cfx.costPct / 100) * locCost).toFixed(4), // Milestone 15: a combo's production cost; Milestone 21: localisation
         combos,
         engine: setup.engine ? engineFor(setup.engine, setup.recipe.technology) : null, // Milestone 16: a snapshot
         deal: setup.deal ?? null, // Milestone 17: the publisher deal this game is made under (src/systems/publishers.js)

@@ -33,6 +33,8 @@ export const ASSETS = {
   ...Object.fromEntries([...new Set(AWARDS.map((a) => a.trophy))].map((k) => art('trophies', k))),
   ...Object.fromEntries([art('ui', 'dev_ui_04')]),
   ...Object.fromEntries(['dev_ui_15', 'dev_ui_16', 'dev_ui_17'].map((k) => art('ui', k))), // Milestone 20: support icons
+  ...Object.fromEntries(['business_ui_10', 'business_ui_11', 'business_ui_12'].map((k) => art('business', k))), // Milestone 21: licensing, publishing, acquisitions
+  ...Object.fromEntries([art('brand', 'dev_brand_03')]), // the title logo (redrawn 28 Sept)
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

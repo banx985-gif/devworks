@@ -31,6 +31,10 @@
 // Milestone 20: addPlatform (a post-launch Port): the new platform's porting cost and certification as at release (a
 // fail delays it), then it sells there from its launch day on its own curve, with the game's original review.
 //
+// Milestone 21: a localised game (result.localised) sells LOCALISATION.salesPct more at launch (+ BUS4 through the effect
+// query 'localisedSalesPct'); a global publisher's reach (globalReach) counts only up to reachCapPct on a game that isn't
+// localised. The multiplier is kept on record.release.localisation.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -49,6 +53,7 @@ import { createFranchises, typeOf } from './franchises.js';
 import { AUDIENCE_GROUPS } from '../../data/combos.js';
 import { ENGINE_BALANCE } from '../../data/engines.js';
 import { platformById as platformOf } from '../../data/platforms.js';
+import { LOCALISATION } from '../../data/global.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -213,13 +218,16 @@ export function createBusiness({ bus, clock, world, projects }) {
       certFailed: plan.platforms.filter((x) => x.cert?.failed).map((x) => x.id),
     };
     const byPlatform = {};
+    const locMult = g.localised ? 1 + (LOCALISATION.salesPct + (world.effect?.('localisedSalesPct') ?? 0)) / 100 : 1; // Milestone 21
+    const reach = g.deal ? (g.deal.globalReach && !g.localised ? Math.min(g.deal.salesPct ?? 0, LOCALISATION.reachCapPct) : g.deal.salesPct ?? 0) : 0;
+    record.release.localisation = { localised: g.localised ?? null, salesMult: +locMult.toFixed(4), reachPct: reach, capped: !!(g.deal?.globalReach && !g.localised && (g.deal.salesPct ?? 0) > reach) };
     const cfx = g.comboFx ?? {}; // Milestone 15
     const audiencePct = (id) => {
       const grp = platformOf(id)?.group;
       return (AUDIENCE_GROUPS.casual.includes(grp) ? cfx.casualPct ?? 0 : 0) + (AUDIENCE_GROUPS.core.includes(grp) ? cfx.corePct ?? 0 : 0);
     };
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? g.deal.salesPct ?? 0 : 0) / 100), price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? reach : 0) / 100) * locMult, price: sc.price, audience: x.buyers, hype, clash });
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;

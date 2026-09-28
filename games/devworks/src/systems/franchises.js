@@ -71,7 +71,7 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
     const reviewAvg = rel.length ? rel.reduce((t, r) => t + r.release.score, 0) / rel.length : 0;
     // Milestone 15: a combo's "franchise potential" (the best of its released games) makes the points count more.
     const potential = Math.max(0, ...rel.map((r) => r.result.comboFx?.franchisePct ?? 0));
-    const points = ((copies * reviewAvg) / F.pointsReviewRef) * (1 + potential / 100);
+    const points = ((copies * reviewAvg) / F.pointsReviewRef) * (1 + potential / 100) + (ip.basePoints ?? 0); // Milestone 21: an acquired IP's fans
     const status = statusFor({ points, entries: rel.length, reviewAvg });
     return {
       entries: ip.entries.length,
@@ -139,6 +139,14 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
     stats,
     releasedOf,
     ipOf: (record) => byId(record?.result?.ipId),
+    // Milestone 21: an IP bought with a studio (no games of yours yet; its fans are basePoints). Returns the IP.
+    addAcquired({ name, genre = null, theme = null, basePoints = 0, from = null }) {
+      const ip = { id: `IP${nextId++}`, name, genre, theme, createdDay: today(), entries: [], fatigue: 0, fatigueDay: today(), status: 'new', legendaryDay: null, basePoints, acquired: from ?? true };
+      ips.push(ip);
+      checkStatus(ip);
+      bus?.emit('franchise:new', { ip });
+      return ip;
+    },
     rename(id, name) {
       const ip = byId(id);
       const n = `${name ?? ''}`.trim().slice(0, 28);
@@ -160,7 +168,7 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
       if (!ip) return null;
       const prev = releasedOf(ip).filter((r) => r.number !== record.number);
       const last = prev.length ? prev[prev.length - 1].result.recipe : null;
-      return launchEffect({ fatigueNow: fatigueAfter(ip.fatigue, day - ip.fatigueDay, F), fanbase: prev.length ? stats(ip, day).fanbase : 0, type: record.result.type ?? 'original', last, recipe: record.result.recipe }, F);
+      return launchEffect({ fatigueNow: fatigueAfter(ip.fatigue, day - ip.fatigueDay, F), fanbase: prev.length || ip.basePoints ? stats(ip, day).fanbase : 0, type: record.result.type ?? 'original', last, recipe: record.result.recipe }, F);
     },
     // After the launch: fatigue grows by the type's amount; the franchise's other games get a sales spike.
     launched(record, eff) {

@@ -16,6 +16,10 @@
 // the franchise belongs to the publisher, so a sequel / spin-off / remake / remaster of it needs a deal with them.
 // Self-publishing is always possible.
 //
+// Milestone 21: from Rank A the publishers with globalReach (Atlas, Meridian) offer Global deals: a much bigger reach, a
+// richer advance, and they pay the game's localisation (New Game localises it for free). Without localisation a global
+// publisher's reach is capped (business.js).
+//
 // Events: 'deal:offered', 'deal:signed', 'deal:attached', 'deal:missed' { deal, milestone, penalty }, 'deal:done',
 // 'deal:lapsed'.
 import { ContractSystem } from '../../../../core/ContractSystem.js';
@@ -27,6 +31,7 @@ import { elementsOf } from '../../data/elements.js';
 import { PROJECT_BALANCE, FAME } from '../../data/balance.js';
 import { platformById } from '../../data/platforms.js';
 import { releasable } from './platformMarket.js';
+import { GLOBAL_DEALS } from '../../data/global.js';
 
 const SCOPE_ORDER = SCOPES.map((s) => s.id);
 const phaseEnd = (i) => PROJECT_BALANCE.phases.slice(0, i + 1).reduce((t, p) => t + p.share, 0);
@@ -72,7 +77,8 @@ export function createPublishers({ bus, clock, world, business, projects, elemen
     const genres = pub.control === 'genre' && ctx.genres.length > 3 ? rng.shuffle([...ctx.genres]).slice(0, 3) : null;
     const sc = PROJECT_BALANCE.scopes[scope];
     const rec = ctx.short ? DEALS.recovery.advanceMult : 1;
-    const advance = Math.max(500, Math.round((sc.baseCostPerDay * est * (DEALS.advanceDaysPct / 100) * pub.advance * rec * (1 + (world.effect?.('advancePct') ?? 0) / 100)) / 50) * 50); // Milestone 18: Crown Finance
+    const global = !!pub.globalReach && ctx.rankIndex >= rankIndexOf(FAME.ranks, GLOBAL_DEALS.rank); // Milestone 21
+    const advance = Math.max(500, Math.round((sc.baseCostPerDay * est * (DEALS.advanceDaysPct / 100) * pub.advance * rec * (global ? GLOBAL_DEALS.advanceMult : 1) * (1 + (world.effect?.('advancePct') ?? 0) / 100)) / 50) * 50); // Milestone 18: Crown Finance
     return {
       publisher: pub.id,
       scope,
@@ -82,7 +88,8 @@ export function createPublishers({ bus, clock, world, business, projects, elemen
       advance,
       sharePct: pub.sharePct,
       hype: pub.hype,
-      salesPct: pub.salesPct,
+      salesPct: pub.salesPct + (global ? GLOBAL_DEALS.reachPct : 0),
+      global,
       ipOwned: rng.chance(pub.ipChance),
       // Deadlines, in days from the day the game starts.
       milestones: DEALS.milestones.map((m) => ({ ...m, dueIn: Math.ceil(est * phaseEnd(m.phase) * pub.slack), dueDay: null, state: 'open' })),
@@ -192,7 +199,7 @@ export function createPublishers({ bus, clock, world, business, projects, elemen
     for (const m of c.milestones.filter((x) => x.state === 'missed' && !x.charged)) m.charged = true;
     c.record = record.number;
     const pub = publisherById(c.publisher);
-    record.result.deal = { id: c.id, publisher: c.publisher, name: pub.name, sharePct: c.sharePct, platform: c.platform, ipOwned: c.ipOwned, salesPct: c.salesPct, pcOnly: !!pub.pcOnly };
+    record.result.deal = { id: c.id, publisher: c.publisher, name: pub.name, sharePct: c.sharePct, platform: c.platform, ipOwned: c.ipOwned, salesPct: c.salesPct, pcOnly: !!pub.pcOnly, globalReach: !!pub.globalReach, global: !!c.global };
     if (c.ipOwned) {
       const ip = business.franchises.byId(record.result.ipId);
       if (ip && !ip.owner) ip.owner = c.publisher;

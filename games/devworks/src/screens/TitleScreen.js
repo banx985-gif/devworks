@@ -1,4 +1,5 @@
-// Title screen (Milestone 5b, bible §6 "Main Menu", spec §7): opens on launch. The DEVWORKS name drawn by code, the
+// Title screen (Milestone 5b, bible §6 "Main Menu", spec §7): opens on launch. The DEVWORKS title logo (dev_brand_03;
+// the name drawn by code until it has loaded), the
 // five start staff, and Continue (the last-played slot), Load / Slots, New Game and Settings (a placeholder sheet).
 // Load / Slots shows the four save slots as cards: an occupied slot shows the studio name, "Studio Director <name>",
 // the founder's portrait and name, Year / Month, rank, NG+ level (0 for now) and play time, with Play and Delete
@@ -36,10 +37,17 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
       if (tap && !hit && hitRect(tap, r)) hit = fn;
     };
     // The whole block (logo, staff, buttons) sits in the middle of the screen, whatever its height.
-    const crewH = Math.min(420, Math.max(220, sr.h - 250 - 4 * (BTN_H + 30) - 260 - 140));
-    const blockH = 250 + crewH + 40 + BTN_H + 60 + 3 * (BTN_H + 26);
+    const logoH = Math.round(Math.min(420, Math.max(260, sr.h * 0.2))); // the logo art (1209 × 977)
+    const headH = logoH + 80;
+    const crewH = Math.min(420, Math.max(200, sr.h - headH - 4 * (BTN_H + 30) - 260 - 140));
+    const blockH = headH + crewH + 40 + BTN_H + 60 + 3 * (BTN_H + 26);
     let y = sr.y + Math.max(50, (sr.h - blockH) / 2 - 30);
-    if (ctx) {
+    if (ctx && assets.has?.('dev_brand_03')) {
+      const lw = Math.min(sr.w - 80, logoH * assets.aspect('dev_brand_03'));
+      const lh = lw / assets.aspect('dev_brand_03');
+      assets.draw(ctx, 'dev_brand_03', cx - lw / 2, y + (logoH - lh) / 2, lw, lh);
+      text(ctx, 'Build a game studio, one hit at a time.', cx, y + logoH + 16, { size: S.body, bold: true, color: C.textMuted, align: 'center', maxWidth: sr.w - 80 });
+    } else if (ctx) {
       ctx.save();
       ctx.font = font(150, true);
       ctx.textAlign = 'center';
@@ -53,7 +61,7 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
       ctx.restore();
       text(ctx, 'Build a game studio, one hit at a time.', cx, y + 175, { size: S.body, bold: true, color: C.textMuted, align: 'center', maxWidth: sr.w - 80 });
     }
-    y += 250;
+    y += headH;
     // The five start staff, side by side on a soft floor shadow.
     if (ctx) {
       const each = Math.min(190, (sr.w - 80) / 5);

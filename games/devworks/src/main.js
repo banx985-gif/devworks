@@ -41,6 +41,9 @@
 // release calendar); award wins add Fame, trophies (the Awards Cabinet) and the stages' award needs.
 // Milestone 20: post-launch support (Catalogue → Support on a released game: Patch, Free Update, Expansion, DLC, Port,
 // Move On; Remaster / Remake lead to New Game): a player score, Fan Trust, a longer tail, add-on sales, new platforms.
+// Milestone 21: global business — localisation on New Game (PRO3 / Localisation Suite), Global publisher deals at Rank A,
+// engine licensing (Business → Engine Licensing), publishing other studios (Business → Publishing Office, or tap the
+// Publishing Office), acquisitions (Business → Acquisitions); passive income capped at a share of each year's income.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -89,6 +92,9 @@ import { createPublishersScreen, createContractsScreen } from './screens/Busines
 import { createSponsors } from './systems/sponsors.js';
 import { createRivals } from './systems/rivals.js';
 import { createSupport } from './systems/support.js';
+import { createGlobalBusiness } from './systems/globalBusiness.js';
+import { createLicensingScreen, createPublishingOfficeScreen, createAcquisitionsScreen } from './screens/GlobalScreens.js';
+import { LOCALISATION } from '../data/global.js';
 import { supportOptionById as SUPPORT_OPTION_BY_ID } from '../data/support.js';
 import { createAwards } from './systems/awards.js';
 import { createAwardsScreen, createRivalsScreen, createRankingsScreen } from './screens/CompeteScreens.js';
@@ -138,7 +144,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -182,6 +188,8 @@ support = createSupport({ bus, clock, world, business, projects, lanes: () => la
 const publishers = createPublishers({ bus, clock, world, business, projects, elements: { scopeOpen: (id) => elements.scopeOpen(id), isOpen: (id) => elements.isOpen(id) } }); // Milestone 17
 contracts = createContracts({ bus, clock, world, business, engines: () => engines, isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : null) });
 const lanes = () => stageById(world.stage).lanes;
+// Milestone 21: global business (after the business, research, engines, recruitment and publishers).
+const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
@@ -372,6 +380,7 @@ const menus = createStudioMenus({
   contracts: () => contracts,
   sponsors: () => sponsors, // Milestone 18
   support: () => support, // Milestone 20
+  global: () => global, // Milestone 21
   startSupport: (id, number, team, platform = null) => {
     const r = support.start(id, number, team, platform);
     sheet.close();
@@ -437,6 +446,7 @@ const openStation = (id) => {
   else if (world.stationById(id)?.def.planner) router.go('marketing'); // the Marketing Wall (Milestone 9)
   else if (id === 'F09') openMenu('recruit'); // the Recruitment Desk (Milestone 13)
   else if (id === 'F15') router.go('awards'); // the Awards Cabinet (Milestone 19)
+  else if (id === 'F26') router.go('publishingOffice'); // the Publishing Office (Milestone 21)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -525,7 +535,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -610,6 +620,7 @@ async function playSlot(i) {
   rivals.load(data.rivals ?? null); // Milestone 19 (a save from before it: the rivals' past releases, no award results)
   awards.load(data.awards ?? null);
   support.load(data.support ?? null); // Milestone 20
+  global.load(data.global ?? null); // Milestone 21
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -638,6 +649,7 @@ async function startStudio(i, setup) {
   rivals.newGame(); // Milestone 19
   awards.newGame();
   support.newGame(); // Milestone 20
+  global.newGame(); // Milestone 21
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -842,7 +854,7 @@ const newProject = createNewProjectScreen({
   openPicker: (family) => openMenu(`pick:${family}`),
   scopeOpen: (id) => elements.scopeOpen(id),
   scopeReason: (id) => elements.scopeReason(id),
-  estimate: (team, scope, type) => projects.estimate(team, scope, type),
+  estimate: (team, scope, type, localised) => projects.estimate(team, scope, type, localised),
   franchises: business.franchises, // Milestone 10: project types
   // Milestone 13: nobody on two games or on a course; the missing-role hints; the lanes.
   unavailable: (id) => {
@@ -856,7 +868,9 @@ const newProject = createNewProjectScreen({
   },
   laneWhy: () => (projects.jobs.length >= lanes() ? 'a free game lane' : null),
   engineChoices: (tech) => engines.choices(tech), // Milestone 16
-  deals: () => publishers.signed().map((d) => ({ id: d.id, scope: d.scope, short: publishers.publisherName(d.publisher), label: `${publishers.publisherName(d.publisher)} deal`, terms: dealTerms(d) })), // Milestone 17
+  deals: () => publishers.signed().map((d) => ({ id: d.id, scope: d.scope, short: publishers.publisherName(d.publisher), label: `${publishers.publisherName(d.publisher)}${d.global ? ' Global' : ''} deal`, terms: dealTerms(d), global: d.global ? publishers.publisherName(d.publisher) : null })), // Milestone 17 (Milestone 21: Global deals)
+  localisationWhy: () => global.localisationWhy(), // Milestone 21
+  localisationLine: (mode) => localisationLine(mode),
   dealWhy: (id, setup) => publishers.setupWhy(id, setup),
   ipWhy: (setup) => publishers.ipWhy(setup),
   audioCost: (id) => Math.round((PROJECT_BALANCE.audio[id]?.cost ?? 0) * (1 + world.effect(`audioCostPct.${id}`) / 100)), // Milestone 18
@@ -865,7 +879,7 @@ const newProject = createNewProjectScreen({
   combosIn: (recipe) => combosFor(recipe).filter((id) => combos.known(id)).map((id) => comboById(id).name),
   dateLabel: (d) => clock.shortLabel(d),
   today: () => clock.totalDays,
-  costPerDay: (scope, focus, type) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100) * (FRANCHISE_BALANCE.types[type]?.costMult ?? 1)),
+  costPerDay: (scope, focus, type, localise) => Math.round(PROJECT_BALANCE.scopes[scope].baseCostPerDay * (1 + (PROJECT_BALANCE.budgetFocus[focus]?.costPct ?? 0) / 100) * (FRANCHISE_BALANCE.types[type]?.costMult ?? 1) * (localise === 'on' ? 1 + localisationCostPct() / 100 : 1)),
   onStart: (setup) => {
     projects.start(setup, studioRng);
     debug.log(`project started: ${setup.title}`);
@@ -987,6 +1001,19 @@ bus.on('support:done', ({ job, record, effects }) => {
   const o = SUPPORT_OPTION_BY_ID(job.option);
   const bits = [effects.bugsFixed ? `${effects.bugsFixed} bugs fixed` : null, effects.playerScore ? `player score +${effects.playerScore}` : null, effects.trust ? `Fan Trust +${Math.round(effects.trust)}` : null, effects.tailPct ? `tail +${effects.tailPct}%` : null, effects.addonRevenue ? `add-on: ${effects.addonRevenue.toLocaleString('en-GB')} Credits over time` : null, effects.port?.ok ? `launches ${clock.shortLabel(effects.port.launchDay)}` : null].filter(Boolean);
   beat = { entry: { title: `${o.name} done: ${record.result.title}`, body: bits.join(' · ') || 'Done.' }, age: 0 };
+});
+// Global business banners (Milestone 21).
+bus.on('licence:signed', ({ licence }) => {
+  beat = { entry: { title: `Engine licensed to ${licence.customer}`, body: `${licence.label}: fees every month for a year` }, age: 0 };
+});
+bus.on('external:released', ({ project }) => {
+  beat = { entry: { title: `${project.studio}'s game is out: review ${project.result.review}`, body: `Your share: ${project.result.share.toLocaleString('en-GB')} Credits over the next months` }, age: 0 };
+});
+bus.on('acquisition:offered', ({ target }) => {
+  beat = { entry: { title: `${target.studio} is for sale`, body: 'See Business → Acquisitions.' }, age: 0 };
+});
+bus.on('acquisition:done', ({ target }) => {
+  beat = { entry: { title: `You bought ${target.studio}!`, body: target.line }, age: 0 };
 });
 // Sponsor banners (Milestone 18).
 bus.on('sponsor:signed', ({ deal }) => {
@@ -1324,8 +1351,14 @@ bus.on('game:certifying', ({ record }) => {
 });
 const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive'), openDiscoveries: () => router.go('discoveries'), openSupport: (n) => openMenu('support', n) });
 const engineScreen = createEngineScreen({ layout, assets, engines, topBar: subTopBar, textPrompt, openProject: (kind) => openMenu('engineStart', kind), dateLabel: (d) => clock.shortLabel(d) }); // Milestone 16
+// Milestone 21: localisation's cost after the Localisation Suite, and its one-line summary on New Game.
+const localisationCostPct = () => +(LOCALISATION.costPct * (1 + world.effect('localisationCostPct') / 100)).toFixed(1);
+function localisationLine(mode) {
+  const sells = LOCALISATION.salesPct + world.effect('localisedSalesPct');
+  return mode === 'publisher' ? `+${LOCALISATION.workPct}% work, sells ${sells}% more abroad.` : mode === 'on' ? `+${localisationCostPct()}% cost a day, +${LOCALISATION.workPct}% work; sells ${sells}% more abroad.` : `Off: sells at home only; a global publisher's reach counts at most ${LOCALISATION.reachCapPct}%.`;
+}
 // Milestone 17: the deal terms in one line; the Publishers and Contract Board screens.
-const dealTerms = (d) => `${SCOPES.find((s) => s.id === d.scope)?.name}${d.exactScope ? '' : '+'} game · ${d.sharePct}% of sales · on ${publishers.platformName(d.platform)}${d.genres ? ` · genre: ${d.genres.map((g) => elementById(g)?.name).join(' / ')}` : ''}${d.ipOwned ? ' · they own the IP' : ''}`;
+const dealTerms = (d) => `${d.global ? 'Global deal: localised for free · ' : ''}${SCOPES.find((s) => s.id === d.scope)?.name}${d.exactScope ? '' : '+'} game · ${d.sharePct}% of sales · on ${publishers.platformName(d.platform)}${d.genres ? ` · genre: ${d.genres.map((g) => elementById(g)?.name).join(' / ')}` : ''}${d.ipOwned ? ' · they own the IP' : ''}`;
 const publishersScreen = createPublishersScreen({ layout, assets, topBar: subTopBar, publishers, dealTerms, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = publishers.sign(id); if (!r.ok) showTip(r.why); } });
 const contractsScreen = createContractsScreen({ layout, assets, topBar: subTopBar, contracts, dateLabel: (d) => clock.shortLabel(d), openAccept: (id) => openMenu('contractTeam', id) });
 const sponsorsScreen = createSponsorsScreen({ layout, assets, topBar: subTopBar, sponsors, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = sponsors.sign(id); if (!r.ok) showTip(r.why); } }); // Milestone 18
@@ -1334,6 +1367,10 @@ const monthLabel = (m) => `Y${Math.floor(m / 12) + 1} M${(m % 12) + 1}`;
 const awardsScreen = createAwardsScreen({ layout, assets, topBar: subTopBar, awards, dateLabel: (d) => clock.shortLabel(d), monthLabel });
 const rivalsScreen = createRivalsScreen({ layout, assets, topBar: subTopBar, rivals, clock, monthLabel });
 const rankingsScreen = createRankingsScreen({ layout, assets, topBar: subTopBar, awards, rivals });
+// Milestone 21: the global business screens.
+const licensingScreen = createLicensingScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = global.signLicence(id); if (!r.ok) showTip(r.why); }, onDecline: (id) => global.declineLicence(id) });
+const publishingOfficeScreen = createPublishingOfficeScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onChoose: (id, choice) => { const r = global.fund(id, choice); if (!r.ok) showTip(r.why); } });
+const acquisitionsScreen = createAcquisitionsScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onBuy: () => { const r = global.acquire(); if (!r.ok) showTip(r.why); }, onDecline: () => global.declineAcquisition(), nameOf: (a) => (a.ipId ? `${business.franchises.byId(a.ipId)?.name} joined your franchises` : a.staffId ? `${staffDefById(a.staffId)?.name} came to the recruitment board` : null) });
 const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: subTopBar }); // Milestone 15
 const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
@@ -1358,7 +1395,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1384,6 +1421,9 @@ router
   .register('awards', awardsScreen)
   .register('rivals', rivalsScreen)
   .register('rankings', rankingsScreen)
+  .register('licensing', licensingScreen)
+  .register('publishingOffice', publishingOfficeScreen)
+  .register('acquisitions', acquisitionsScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

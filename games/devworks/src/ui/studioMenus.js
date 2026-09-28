@@ -29,6 +29,7 @@
 //   Milestone 19: Compete → Awards / Rivals / Rankings (screens); the debug award is gone (awards are real)
 //   Milestone 20: support (catalogue number): Patch / Free Update / Expansion / DLC / Port / Move On with what each
 //   does, costs and why not; Remaster / Remake lead to New Game; supportTeam ({ number, option, platform }): the team
+//   Milestone 21: Business → Engine Licensing, Publishing Office and Acquisitions (screens)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -48,7 +49,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -140,6 +141,13 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             ...(publishers ? [{ id: 'publishers', label: 'Publishers', sub: `${publishers().offers.length} offer${publishers().offers.length === 1 ? '' : 's'} · ${publishers().active.length} signed`, icon: 'business_ui_01', accent: C.purple, onTap: () => openScreen('publishers') }] : []),
             ...(sponsors ? [{ id: 'sponsors', label: 'Sponsors', sub: `${sponsors().deals.length} of ${sponsors().slots()} slots · ${sponsors().offers.length} offer${sponsors().offers.length === 1 ? '' : 's'}`, icon: 'business_ui_02', accent: C.purple, onTap: () => openScreen('sponsors') }] : []),
             ...(contracts ? [{ id: 'contracts', label: 'Contract Board', sub: `${contracts().offers.length} jobs · ${contracts().active.length} of 2 active`, icon: 'business_ui_03', accent: C.purple, onTap: () => openScreen('contracts') }] : []),
+            ...(global
+              ? [
+                  { id: 'licensing', label: 'Engine Licensing', sub: global().licensingWhy() ?? `${global().licences.length} of ${global().maxLicences()} · ${global().licenceOffers.length} offer${global().licenceOffers.length === 1 ? '' : 's'}`, icon: 'business_ui_10', accent: C.purple, onTap: () => openScreen('licensing') },
+                  { id: 'publishingOffice', label: 'Publishing Office', sub: global().externalWhy() ?? `${global().activeExternal().length} of 3 · ${global().pitches.length} pitch${global().pitches.length === 1 ? '' : 'es'}`, icon: 'business_ui_11', accent: C.purple, onTap: () => openScreen('publishingOffice') },
+                  { id: 'acquisitions', label: 'Acquisitions', sub: global().acqOffer ? 'A studio is for sale!' : `${global().acquired.length} of 2 bought`, icon: 'business_ui_12', accent: C.purple, onTap: () => openScreen('acquisitions') },
+                ]
+              : []),
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
