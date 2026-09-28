@@ -5,6 +5,8 @@ import { FACILITIES, STAGES } from './facilities.js';
 import { ROSTER } from './staff.js';
 import { PUBLISHERS } from './publishers.js';
 import { SPONSORS } from './sponsors.js';
+import { RIVALS } from './rivals.js';
+import { AWARDS } from './awards.js';
 import { BOTTOM_SLOTS } from './home.js';
 import { ELEMENTS } from './elements.js';
 import { FILED_COVERS } from './covers.js';
@@ -26,6 +28,10 @@ export const ASSETS = {
   // Milestone 18: the sponsors' logos and icons.
   ...Object.fromEntries(SPONSORS.map((s) => art('logos', s.logo))),
   ...Object.fromEntries([art('business', 'business_ui_02'), art('ui', 'dev_ui_25')]),
+  // Milestone 19: the rivals' logos (Ghostlight's too: it only shows once found) and the trophies.
+  ...Object.fromEntries(RIVALS.map((r) => art('logos', r.logo))),
+  ...Object.fromEntries([...new Set(AWARDS.map((a) => a.trophy))].map((k) => art('trophies', k))),
+  ...Object.fromEntries([art('ui', 'dev_ui_04')]),
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

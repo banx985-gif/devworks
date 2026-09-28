@@ -33,7 +33,7 @@ export function createAwardsScreen({ layout, assets, topBar, awards, dateLabel, 
       subtitle: 'Every award is held once a year. Your games released in the 12 months before it compete with the rivals’ releases. Results are final once announced.',
       sections: [
         {
-          heading: `Awards Cabinet · ${awards.wins.length} trophies`,
+          heading: `Awards Cabinet · ${awards.wins.length} troph${awards.wins.length === 1 ? 'y' : 'ies'}`,
           empty: 'No trophies yet. The Local Indie Showcase (Month 2) takes any Tiny or Small game.',
           cards: awards.wins
             .slice()

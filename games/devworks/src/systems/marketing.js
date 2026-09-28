@@ -12,6 +12,7 @@
 //
 // Events: 'marketing:run' { key, action, cost, gain, title }.
 import { Rng } from '../../../../core/Rng.js';
+import { releasesIn } from './rivals.js';
 import { MARKETING_BALANCE, PROJECT_BALANCE, FAN_TRUST, FAME } from '../../data/balance.js';
 import { MARKETING_ACTIONS, actionById, CONVENTIONS, COMPETITOR_STUDIOS, COMPETITOR_TITLE } from '../../data/marketing.js';
 import { elementsOf } from '../../data/elements.js';
@@ -24,22 +25,11 @@ const GENRES = elementsOf('genre').map((e) => e.id);
 // --- pure rules (tested in tests/devworks/m9.test.mjs) -------------------------------------------------------
 export const fanExpectationFor = (hype, M = MARKETING_BALANCE) => r4(M.expectation.base + clamp(hype, 0, 100) * M.expectation.perHype);
 
-// The competitor releases of month m (0 = Year 1 Month 1): 0–2, from the run's seed.
+// The competitor releases of month m (0 = Year 1 Month 1), from the run's seed. Milestone 19: these are the rival
+// studios' own releases (src/systems/rivals.js), replacing the Milestone 9 placeholders.
+// eslint-disable-next-line no-unused-vars
 export function competitorsIn(seed, m, M = MARKETING_BALANCE) {
-  const rng = new Rng(`${seed}|rivals|${m}`);
-  const roll = rng.next();
-  let count = 0;
-  for (let acc = 0; count < M.competitors.count.length; count++) if (roll < (acc += M.competitors.count[count])) break;
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const pick = (list) => list[Math.floor(rng.next() * list.length)];
-    const studio = pick(COMPETITOR_STUDIOS);
-    const title = `${pick(COMPETITOR_TITLE.first)} ${pick(COMPETITOR_TITLE.second)}`;
-    const genre = pick(GENRES);
-    const big = rng.next() < M.competitors.bigChance;
-    out.push({ id: `${m}-${i}`, month: m, studio, title, genre, big });
-  }
-  return out;
+  return releasesIn(seed, m).map((r) => ({ id: r.id, month: m, studio: r.studio, title: r.title, genre: r.genre, big: r.big, rival: r.rival }));
 }
 
 // What a launch in month m loses to a same-genre release that month: { competitor, pct, days } or null (the biggest).
@@ -176,6 +166,9 @@ export function createMarketing({ bus, clock, projects, economy, state, hypeEffe
       return c.hype;
     },
     competitors: (m = monthOf()) => competitorsIn(seed, m, M),
+    get seed() {
+      return seed; // Milestone 19: the rivals and the awards use the run's seed too
+    },
     clashFor: (genre, day = today()) => clashIn(seed, monthOf(day), genre, M),
     monthOf,
     monthOfYear,

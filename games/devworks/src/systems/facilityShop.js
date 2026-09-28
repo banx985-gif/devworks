@@ -77,7 +77,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     const reqs = [];
     if (u.rank) reqs.push({ label: `Rank ${u.rank}`, ok: rankIndex() >= rankIndexOf(FAME.ranks, u.rank) });
     if (u.released) reqs.push({ label: `${u.released} released games (${Math.min(u.released, released().length)} so far)`, ok: released().length >= u.released });
-    if (u.awards) reqs.push({ label: u.awards === 1 ? 'An award (awards come in a later update)' : `${u.awards} awards`, ok: awards() >= u.awards });
+    if (u.awards) reqs.push({ label: u.awards === 1 ? 'An award won (Compete → Awards)' : `${u.awards} awards won`, ok: awards() >= u.awards }); // Milestone 19: real awards
     reqs.push({ label: `${st.cost.toLocaleString('en-GB')} Credits`, ok: business.credits >= st.cost });
     const miss = reqs.find((r) => !r.ok);
     return { stage: st, reqs, ok: !miss, why: miss ? `Needs ${miss.label}` : null };
@@ -105,9 +105,5 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
       FACILITIES.map((f) => status(f.id))
         .filter((s) => !s.hidden)
         .sort((a, b) => a.owned - b.owned || !!lockReason(a.def) - !!lockReason(b.def) || a.def.cost - b.def.cost),
-    // ?debug=1: awards arrive in Milestone 19; this stands in for one so S3 can be tried.
-    debugAward() {
-      business.state.awards = awards() + 1;
-    },
   };
 }

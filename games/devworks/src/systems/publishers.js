@@ -245,6 +245,15 @@ export function createPublishers({ bus, clock, world, business, projects, elemen
     setupWhy,
     ipWhy,
     requiredPlatform,
+    // Milestone 19 (C07 International Dev Festival): one more offer now.
+    extraOffer() {
+      const t = generate(context(), deals.rng);
+      if (!t) return null;
+      const c = deals._make(t, null, today());
+      deals.offers.push(c);
+      bus.emit('deal:offered', { deal: c });
+      return c;
+    },
     publisherName: (id) => publisherById(id)?.name ?? id,
     platformName: (id) => platformById(id)?.name ?? id,
     newGame() {

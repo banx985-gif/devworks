@@ -26,6 +26,7 @@
 //   first), Start
 //   Milestone 17: Business → Publishers and Contract Board (screens); contractTeam (id): pick the team, Accept; the
 //   release sheet keeps a publisher's platform in (and says so)
+//   Milestone 19: Compete → Awards / Rivals / Rankings (screens); the debug award is gone (awards are real)
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -71,6 +72,20 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
   const desks = STATIONS.find((s) => s.role === 'Maker');
   for (const slot of BOTTOM_SLOTS) {
     if (slot.id === 'staff' || slot.id === 'business') continue;
+    if (slot.id === 'compete') {
+      // Milestone 19: the three Compete screens.
+      menus.register('compete', () => ({
+        title: slot.label,
+        subtitle: slot.line,
+        art: slot.icon,
+        sections: [{ columns: 1, buttons: [
+          { id: 'awards', label: 'Awards', sub: 'C01–C10, your trophies and last year’s results', icon: 'award_trophy_01', onTap: () => openScreen('awards') },
+          { id: 'rivals', label: 'Rivals', sub: 'The other studios and their games', icon: 'rival_logo_r01', accent: C.progress, onTap: () => openScreen('rivals') },
+          { id: 'rankings', label: 'Rankings', sub: 'Studios by awards and sales', icon: 'dev_ui_04', accent: C.purple, onTap: () => openScreen('rankings') },
+        ] }],
+      }));
+      continue;
+    }
     menus.register(slot.id, () => ({
       title: slot.label,
       subtitle: slot.line,
@@ -261,7 +276,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const sections = [{ lines }];
     if (n) {
       sections.push({ title: `Next: ${n.stage.name}`, lines: [...n.reqs.map((r) => ({ text: `${r.ok ? '✓' : '✗'} ${r.label}`, color: r.ok ? C.good : C.bad })), { text: `Staff cap ${n.stage.staffCap} · game lanes ${n.stage.lanes} · floor ${n.stage.cols} × ${n.stage.rows}`, color: C.textMuted }] });
-      sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `${n.stage.cost.toLocaleString('en-GB')} Credits. Everything stays where it is.` : n.why, disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }, ...(debugAward ? [{ id: 'debugAward', label: 'Debug: win an award', sub: 'Awards come in Milestone 19', accent: C.purple, onTap: () => debugAward() }] : [])] });
+      sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `${n.stage.cost.toLocaleString('en-GB')} Credits. Everything stays where it is.` : n.why, disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }] });
     } else sections.push({ lines: [{ text: 'The Corporate HQ and the Global Campus come in a later update.', color: C.textMuted }] });
     return { title: `Studio: ${st.name}`, subtitle: `Stage ${st.id} of 5`, art: st.shell ?? 'facility_f01', sections };
   });

@@ -37,6 +37,8 @@
 // contract-work board (Business → Publishers / Contract Board).
 // Milestone 18: sponsors (Business → Sponsors: 1–3 slots by rank, 6-month deals, perks through the studio's effect
 // query, exact obligation counters, relationship tiers); Standard and Premium audio packages.
+// Milestone 19: awards C01–C10 and the rival studios (Compete → Awards / Rivals / Rankings; their releases are the
+// release calendar); award wins add Fame, trophies (the Awards Cabinet) and the stages' award needs.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -83,6 +85,10 @@ import { createPublishers } from './systems/publishers.js';
 import { createContracts } from './systems/contracts.js';
 import { createPublishersScreen, createContractsScreen } from './screens/BusinessDealsScreens.js';
 import { createSponsors } from './systems/sponsors.js';
+import { createRivals } from './systems/rivals.js';
+import { createAwards } from './systems/awards.js';
+import { createAwardsScreen, createRivalsScreen, createRankingsScreen } from './screens/CompeteScreens.js';
+import { staffDefById as defOf, ROSTER as ALL_STAFF } from '../data/staff.js';
 import { createSponsorsScreen } from './screens/SponsorsScreen.js';
 import { sponsorById } from '../data/sponsors.js';
 const sponsorName = (id) => sponsorById(id)?.name ?? id;
@@ -128,7 +134,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -163,6 +169,9 @@ const training = createTraining({ bus, clock, world, business, projects, researc
 engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio', extraBusy: (id) => (contracts?.jobOf(id) ? 'On a contract' : null) });
 const sponsors = createSponsors({ bus, clock, world, business }); // Milestone 18
 world.addEffectSource((key) => sponsors.effect(key));
+// Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
+const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).map((p) => p.id) });
+const awards = createAwards({ bus, clock, business, projects, rivals, seed: () => business.marketing.seed, studioName: () => profile.name || 'Your studio', hasEngine: () => !!engines?.engines.length });
 const publishers = createPublishers({ bus, clock, world, business, projects, elements: { scopeOpen: (id) => elements.scopeOpen(id), isOpen: (id) => elements.isOpen(id) } }); // Milestone 17
 contracts = createContracts({ bus, clock, world, business, engines: () => engines, isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : null) });
 const lanes = () => stageById(world.stage).lanes;
@@ -331,7 +340,6 @@ const menus = createStudioMenus({
     router.go('studio');
     studio.setBuildMode(true);
   },
-  debugAward: new URLSearchParams(window.location.search).has('debug') ? () => shop.debugAward() : null,
   runMarketing: (key, id) => {
     sheet.close();
     if (business.marketing.run(id, key)) debug.log(`marketing: ${id} for ${key}`);
@@ -410,6 +418,7 @@ const openStation = (id) => {
   else if (id === shelfId) router.go('catalogue');
   else if (world.stationById(id)?.def.planner) router.go('marketing'); // the Marketing Wall (Milestone 9)
   else if (id === 'F09') openMenu('recruit'); // the Recruitment Desk (Milestone 13)
+  else if (id === 'F15') router.go('awards'); // the Awards Cabinet (Milestone 19)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -498,7 +507,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -580,6 +589,8 @@ async function playSlot(i) {
   publishers.load(data.publishers ?? null); // Milestone 17 (a save from before it: this month's offers now)
   contracts.load(data.contracts ?? null);
   sponsors.load(data.sponsors ?? null); // Milestone 18
+  rivals.load(data.rivals ?? null); // Milestone 19 (a save from before it: the rivals' past releases, no award results)
+  awards.load(data.awards ?? null);
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -605,6 +616,8 @@ async function startStudio(i, setup) {
   publishers.newGame(); // Milestone 17: the first offers
   contracts.newGame();
   sponsors.newGame(); // Milestone 18
+  rivals.newGame(); // Milestone 19
+  awards.newGame();
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -917,6 +930,36 @@ bus.on('contract:success', ({ contract }) => {
 });
 bus.on('contract:failed', ({ contract, reason }) => {
   beat = { entry: { title: `Contract ${reason === 'cancelled' ? 'dropped' : 'missed'}: ${contract.client}`, body: 'No pay.' }, age: 0 };
+});
+// Awards (Milestone 19): a win is a big moment with its trophy, and it hands out the award's extra; a place is a banner.
+bus.on('award:result', ({ award, result }) => {
+  if (result.winner === 'player' || !result.playerPlace) return;
+  beat = { entry: { title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` }, age: 0 };
+});
+bus.on('award:won', ({ award, result }) => {
+  if (award.extra === 'rp') research.system.addRp(award.rp, `Award: ${award.name}`, clock.totalDays);
+  if (award.extra === 'agencyRefresh') recruitment.refreshWith('ad', 'agency');
+  if (award.extra === 'moreOffers') publishers.extraOffer();
+  if (award.extra === 'eliteArrival') {
+    const elite = ALL_STAFF.find((d) => d.tier === 'elite' && !world.staffSystem.get(d.id) && !recruitment.eligibilityWhy(d));
+    if (elite) recruitment.specialArrival(elite.id, `Interested after your ${award.name} win`);
+  }
+  if (award.extra === 'ending') bus.emit('ending:year20', { award, result }); // the Year-20 ending (a later milestone)
+  feedback.show({
+    title: `${award.name}!`,
+    subtitle: `"${result.entrants[0].title}" won. +${award.fame.toLocaleString('en-GB')} Fame · ${award.rewardText}`,
+    accent: COL.gold,
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const s = Math.min(1, t / 0.35);
+      const size = 420 * (0.6 + 0.4 * s);
+      ctx.save();
+      ctx.globalAlpha = s;
+      assets.drawContained(ctx, award.trophy, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.33 - size / 2, w: size, h: size });
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
 });
 // Sponsor banners (Milestone 18).
 bus.on('sponsor:signed', ({ deal }) => {
@@ -1259,6 +1302,11 @@ const dealTerms = (d) => `${SCOPES.find((s) => s.id === d.scope)?.name}${d.exact
 const publishersScreen = createPublishersScreen({ layout, assets, topBar: subTopBar, publishers, dealTerms, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = publishers.sign(id); if (!r.ok) showTip(r.why); } });
 const contractsScreen = createContractsScreen({ layout, assets, topBar: subTopBar, contracts, dateLabel: (d) => clock.shortLabel(d), openAccept: (id) => openMenu('contractTeam', id) });
 const sponsorsScreen = createSponsorsScreen({ layout, assets, topBar: subTopBar, sponsors, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = sponsors.sign(id); if (!r.ok) showTip(r.why); } }); // Milestone 18
+// Milestone 19: the Compete screens.
+const monthLabel = (m) => `Y${Math.floor(m / 12) + 1} M${(m % 12) + 1}`;
+const awardsScreen = createAwardsScreen({ layout, assets, topBar: subTopBar, awards, dateLabel: (d) => clock.shortLabel(d), monthLabel });
+const rivalsScreen = createRivalsScreen({ layout, assets, topBar: subTopBar, rivals, clock, monthLabel });
+const rankingsScreen = createRankingsScreen({ layout, assets, topBar: subTopBar, awards, rivals });
 const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: subTopBar }); // Milestone 15
 const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
@@ -1283,7 +1331,7 @@ if (debug.enabled) {
       debug.log(`debug badges ${debugBadges ? 'on' : 'off'}`);
     },
   });
-  window.__dw = { sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1306,6 +1354,9 @@ router
   .register('publishers', publishersScreen)
   .register('contracts', contractsScreen)
   .register('sponsors', sponsorsScreen)
+  .register('awards', awardsScreen)
+  .register('rivals', rivalsScreen)
+  .register('rankings', rankingsScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 
