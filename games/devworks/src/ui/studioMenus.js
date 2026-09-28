@@ -27,6 +27,8 @@
 //   Milestone 17: Business → Publishers and Contract Board (screens); contractTeam (id): pick the team, Accept; the
 //   release sheet keeps a publisher's platform in (and says so)
 //   Milestone 19: Compete → Awards / Rivals / Rankings (screens); the debug award is gone (awards are real)
+//   Milestone 20: support (catalogue number): Patch / Free Update / Expansion / DLC / Port / Move On with what each
+//   does, costs and why not; Remaster / Remake lead to New Game; supportTeam ({ number, option, platform }): the team
 import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
@@ -34,6 +36,7 @@ import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
 import { ROLES, STATS, TIERS, TRAITS, ROSTER, staffDefById } from '../../data/staff.js';
 import { portraitOf } from '../../data/portraits.js';
 import { MENTORING } from '../../data/recruitment.js';
+import { SUPPORT_OPTIONS } from '../../data/support.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { PLATFORMS, RELEASE_MODEL } from '../../data/platforms.js';
 import { RELEASE, ECONOMY, PROJECT_BALANCE, PLATFORM_BALANCE } from '../../data/balance.js';
@@ -45,7 +48,7 @@ import { facilityById, stageById } from '../../data/facilities.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -540,6 +543,58 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         ...(paceLine ? [{ lines: [paceLine] }] : []),
         { title: 'Team', columns: 2, buttons: opts.map((o) => ({ id: `cteam:${o.staff.id}`, label: team.includes(o.staff.id) ? `✓ ${o.staff.name}` : o.staff.name, sub: o.why ?? `${stat.label} ${o.staff.stats[c.stat]}`, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !!o.why, accent: team.includes(o.staff.id) ? C.good : C.progress, onTap: () => contractTeams.set(id, team.includes(o.staff.id) ? team.filter((x) => x !== o.staff.id) : [...team, o.staff.id]) })) },
         { columns: 1, buttons: [{ id: 'contractGo', label: 'Accept the contract', sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { contractTeams.delete(id); acceptContract?.(id, team); } }] },
+      ],
+    };
+  });
+
+  // Milestone 20: post-launch support for a released game.
+  menus.register('support', (number) => {
+    const sp = support?.();
+    const rec = projects().catalogue.get(number);
+    if (!sp || !rec?.release) return null;
+    const s = rec.support;
+    const opts = sp.options(number);
+    return {
+      title: `Support: ${rec.result.title}`,
+      subtitle: `Review ${rec.release.score} (it never changes) · player score ${sp.playerScore(number)}${s ? ` · ${s.bugsLeft} bugs left` : ''}`,
+      art: rec.result.cover,
+      accent: C.purple,
+      sections: [
+        { lines: [{ text: 'Support takes a game lane and staff time while it runs.', color: C.textMuted }] },
+        { columns: 1, buttons: opts.flatMap((o) => {
+          const cost = o.option.instant ? 'Free' : `${o.option.costPerDay} Credits a day · ${o.option.work} work`;
+          if (o.option.port && o.ok) return o.targets.map((pid) => ({ id: `support:port:${pid}`, label: `Port to ${PLATFORMS.find((p) => p.id === pid)?.name ?? pid}`, sub: `${o.option.line} ${cost}`, icon: PLATFORMS.find((p) => p.id === pid)?.art ?? o.option.icon, onTap: () => open('supportTeam', { number, option: 'port', platform: pid }) }));
+          return [{ id: `support:${o.option.id}`, label: o.option.name, sub: o.ok ? `${o.option.line} ${cost}` : o.why, icon: o.option.icon, disabled: !o.ok, accent: o.option.id === 'moveOn' ? C.bad : C.purple, onTap: () => (o.option.instant ? startSupport?.(o.option.id, number, []) : open('supportTeam', { number, option: o.option.id })) }];
+        }) },
+        { columns: 2, buttons: [
+          { id: 'support:remaster', label: 'Remaster', sub: 'A new project (New Game)', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remaster') },
+          { id: 'support:remake', label: 'Remake', sub: 'A new project (New Game)', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remake') },
+        ] },
+      ],
+    };
+  });
+  const supportTeams = new Map();
+  menus.register('supportTeam', (t) => {
+    const sp = support?.();
+    const o = SUPPORT_OPTIONS.find((x) => x.id === t?.option);
+    const rec = projects().catalogue.get(t?.number);
+    if (!sp || !o || !rec) return null;
+    const key = `${t.number}:${t.option}:${t.platform ?? ''}`;
+    const staffList = world().staffSystem.staff;
+    const busy = (id) => (projects().jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world().workerById(id)?.away ? 'Away on a course' : sp.jobOf(id) ? 'On other support' : null);
+    const free = staffList.filter((s) => !busy(s.id));
+    if (!supportTeams.has(key)) supportTeams.set(key, [...free].sort((a, b) => (b.stats[o.stat] ?? 0) - (a.stats[o.stat] ?? 0)).slice(0, 2).map((s) => s.id));
+    const team = supportTeams.get(key).filter((id) => free.some((s) => s.id === id));
+    supportTeams.set(key, team);
+    const stat = STATS.find((x) => x.key === o.stat);
+    return {
+      title: `${o.name}: ${rec.result.title}`,
+      subtitle: `${o.work} work · ${o.costPerDay} Credits a day · ${stat.label} counts`,
+      art: o.icon,
+      accent: C.purple,
+      sections: [
+        { title: 'Team', columns: 2, buttons: staffList.map((s) => ({ id: `steam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: busy(s.id) ?? `${stat.label} ${s.stats[o.stat]}`, icon: s.art, iconCrop: portraitOf(s.art), disabled: !!busy(s.id), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => supportTeams.set(key, team.includes(s.id) ? team.filter((x) => x !== s.id) : [...team, s.id]) })) },
+        { columns: 1, buttons: [{ id: 'supportGo', label: `Start: ${o.name}`, sub: team.length ? `${team.length} on it` : 'Pick at least one person', disabled: !team.length, accent: C.good, onTap: () => { supportTeams.delete(key); startSupport?.(o.id, t.number, team, t.platform ?? null); } }] },
       ],
     };
   });

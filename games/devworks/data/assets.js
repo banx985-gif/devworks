@@ -32,6 +32,7 @@ export const ASSETS = {
   ...Object.fromEntries(RIVALS.map((r) => art('logos', r.logo))),
   ...Object.fromEntries([...new Set(AWARDS.map((a) => a.trophy))].map((k) => art('trophies', k))),
   ...Object.fromEntries([art('ui', 'dev_ui_04')]),
+  ...Object.fromEntries(['dev_ui_15', 'dev_ui_16', 'dev_ui_17'].map((k) => art('ui', k))), // Milestone 20: support icons
   // Bottom bar icons, and Release (Create's "Current project").
   ...Object.fromEntries(BOTTOM_SLOTS.map((s) => art('ui', s.icon))),
   ...Object.fromEntries([art('ui', 'dev_ui_07')]),

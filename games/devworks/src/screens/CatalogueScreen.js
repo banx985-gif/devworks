@@ -2,7 +2,7 @@
 // code), review score, copies sold, revenue to date and status (Selling / Long tail, or Not released with a Release
 // button). The studio's Fame, rank and Fan Trust sit at the top. Milestone 10: the Franchise Archive button (top right),
 // each game's project type, and copies / Credits including the back catalogue. Drag scrolls; tap an unreleased game to release it.
-import { THEME } from '../../../../core/Theme.js';
+import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
@@ -13,11 +13,14 @@ import { drawCover } from '../ui/gameCard.js';
 const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
-const ROW_H = 330;
+const ROW_H = 410; // Milestone 20: room for the post-launch line and the Support button
 const HEAD_H = 190;
 
 // Milestone 15: "Discoveries" under Franchises opens the Discovery Archive.
-export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease, openArchive = null, openDiscoveries = null }) {
+// Milestone 20: released games show their player score (after patches; the review never changes), what support did
+// (Fan Trust, a longer tail, add-ons, ports) and a Support button.
+export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease, openArchive = null, openDiscoveries = null, openSupport = null }) {
+  const supportRect = (row) => ({ x: row.x + 20, y: row.y + 322, w: 200, h: 72 });
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -37,7 +40,7 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
     text(ctx, 'Catalogue', PAD, PAD, { size: S.title, bold: true });
     if (openArchive) drawButton(ctx, archiveRect(w), 'Franchises', { accent: C.progress });
     if (openDiscoveries) drawButton(ctx, discoveriesRect(w), 'Discoveries', { accent: C.purple });
-    text(ctx, `Rank ${business.rank.id} · ${business.fame.toLocaleString('en-GB')} Fame · Fan Trust ${Math.round(business.state.fanTrust)}`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw });
+    text(ctx, `Rank ${business.rank.id} · ${business.fame.toLocaleString('en-GB')} Fame · Fan Trust ${Math.round(business.state.fanTrust)}`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: (openDiscoveries ? discoveriesRect(w).x : openArchive ? archiveRect(w).x : w) - PAD - 16 }); // (clear of the buttons)
     const list = games();
     if (!list.length) text(ctx, 'No games yet. Make one from Create → New Game.', PAD, HEAD_H, { size: S.body, color: C.textMuted, maxWidth: cw });
     list.forEach((rec, i) => {
@@ -73,6 +76,10 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
         text(ctx, `Review ${rec.release.score}`, tx + 100, r.y + 176, { size: S.heading, bold: true, baseline: 'middle' });
         text(ctx, `${(rec.sales.copies + (rec.catalogue?.copies ?? 0)).toLocaleString('en-GB')} copies sold`, tx, r.y + 222, { size: S.body, maxWidth: tw });
         text(ctx, `${(rec.sales.revenue + (rec.catalogue?.revenue ?? 0)).toLocaleString('en-GB')} Credits earned`, tx, r.y + 266, { size: S.body, color: C.good, bold: true, maxWidth: tw });
+        const sp = rec.support;
+        const bits = sp ? [`Player score ${sp.playerScore}`, sp.trust ? `Fan Trust +${Math.round(sp.trust)}` : null, sp.tailPct ? `tail +${Math.round(sp.tailPct)}%` : null, sp.addons.length ? `${sp.addons.length} add-on${sp.addons.length === 1 ? '' : 's'}` : null, (rec.release.platforms?.length ?? 1) > 1 ? `on ${rec.release.platforms.length} platforms` : null, sp.ended ? 'support ended' : null].filter(Boolean) : ['No post-launch support yet'];
+        text(ctx, bits.join(' · '), tx, r.y + 322, { size: S.small, color: sp ? C.purple : C.textMuted, bold: !!sp, maxWidth: tw });
+        if (openSupport && !sp?.ended) drawButton(ctx, supportRect(r), 'Support', { accent: C.purple, font: font(S.small, true) });
       } else if (rec.cert) {
         // Milestone 8: in certification until its launch day.
         text(ctx, `In certification: launches ${dateLabel(rec.cert.launchDay)}`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
@@ -101,6 +108,21 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
       const b = releaseRect(rowRect(i, pr.w));
       return { x: pr.x + b.x, y: pr.y + b.y - scroll.scrollY, w: b.w, h: b.h };
     },
+    // Screen rect of a released game's Support button (tests), or null.
+    supportButton(number) {
+      const i = games().findIndex((r) => r.number === number);
+      if (i < 0) return null;
+      const pr = panelRect();
+      const b = supportRect(rowRect(i, pr.w));
+      return { x: pr.x + b.x, y: pr.y + b.y - scroll.scrollY, w: b.w, h: b.h };
+    },
+    scrollToGame(number) {
+      const i = games().findIndex((r) => r.number === number);
+      if (i >= 0) {
+        scroll.scrollY = rowRect(i, panelRect().w).y - 40;
+        scroll.clamp();
+      }
+    },
     // Screen rect of the Franchises button (tests).
     archiveButton() {
       const pr = panelRect();
@@ -116,6 +138,7 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
       games().forEach((rec, i) => {
         const row = rowRect(i, w);
         if (!rec.release && !rec.cert && hitRect(q, row)) openRelease(rec.number);
+        else if (rec.release && openSupport && !rec.support?.ended && hitRect(q, supportRect(row))) openSupport(rec.number);
       });
     },
     render(ctx) {

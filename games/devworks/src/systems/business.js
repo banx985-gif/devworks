@@ -28,6 +28,9 @@
 // Milestone 17: a game made under a publisher deal (result.deal) must release on the deal's platform when it can, and
 // the publisher's reach adds launch sales (on PC only for OpenGate). The share of sales is taken in publishers.js.
 //
+// Milestone 20: addPlatform (a post-launch Port): the new platform's porting cost and certification as at release (a
+// fail delays it), then it sells there from its launch day on its own curve, with the game's original review.
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -231,8 +234,38 @@ export function createBusiness({ bus, clock, world, projects }) {
     return record;
   }
 
+  // Milestone 20: a Port. Returns { ok, why, launchDay, cost }.
+  function addPlatform(number, id) {
+    const record = projects.catalogue.get(number);
+    const on = record?.release?.platforms ?? (record?.release ? [record.release.platform] : []);
+    if (!record?.release || on.includes(id) || (record.pendingPorts ?? []).some((x) => x.id === id)) return { ok: false, why: 'Not possible' };
+    const plan = releasePlan(number, [on[0], id]);
+    const x = plan.platforms?.find((p) => p.id === id);
+    if (!x || !releasable(x.status)) return { ok: false, why: `${platformById(id)?.name ?? id} isn't on sale` };
+    const cost = x.port + (x.cert?.fee ?? 0);
+    if (cost) economy.spend('credits', cost, `Port: ${record.result.title} to ${x.name}`, 'release');
+    const launchDay = clock.totalDays + (x.cert?.days ?? 0);
+    (record.pendingPorts ||= []).push({ id, launchDay, buyers: x.buyers, fit: x.fit, niche: x.niche });
+    return { ok: true, launchDay, cost };
+  }
+  function launchPorts() {
+    for (const record of released()) {
+      for (const p of [...(record.pendingPorts ?? [])]) {
+        if (clock.totalDays < p.launchDay) continue;
+        record.pendingPorts = record.pendingPorts.filter((x) => x !== p);
+        const g = record.result;
+        const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny;
+        record.sales.byPlatform ||= {};
+        record.sales.byPlatform[p.id] = startSales({ score: record.release.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(p.id), platform: p.id, reviewSeed: `${g.reviewSeed}|port|${p.id}`, day: clock.totalDays, salesMult: sc.salesMult * p.fit * p.niche, price: record.release.price, audience: p.buyers, hype: 0, clash: null });
+        record.release.platforms = [...(record.release.platforms ?? [record.release.platform]), p.id];
+        bus.emit('game:ported', { record, platform: p.id });
+      }
+    }
+  }
+
   bus.on('clock:day', () => {
-    marketing.daily(); // Milestone 9: Hype fades and campaigns add theirs, before anything launches today
+    marketing.daily();
+    launchPorts(); // Milestone 20 // Milestone 9: Hype fades and campaigns add theirs, before anything launches today
     // Certified games launch (Milestone 8).
     for (const record of games()) if (record.cert && clock.totalDays >= record.cert.launchDay) launch(record, record.cert.plan);
     for (const record of released()) {
@@ -312,6 +345,7 @@ export function createBusiness({ bus, clock, world, projects }) {
     marketing,
     franchises,
     releasePlan,
+    addPlatform, // Milestone 20
     unreleased: () => games().filter((r) => !r.release && !r.cert),
     certifying: () => games().filter((r) => r.cert),
     released,
