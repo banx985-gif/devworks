@@ -49,10 +49,11 @@ import { elementById } from '../../data/elements.js';
 import { fanExpectationFor } from '../systems/marketing.js';
 import { facilityById, stageById } from '../../data/facilities.js';
 import { HW_SLOTS, componentsOf } from '../../data/hardware.js';
+import { DISTRIBUTION } from '../../data/distribution.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, distribution = null, fullLaunch = null, setStorefront = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -105,7 +106,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                 buttons: [
                   ...business()
                     .unreleased()
-                    .map((r) => ({ id: `release${r.number}`, label: `Release "${r.result.title}"`, sub: 'Finished and waiting', icon: r.result.cover, onTap: () => open('release', r.number) })),
+                    .map((r) => ({ id: `release${r.number}`, label: r.ea ? `Early Access: "${r.result.title}"` : `Release "${r.result.title}"`, sub: r.ea ? `Month ${r.ea.months} · ${r.result.bugs} bugs left · full launch when ready` : 'Finished and waiting', icon: r.result.cover, onTap: () => open('release', r.number) })),
                   ...(projects().decision ? [{ id: 'decision', label: `${DECISION_POINTS[projects().decision.point]} decision needed`, sub: 'Your game waits for you', icon: 'dev_ui_07', accent: C.action, onTap: () => open('decision') }] : []),
                   ...projects().jobs.map((job, i) => ({ id: i ? `current${i + 1}` : 'current', label: projects().jobs.length > 1 ? `Game in the works: ${job.name}` : 'Current project', sub: projectLine(job), icon: 'dev_ui_07', onTap: () => (openProjectById ? openProjectById(job.id) : openProject()) })),
                   ...(projects().jobs.length < lanes() ? [{ id: 'newGame', label: projects().jobs.length ? `New Game (lane ${projects().jobs.length + 1})` : 'New Game', sub: projects().jobs.length ? `Your studio can make ${lanes()} games at once` : 'Pick a recipe, scope and team', icon: slot.icon, onTap: newGame }] : []),
@@ -154,6 +155,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                 ]
               : []),
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
+            ...(distribution?.() && !distribution().storefrontWhy() ? [{ id: 'storefront', label: 'Storefront', sub: distribution().storefront.open ? `Open · ${Math.round(distribution().shareNow())}% of downloads` : 'Closed', icon: DISTRIBUTION.icon, accent: C.purple, onTap: () => open('storefront') }] : []), // Milestone 26
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
         },
@@ -167,17 +169,21 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
   // state, players, audience fit and certification, then the porting / certification cost, the QA overhead and when
   // it launches. The picks are kept per game while the sheet is open.
   const picks = new Map(); // catalogue number → [platform ids]
+  const modes = new Map(); // Milestone 26: catalogue number → distribution mode
   const fmt = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n.toLocaleString('en-GB'));
   menus.register('release', (number) => {
     const b = business();
     const rec = projects().catalogue.get(number);
     if (!rec || rec.release || rec.cert) return null;
+    if (rec.ea) return earlyAccessSheet(rec); // Milestone 26
     const day = today();
+    const dist = distribution?.();
+    const mode = modes.get(number) ?? 'balanced';
     const active = b.platforms.active(day);
     let chosen = (picks.get(number) ?? [RELEASE.platform]).filter((id) => active.some((x) => x.id === id));
     if (!chosen.length && active.length) chosen = [active[0].id];
     picks.set(number, chosen);
-    const plan = b.releasePlan(number, chosen, day);
+    const plan = b.releasePlan(number, chosen, day, dist ? mode : 'balanced');
     const price = PROJECT_BALANCE.scopes[rec.result.scope]?.price ?? RELEASE.price; // Milestone 7: by scope
     const keep = (price * (100 - RELEASE.storeCutPct)) / 100;
     const needs = publishers?.()?.requiredPlatform(rec, day); // Milestone 17
@@ -193,6 +199,12 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       if (plan.extraBugs) lines.push({ text: `Extra QA for ${chosen.length} platforms: +${plan.extraBugs} bug${plan.extraBugs === 1 ? '' : 's'} the reviews will see`, color: C.bad });
       lines.push({ text: plan.certDays ? `Certification takes ${plan.certDays} days: it launches ${dateOf(plan.launchDay)}` : 'No certification needed: it launches today', color: C.text });
     } else lines.push({ text: plan.why, color: C.bad });
+    // Milestone 26: the distribution mode — this year's box / download split and what the mode does to it.
+    if (dist) {
+      const fx = dist.effectsNow(mode);
+      lines.push({ text: `${DISTRIBUTION.modes[mode].name} · this year ${Math.round(fx.physicalPct)}% of players buy boxes: sales × ${fx.salesMult.toFixed(2)}${fx.netMult !== 1 ? ` · keeps ${Math.round(fx.netMult * 100)}% per copy` : ''}${plan.pressing ? ` · pressing ${plan.pressing.toLocaleString('en-GB')} Credits now` : ''}`, color: C.purple });
+      lines.push({ text: DISTRIBUTION.modes[mode].line, color: C.textMuted });
+    }
     // Milestone 9: Hype, what fans expect, and the competition in the launch month.
     const mk = b.marketing;
     const hype = mk.hypeOf(rec.jobId);
@@ -204,7 +216,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     else lines.push({ text: comps.length ? `Launch month: ${comps.map((x) => `"${x.title}" (${elementById(x.genre)?.name ?? ''}${x.big ? ', big' : ''})`).join(', ')}, none in your genre` : 'No competitor releases in the launch month', color: C.textMuted });
     return {
       title: `Release "${rec.result.title}"`,
-      subtitle: `${RELEASE_MODEL.name}. Pick one or more platforms.`,
+      subtitle: distribution?.() ? 'Self-publish. Pick the platforms and how it is sold.' : `${RELEASE_MODEL.name}. Pick one or more platforms.`,
       art: rec.result.cover,
       sections: [
         {
@@ -219,8 +231,64 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           }),
         },
         { lines },
-        { columns: 1, buttons: [{ id: 'release', label: plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', disabled: !plan.ok, onTap: () => doRelease(number, chosen) }] },
+        ...(dist
+          ? [
+              {
+                title: 'Distribution',
+                columns: 2,
+                buttons: Object.entries(DISTRIBUTION.modes).map(([id, m]) => {
+                  const why = id === 'earlyAccess' ? dist.eaWhy(rec, chosen) : null;
+                  return { id: `mode-${id}`, label: mode === id ? `✓ ${m.short}` : m.short, sub: why ?? `sales × ${dist.effectsNow(id).salesMult.toFixed(2)} this year`, icon: DISTRIBUTION.icon, accent: mode === id ? C.good : C.progress, disabled: !!why, onTap: () => modes.set(number, id) };
+                }),
+              },
+            ]
+          : []),
+        { columns: 1, buttons: [{ id: 'release', label: mode === 'earlyAccess' && dist ? 'Start Early Access' : plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', disabled: !plan.ok, onTap: () => doRelease(number, chosen, dist ? mode : 'balanced') }] },
       ],
+    };
+  });
+
+  // Milestone 26: a game in Early Access — how it is doing, and Full launch.
+  function earlyAccessSheet(rec) {
+    const dist = distribution?.();
+    const ea = rec.ea;
+    const E = DISTRIBUTION.earlyAccess;
+    const left = E.maxMonths - ea.months;
+    const lines = [
+      { text: `Month ${ea.months} of Early Access · ${ea.sales.copies.toLocaleString('en-GB')} early copies · ${ea.sales.revenue.toLocaleString('en-GB')} Credits`, color: C.actionDark },
+      { text: `Players reported bugs: ${ea.fixed} fixed, ${rec.result.bugs} left (${ea.bugsAtStart} at the start). ${E.bugFixPct}% of what is left is fixed each month.`, color: C.text },
+      ea.months >= E.okMonths ? { text: `Fans are getting impatient: every month now costs ${E.trustPerMonth} Fan Trust. It launches by itself in ${left} month${left === 1 ? '' : 's'}.`, color: C.bad } : { text: `Fans are happy to wait ${E.okMonths - ea.months} more month${E.okMonths - ea.months === 1 ? '' : 's'}.`, color: C.good },
+      rec.result.bugs > E.buggyBugs ? { text: `Launching with more than ${E.buggyBugs} bugs costs ${E.buggyTrust} Fan Trust.`, color: C.bad } : { text: 'Few bugs left: a clean launch.', color: C.good },
+      `Full launch: reviews come in and it sells like a digital release (${E.fullLaunchPct}% — early players already have it).`,
+    ];
+    return {
+      title: `Early Access: "${rec.result.title}"`,
+      subtitle: `On ${ea.plan.platforms.map((x) => x.name).join(', ')}`,
+      art: rec.result.cover,
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'fullLaunch', label: 'Full launch', sub: 'Reviews come in, then full sales', disabled: !dist, onTap: () => fullLaunch?.(rec.number) }] }],
+    };
+  }
+  // Milestone 26: the studio's own storefront (Business → Storefront).
+  menus.register('storefront', () => {
+    const dist = distribution?.();
+    if (!dist) return null;
+    const st = dist.storefront;
+    const why = dist.storefrontWhy();
+    const S = DISTRIBUTION.storefront;
+    const last = st.history.at(-1);
+    const lines = [
+      { text: `${st.open ? 'Open' : 'Closed'} · ${Math.round(dist.shareNow())}% of your games' downloads sell through it this year (at most ${S.capPct}%)`, color: st.open ? C.good : C.actionDark },
+      `On those you keep the store's ${RELEASE.storeCutPct}% cut too; your console's third-party games pay a little through it. It costs ${S.opCost.toLocaleString('en-GB')} Credits a month while open.`,
+      { text: 'It adds margin only: every game still reaches players through the platforms.', color: C.textMuted },
+      ...(last ? [{ text: `Last month: +${last.margin.toLocaleString('en-GB')} games, +${last.thirdParty.toLocaleString('en-GB')} third-party, −${last.opCost.toLocaleString('en-GB')} running = ${last.net >= 0 ? '+' : ''}${last.net.toLocaleString('en-GB')}`, color: last.net >= 0 ? C.good : C.bad }] : []),
+      ...(st.totals.opCost ? [{ text: `So far: ${(st.totals.margin + st.totals.thirdParty - st.totals.opCost).toLocaleString('en-GB')} Credits net`, color: C.actionDark }] : []),
+      ...(why ? [{ text: why, color: C.bad }] : []),
+    ];
+    return {
+      title: 'Your Storefront',
+      subtitle: 'Sell your games (and your console\'s third-party games) directly.',
+      art: DISTRIBUTION.icon,
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'toggle', label: st.open ? 'Close the storefront' : 'Open the storefront', sub: why ?? (st.open ? 'No more running costs' : `${S.opCost.toLocaleString('en-GB')} Credits a month`), disabled: !!why, accent: st.open ? C.bad : C.good, onTap: () => setStorefront?.(!st.open) }] }],
     };
   });
 

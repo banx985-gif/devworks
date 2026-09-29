@@ -58,7 +58,7 @@ export const FACILITIES = [
   { id: 'F29', name: 'Dev Kit Lab', role: 'Specialist', unlock: { research: ['HW3'] }, cost: 9000, line: 'Third-party support +10%', effects: { thirdPartyPct: 10 }, size: { w: 3, h: 2 } },
   { id: 'F30', name: 'Certification Lab', role: 'Specialist', unlock: { research: ['HW4'] }, cost: 9400, line: 'Console defect/certification risk -12%', effects: { certFailPct: -12 }, size: { w: 3, h: 2 } },
   { id: 'F31', name: 'Distribution Hub', role: 'Support', unlock: { rank: 'A', stage: 4 }, cost: 8000, line: 'Physical/digital launch efficiency +10%', effects: { launchSalesPct: 10 }, size: { w: 3, h: 2 } },
-  { id: 'F32', name: 'Storefront Ops', role: 'Front desk', unlock: { year: 15, research: ['BUS6'] }, cost: 9000, line: 'Unlock own digital storefront', effects: {}, later: 'the storefront milestone', size: { w: 2, h: 2 } },
+  { id: 'F32', name: 'Storefront Ops', role: 'Front desk', unlock: { year: 15, research: ['BUS6'] }, cost: 9000, line: 'Unlock own digital storefront', effects: {}, size: { w: 2, h: 2 } },
   { id: 'F33', name: 'Museum / Hall of Fame', role: 'Showcase', unlock: { year: 12, trophies: 5 }, cost: 7600, line: 'NG+ legacy archive +1', effects: { legacyArchive: 1 }, later: 'NG+ (Milestone 33)', size: { w: 3, h: 2 } },
   { id: 'F34', name: 'Black Box R&D', role: 'Secret', unlock: { secret: 'SEC-FAC-01' }, cost: 18000, line: 'Prestige engine/hardware research +20%', effects: { prestigeResearchPct: 20 }, later: 'the secrets', size: { w: 3, h: 3 } },
   { id: 'F35', name: 'The Vault', role: 'Secret', unlock: { secret: 'SEC-FAC-02' }, cost: 22000, line: 'PROJECT ONE / PROJECT X clue hub', effects: {}, later: 'the secrets', size: { w: 3, h: 3 } },

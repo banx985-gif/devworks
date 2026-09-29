@@ -118,7 +118,7 @@ export function sellDay(sales, S = SALES_BALANCE, R = RELEASE) {
   const exact = sales.lifetime * dayShare(sales.days, S, sales.curve ?? S.curve) * wobble * cut + sales.carry;
   const copies = Math.max(0, Math.floor(exact));
   sales.carry = +(exact - copies).toFixed(6);
-  const revenue = Math.round(copies * netPerCopy(R, sales.price ?? R.price));
+  const revenue = Math.round(copies * netPerCopy(R, sales.price ?? R.price) * (sales.netMult ?? 1)); // Milestone 26: a distribution mode's margin
   sales.copies += copies;
   sales.revenue += revenue;
   sales.days++;

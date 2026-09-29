@@ -104,6 +104,7 @@ import { createHardware } from './systems/hardware.js';
 import { createHardwareScreen } from './screens/HardwareScreen.js';
 import { HARDWARE } from '../data/hardware.js';
 import { createConsoles } from './systems/consoles.js';
+import { createDistribution } from './systems/distribution.js'; // Milestone 26
 import { createConsoleScreen } from './screens/ConsoleScreen.js';
 import { CONSOLE } from '../data/consoles.js';
 import { createLicensingScreen, createPublishingOfficeScreen, createAcquisitionsScreen } from './screens/GlobalScreens.js';
@@ -205,6 +206,7 @@ const lanes = () => stageById(world.stage).lanes;
 // Milestone 21: global business (after the business, research, engines, recruitment and publishers).
 hardware = createHardware({ bus, clock, world, business, research, studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
 const consoles = createConsoles({ bus, clock, world, business, projects, hardware, engines: () => engines, studioName: () => profile.name || 'Studio', seed: () => business.marketing.seed }); // Milestone 24
+const distribution = createDistribution({ bus, clock, world, business, projects, consoles: () => consoles }); // Milestone 26 (registers itself with the business)
 const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
@@ -342,9 +344,19 @@ const menus = createStudioMenus({
   business: () => business,
   today: () => clock.totalDays,
   debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
-  doRelease: (number, ids) => {
+  distribution: () => distribution, // Milestone 26
+  fullLaunch: (number) => {
     sheet.close();
-    const rec = business.release(number, ids);
+    const r = distribution.fullLaunch(number);
+    if (!r.ok) showTip(r.why);
+  },
+  setStorefront: (on) => {
+    const r = distribution.setStorefront(on);
+    if (!r.ok) showTip(r.why);
+  },
+  doRelease: (number, ids, mode = 'balanced') => {
+    sheet.close();
+    const rec = business.release(number, ids, mode);
     if (rec) debug.log(rec.release ? `released: ${rec.result.title} (review ${rec.release.score})` : `certifying: ${rec.result.title}`);
   },
   openScreen: (name) => router.go(name),
@@ -563,7 +575,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -651,6 +663,7 @@ async function playSlot(i) {
   global.load(data.global ?? null); // Milestone 21
   hardware.load(data.hardware ?? null); // Milestone 23
   consoles.load(data.consoles ?? null); // Milestone 24
+  distribution.load(data.distribution ?? null); // Milestone 26
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -682,6 +695,7 @@ async function startStudio(i, setup) {
   global.newGame(); // Milestone 21
   hardware.newGame(); // Milestone 23
   consoles.newGame(); // Milestone 24
+  distribution.newGame(); // Milestone 26
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -1091,6 +1105,13 @@ bus.on('console:defects', ({ console: c, cost }) => {
     const p = studio.screenPointOf(makerId);
     vfx.sprite('screen', CONSOLE.defectVfx, p.x, p.y - 160, { size: 260, life: 1.6, from: 0.4, to: 1, rise: 60, hold: 0.6 });
   }
+});
+// Milestone 26: Early Access banners.
+bus.on('ea:started', ({ record }) => {
+  beat = { entry: { title: `${record.result.title} is in Early Access`, body: 'Players buy it early and report bugs. Full launch from Create when it is ready.' }, age: 0 };
+});
+bus.on('ea:month', ({ record, fixed, trust }) => {
+  beat = { entry: { title: `Early Access: ${record.result.title}`, body: `${fixed} bug${fixed === 1 ? '' : 's'} fixed from player reports${trust ? ` · fans are impatient: Fan Trust −${trust}` : ''}` }, age: 0 };
 });
 // Milestone 25: a revision and a retired generation are banners.
 bus.on('console:revised', ({ console: c }) => {
@@ -1522,7 +1543,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

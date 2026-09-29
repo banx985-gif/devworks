@@ -35,6 +35,10 @@
 // query 'localisedSalesPct'); a global publisher's reach (globalReach) counts only up to reachCapPct on a game that isn't
 // localised. The multiplier is kept on record.release.localisation.
 //
+// Milestone 26 (src/systems/distribution.js, set with setDistribution): each release picks a distribution mode — its
+// sales this year, curve shape, pressing cost (paid at release) and margin per copy (record.release.distribution);
+// Early Access doesn't launch the game yet (the distribution system keeps it in record.ea until launchNow).
+//
 // Events: 'game:certifying' { record }, 'game:released' { record }, 'sales:day' { record, copies, revenue } (per game with sales that day),
 // plus core's 'economy:change' / 'economy:debt' / 'reputation:change' / 'reputation:rankUp'.
 import { EconomySystem } from '../../../../core/EconomySystem.js';
@@ -75,6 +79,7 @@ export function createBusiness({ bus, clock, world, projects }) {
   const state = { fanTrust: FAN_TRUST.start, hype: REVIEW_BALANCE.start.hype, fanExpectation: REVIEW_BALANCE.start.fanExpectation, fameCarry: 0, shipped: 0 };
 
   const games = () => projects.catalogue.list();
+  let dist = null; // Milestone 26: the distribution system (setDistribution)
   // One day of sales for a released game: every platform it is on (a game from before Milestone 8 has one sales
   // state), added up on record.sales.
   function sellRecord(record) {
@@ -120,7 +125,7 @@ export function createBusiness({ bus, clock, world, projects }) {
   // What releasing a game on these platforms would take (Milestone 8): each platform's buyers, fit and niche bonus,
   // its certification (days, fee, a seeded fail and its delay), the porting cost and QA overhead of every platform
   // after the first, and the launch day. Pure: the same game, platforms and day always give the same plan.
-  function releasePlan(number, ids = [RELEASE.platform], day = clock.totalDays) {
+  function releasePlan(number, ids = [RELEASE.platform], day = clock.totalDays, mode = 'balanced') {
     const record = projects.catalogue.get(number);
     if (!record) return { ok: false, why: 'No such game' };
     const g = record.result;
@@ -168,18 +173,28 @@ export function createBusiness({ bus, clock, world, projects }) {
       plan.why = `${g.deal.name} wants it on ${platformById(need)?.name ?? need}`;
     }
     plan.launchDay = day + plan.certDays;
+    // Milestone 26: the distribution mode — retail pressing is paid at release; Early Access has its own rules.
+    plan.distribution = mode;
+    plan.pressing = dist ? dist.pressingCost(record, mode) : 0;
+    plan.cost += plan.pressing;
+    if (plan.ok && mode === 'earlyAccess') {
+      const why = dist ? dist.eaWhy(record, ids) : 'Not open';
+      if (why) Object.assign(plan, { ok: false, why });
+    }
     return plan;
   }
 
   // Release a finished game on one or more platforms (Milestone 8). Porting and certification are paid now; a game on
   // open platforms only launches today, otherwise when the slowest certification passes. Returns the record.
-  function release(number, ids = [RELEASE.platform]) {
+  function release(number, ids = [RELEASE.platform], mode = 'balanced') {
     const record = projects.catalogue.get(number);
-    if (!record || record.release || record.cert) return null;
-    const plan = releasePlan(number, ids);
+    if (!record || record.release || record.cert || record.ea) return null;
+    const plan = releasePlan(number, ids, clock.totalDays, mode);
     if (!plan.ok) return null;
     if (plan.portCost) economy.spend('credits', plan.portCost, `Porting: ${record.result.title}`, 'release');
     if (plan.certFees) economy.spend('credits', plan.certFees, `Certification: ${record.result.title}`, 'release');
+    if (plan.pressing) economy.spend('credits', plan.pressing, `Pressing and shipping: ${record.result.title}`, 'release'); // Milestone 26
+    if (mode === 'earlyAccess') return dist.startEA(record, plan);
     if (plan.certDays > 0) {
       record.cert = { plan, startDay: clock.totalDays, launchDay: plan.launchDay };
       bus.emit('game:certifying', { record });
@@ -222,13 +237,21 @@ export function createBusiness({ bus, clock, world, projects }) {
     const locMult = g.localised ? 1 + (LOCALISATION.salesPct + (world.effect?.('localisedSalesPct') ?? 0)) / 100 : 1; // Milestone 21
     const reach = g.deal ? (g.deal.globalReach && !g.localised ? Math.min(g.deal.salesPct ?? 0, LOCALISATION.reachCapPct) : g.deal.salesPct ?? 0) : 0;
     record.release.localisation = { localised: g.localised ?? null, salesMult: +locMult.toFixed(4), reachPct: reach, capped: !!(g.deal?.globalReach && !g.localised && (g.deal.salesPct ?? 0) > reach) };
+    // Milestone 26: the distribution mode (Balanced changes nothing); a game coming out of Early Access has fewer buyers left.
+    const fx = dist ? dist.effectsNow(plan.distribution ?? 'balanced') : null;
+    const distMult = (fx?.salesMult ?? 1) * (plan.fromEA ? dist.EA.fullLaunchPct / 100 : 1);
+    record.release.distribution = fx ? { mode: fx.mode, physicalPct: fx.physicalPct, salesMult: +distMult.toFixed(4), digitalFrac: fx.digitalFrac, netMult: fx.netMult, pressing: plan.pressing ?? 0 } : null;
     const cfx = g.comboFx ?? {}; // Milestone 15
     const audiencePct = (id) => {
       const grp = platformOf(id)?.group;
       return (AUDIENCE_GROUPS.casual.includes(grp) ? cfx.casualPct ?? 0 : 0) + (AUDIENCE_GROUPS.core.includes(grp) ? cfx.corePct ?? 0 : 0);
     };
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? reach : 0) / 100) * locMult, price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? reach : 0) / 100) * locMult * distMult, price: sc.price, audience: x.buyers, hype, clash });
+      if (fx && !dist.isNeutral(fx)) {
+        byPlatform[x.id].curve = dist.shapeCurve(byPlatform[x.id].curve, fx.curve);
+        if (fx.netMult !== 1) byPlatform[x.id].netMult = fx.netMult;
+      }
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
@@ -334,6 +357,11 @@ export function createBusiness({ bus, clock, world, projects }) {
     state,
     charge,
     release,
+    launchNow: (record, plan) => launch(record, plan), // Milestone 26: Early Access full launch
+    setDistribution: (d) => (dist = d),
+    get distribution() {
+      return dist;
+    },
     newGame,
     get credits() {
       return economy.balance('credits');
@@ -358,7 +386,7 @@ export function createBusiness({ bus, clock, world, projects }) {
     unreleased: () => games().filter((r) => !r.release && !r.cert),
     certifying: () => games().filter((r) => r.cert),
     released,
-    statusOf: (record) => (record.cert ? 'Certifying' : !record.release ? 'Not released' : statusOn(Math.max(0, record.sales.days - 1), SALES_BALANCE, firstCurve(record))),
+    statusOf: (record) => (record.cert ? 'Certifying' : record.ea && !record.release ? 'Early Access' : !record.release ? 'Not released' : statusOn(Math.max(0, record.sales.days - 1), SALES_BALANCE, firstCurve(record))),
 
     // Ledger by game month (month 1 = days 0–27): { month, year, lines, byCategory, income, costs, net, endBalance }.
     months(daysPerMonth = clock.daysPerMonth) {

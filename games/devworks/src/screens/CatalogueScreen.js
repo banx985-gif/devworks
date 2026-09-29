@@ -59,7 +59,7 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
       const tw = r.x + r.w - 20 - tx;
       text(ctx, g.title, tx, r.y + 24, { size: S.heading, bold: true, maxWidth: tw });
       const status = business.statusOf(rec);
-      const chip = { Selling: C.good, 'Long tail': C.progress, 'Not released': C.warn, Certifying: C.purple }[status];
+      const chip = { Selling: C.good, 'Long tail': C.progress, 'Not released': C.warn, Certifying: C.purple, 'Early Access': C.purple }[status];
       ctx.font = `bold ${S.small}px ${THEME.family}`;
       const chipW = ctx.measureText(status).width + 36;
       ctx.fillStyle = chip;
@@ -84,6 +84,11 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
         // Milestone 8: in certification until its launch day.
         text(ctx, `In certification: launches ${dateLabel(rec.cert.launchDay)}`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
         text(ctx, `${rec.cert.plan.platforms.map((x) => x.name).join(', ')}`, tx, r.y + 204, { size: S.small, color: C.textMuted, maxWidth: tw });
+      } else if (rec.ea) {
+        // Milestone 26: in Early Access until its full launch.
+        text(ctx, `Early Access · month ${rec.ea.months} · ${g.bugs} bug${g.bugs === 1 ? '' : 's'} left`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
+        text(ctx, `${rec.ea.sales.copies.toLocaleString('en-GB')} early copies · ${rec.ea.sales.revenue.toLocaleString('en-GB')} Credits`, tx, r.y + 204, { size: S.small, color: C.textMuted, maxWidth: tw });
+        drawButton(ctx, releaseRect(r), 'Launch');
       } else {
         text(ctx, `Finished, ${g.bugs} bug${g.bugs === 1 ? '' : 's'} left`, tx, r.y + 160, { size: S.body, color: C.textMuted, maxWidth: tw });
         drawButton(ctx, releaseRect(r), 'Release');

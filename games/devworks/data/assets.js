@@ -42,6 +42,8 @@ export const ASSETS = {
   ...Object.fromEntries([art('ui', 'dev_ui_26'), art('ui', 'dev_ui_27'), art('consoles', HARDWARE.prototypeArt), art('events', HARDWARE.firstPrototypeEvent)]),
   // Milestone 24: the console pictures, dev kit / manufacturing icons, the launch moment and the defect smoke.
   ...Object.fromEntries([art('consoles', 'console_visual_01'), art('consoles', 'console_visual_02'), art('ui', 'dev_ui_28'), art('ui', 'dev_ui_29'), art('events', 'dev_event_11'), art('vfx', 'dev_vfx_10'), art('vfx', 'dev_vfx_11')]),
+  // Milestone 26: the distribution icon.
+  ...Object.fromEntries([art('business', 'business_ui_13')]),
   // Milestone 25: the later generations and revisions (the PROJECT X picture stays a secret).
   ...Object.fromEntries(['console_visual_03', 'console_visual_04', 'console_visual_05', 'console_visual_06'].map((id) => art('consoles', id))),
   // Bottom bar icons, and Release (Create's "Current project").
