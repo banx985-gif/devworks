@@ -53,7 +53,7 @@ import { DISTRIBUTION } from '../../data/distribution.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, distribution = null, fullLaunch = null, setStorefront = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, distribution = null, fullLaunch = null, setStorefront = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -90,6 +90,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           { id: 'awards', label: 'Awards', sub: 'C01–C10, your trophies and last year’s results', icon: 'award_trophy_01', onTap: () => openScreen('awards') },
           { id: 'rivals', label: 'Rivals', sub: 'The other studios and their games', icon: 'rival_logo_r01', accent: C.progress, onTap: () => openScreen('rivals') },
           { id: 'rankings', label: 'Rankings', sub: 'Studios by awards and sales', icon: 'dev_ui_04', accent: C.purple, onTap: () => openScreen('rankings') },
+          ...(rumours ? [{ id: 'rumours', label: 'Rumour Archive', sub: rumours(), icon: 'dev_ui_29', accent: C.purple, onTap: () => openScreen('rumours') }] : []), // Milestone 28
         ] }],
       }));
       continue;

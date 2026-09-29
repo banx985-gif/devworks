@@ -106,6 +106,9 @@ import { HARDWARE } from '../data/hardware.js';
 import { createConsoles } from './systems/consoles.js';
 import { createDistribution } from './systems/distribution.js'; // Milestone 26
 import { createStudioEvents } from './systems/studioEvents.js'; // Milestone 27
+import { createSecrets } from './systems/secrets.js'; // Milestone 28
+import { SYNTHETIC_SECRETS } from '../data/secrets.js';
+import { createRumourScreen } from './screens/RumourScreen.js';
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
 import { createConsoleScreen } from './screens/ConsoleScreen.js';
@@ -161,7 +164,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -212,6 +215,10 @@ const consoles = createConsoles({ bus, clock, world, business, projects, hardwar
 const distribution = createDistribution({ bus, clock, world, business, projects, consoles: () => consoles }); // Milestone 26 (registers itself with the business)
 // Milestone 27: events, milestone moments, the Inbox and toasts (one blocking pop-up at a time).
 const studioEvents = createStudioEvents({ bus, clock, world, business, projects, research, sponsors: () => sponsors, consoles: () => consoles, hardware: () => hardware, seed: () => business.marketing.seed });
+// Milestone 28: the secret engine. Only synthetic test rules, and only with ?debug=1 (the real 50 are Milestone 29);
+// the account half (secrets found in any run, prestige tokens) has its own save record.
+const DEBUG_SECRETS = new URLSearchParams(window.location.search).has('debug');
+const secrets = createSecrets({ bus, clock, world, business, projects, rules: DEBUG_SECRETS ? SYNTHETIC_SECRETS : [], profile: () => profile, awards: () => awards, combos: () => combos, consoles: () => consoles, studioEvents: () => studioEvents, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.secretsAccountKey, data).catch((e) => console.error('[DEVWORKS] secrets account save failed', e)) });
 // Milestone 27: IronPeak's obligation — an IronPeak part in a hardware project started during its deal.
 bus.on('hardware:start', ({ job }) => {
   if (Object.values(job.data.parts ?? {}).some((id) => IRONPEAK.includes(id))) sponsors.signal('ironPeakPart');
@@ -363,6 +370,7 @@ const menus = createStudioMenus({
   today: () => clock.totalDays,
   debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
   distribution: () => distribution, // Milestone 26
+  rumours: () => { const r = secrets.rumours(); return r.length ? `${r.filter((x) => x.stage >= 4).length} found · ${r.filter((x) => x.stage < 4).length} rumours` : 'Whispers about secrets'; }, // Milestone 28
   fullLaunch: (number) => {
     sheet.close();
     const r = distribution.fullLaunch(number);
@@ -593,7 +601,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -610,6 +618,7 @@ async function prepareSaves() {
   accountStore = adapter;
   try {
     combos.loadAccount(await adapter.get(SAVE.accountKey)); // Milestone 15: combos found in any slot
+    secrets.loadAccount(await adapter.get(SAVE.secretsAccountKey)); // Milestone 28: secrets found in any run
   } catch (err) {
     console.error('[DEVWORKS] account record unreadable', err);
   }
@@ -683,6 +692,7 @@ async function playSlot(i) {
   consoles.load(data.consoles ?? null); // Milestone 24
   distribution.load(data.distribution ?? null); // Milestone 26
   studioEvents.load(data.studioEvents ?? null); // Milestone 27
+  secrets.load(data.secrets ?? null); // Milestone 28
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -716,6 +726,7 @@ async function startStudio(i, setup) {
   consoles.newGame(); // Milestone 24
   distribution.newGame(); // Milestone 26
   studioEvents.newGame(); // Milestone 27
+  secrets.newGame(); // Milestone 28
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -1264,6 +1275,15 @@ menus.register('inbox', () => {
     ],
   };
 });
+// Milestone 28: the Rumour Archive and (debug) the why-false inspector.
+const rumourScreen = createRumourScreen({ layout, assets, topBar: subTopBar, secrets, onWhy: DEBUG_SECRETS ? (id) => openMenu('secretWhy', id) : null });
+menus.register('secretWhy', (id) => {
+  const w = secrets.why(id);
+  if (!w) return null;
+  return { title: `Why not? ${w.name}`, subtitle: `${w.ok ? 'All conditions hold' : `${w.failing.length} failing`} · clue stage ${w.stage} · checked on ${w.triggers.join(', ')}${w.eased ? ' · eased' : ''}`, art: 'dev_ui_29', accent: COL.progress, sections: [{ lines: w.lines.map((l) => ({ text: `${l.ok ? '✓' : '✗'} ${l.text}`, color: l.ok ? COL.good : COL.bad })) }] };
+});
+bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: 'See Compete → Rumour Archive.' }));
+bus.on('secret:clue', ({ rule, stage }) => studioEvents.note({ title: 'A new rumour', body: rule.clueStages?.[stage - 1]?.text ?? '', icon: 'dev_ui_29' }));
 // Milestone 26: Early Access banners.
 bus.on('ea:started', ({ record }) => {
   showBeat({ title: `${record.result.title} is in Early Access`, body: 'Players buy it early and report bugs. Full launch from Create when it is ready.' });
@@ -1701,7 +1721,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1732,6 +1752,7 @@ router
   .register('acquisitions', acquisitionsScreen)
   .register('hardware', hardwareScreen)
   .register('consoles', consoleScreen)
+  .register('rumours', rumourScreen) // Milestone 28
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 
