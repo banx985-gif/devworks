@@ -15,7 +15,9 @@ export const HW_SLOTS = [
 // the secrets), unit cost (Credits to make one console's part; manufacturing is Milestone 24) and what it brings, each
 // 0–100: perf (speed), rel (reliability), dev (how easy games are to make for it), online, use (usability /
 // portability), appeal (what players think of it on the box).
-const P = (id, name, tier, cost, perf, rel, dev, online, use, appeal, line) => ({ id, slot: id.slice(0, 3), name, tier, cost, perf, rel, dev, online, use, appeal, line, art: `hardware_${id.toLowerCase()}` });
+const P = (id, name, tier, cost, perf, rel, dev, online, use, appeal, line) => ({ id, slot: id.slice(0, 3), name, tier, cost, perf, rel, dev, online, use, appeal, line, art: `hardware_${id.toLowerCase()}`, ...(IRONPEAK.includes(id) ? { ironPeak: true } : {}) });
+// Milestone 27: the parts made by the sponsor IronPeak Hardware (SPN06: use one in a hardware project during its deal).
+export const IRONPEAK = ['CPU03', 'GPU03', 'MEM03', 'STO03'];
 export const COMPONENTS = [
   P('CPU01', 'Budget Core', 1, 30, 25, 85, 70, 0, 50, 20, 'Cheap and dependable; slow.'),
   P('CPU02', 'Balanced Core', 2, 55, 45, 80, 75, 0, 50, 40, 'A sensible all-rounder.'),

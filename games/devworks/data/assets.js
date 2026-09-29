@@ -42,6 +42,9 @@ export const ASSETS = {
   ...Object.fromEntries([art('ui', 'dev_ui_26'), art('ui', 'dev_ui_27'), art('consoles', HARDWARE.prototypeArt), art('events', HARDWARE.firstPrototypeEvent)]),
   // Milestone 24: the console pictures, dev kit / manufacturing icons, the launch moment and the defect smoke.
   ...Object.fromEntries([art('consoles', 'console_visual_01'), art('consoles', 'console_visual_02'), art('ui', 'dev_ui_28'), art('ui', 'dev_ui_29'), art('events', 'dev_event_11'), art('vfx', 'dev_vfx_10'), art('vfx', 'dev_vfx_11')]),
+  // Milestone 27: the 12 milestone moments' pictures and the event icons.
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => art('events', `dev_event_${String(i + 1).padStart(2, '0')}`))),
+  ...Object.fromEntries([art('ui', 'dev_ui_02'), art('ui', 'dev_ui_05'), art('ui', 'dev_ui_07'), art('ui', 'dev_ui_26'), art('ui', 'dev_ui_29'), art('business', 'business_ui_05'), art('platforms', 'platform_device_03')]),
   // Milestone 26: the distribution icon.
   ...Object.fromEntries([art('business', 'business_ui_13')]),
   // Milestone 25: the later generations and revisions (the PROJECT X picture stays a secret).

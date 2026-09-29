@@ -13,15 +13,15 @@
 // At the deal's last month end: met → the completion bonus (2 months of stipend) and the relationship moves up a tier
 // (Partner → Preferred → Major → Strategic; a higher tier pays a bigger stipend) and it offers to renew at once; not
 // met → no bonus, the tier stays, and it waits 6 months before offering again. Never a lock.
-// Sponsors whose obligation needs a later system (IronPeak: own hardware; BOTWORKS: its demo contract) are never offered
-// yet.
+// Sponsors whose obligation needs another system (IronPeak: the Hardware Prototype Lab; BOTWORKS: the crossover demo
+// event, Milestone 27) are offered only when the game says it is there: needs(name) → true (default: never).
 //
 // Events: 'sponsor:offered', 'sponsor:signed', 'sponsor:progress' { deal }, 'sponsor:ended' { deal, met, bonus, tier }.
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 import { SPONSORS, sponsorById, SPONSOR_TIERS, SPONSOR_BALANCE as S } from '../../data/sponsors.js';
 import { FAME } from '../../data/balance.js';
 
-export function createSponsors({ bus, clock, world, business }) {
+export function createSponsors({ bus, clock, world, business, needs = () => false }) {
   const today = () => clock.totalDays;
   const month = () => clock.daysPerMonth;
   let deals = []; // { id, startDay, endDay, count, monthsChecked, monthsPassed, lastCheckDay, tier }
@@ -43,7 +43,7 @@ export function createSponsors({ bus, clock, world, business }) {
 
   const offerable = (id, day = today()) => {
     const d = sponsorById(id);
-    return !!d && !d.later && !deals.some((x) => x.id === id) && !offers.some((o) => o.id === id) && (cooldown[id] ?? 0) <= day;
+    return !!d && !d.later && (!d.needs || needs(d.needs)) && !deals.some((x) => x.id === id) && !offers.some((o) => o.id === id) && (cooldown[id] ?? 0) <= day;
   };
   function refreshOffers() {
     const day = today();

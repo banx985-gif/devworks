@@ -105,6 +105,9 @@ import { createHardwareScreen } from './screens/HardwareScreen.js';
 import { HARDWARE } from '../data/hardware.js';
 import { createConsoles } from './systems/consoles.js';
 import { createDistribution } from './systems/distribution.js'; // Milestone 26
+import { createStudioEvents } from './systems/studioEvents.js'; // Milestone 27
+import { EVENT_RULES } from '../data/events.js';
+import { IRONPEAK } from '../data/hardware.js';
 import { createConsoleScreen } from './screens/ConsoleScreen.js';
 import { CONSOLE } from '../data/consoles.js';
 import { createLicensingScreen, createPublishingOfficeScreen, createAcquisitionsScreen } from './screens/GlobalScreens.js';
@@ -192,7 +195,7 @@ let hardware = null; // Milestone 23 (made below)
 const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy: engineBusy }); // Milestone 13
 const training = createTraining({ bus, clock, world, business, projects, research, recruitment, extraBusy: engineBusy });
 engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio', extraBusy: (id) => (contracts?.jobOf(id) ? 'On a contract' : null) });
-const sponsors = createSponsors({ bus, clock, world, business }); // Milestone 18
+const sponsors = createSponsors({ bus, clock, world, business, needs: (n) => (n === 'hardwareLab' ? !!world.stationById('F28') : n === 'botworksEvents') }); // Milestone 18 (Milestone 27: IronPeak and BOTWORKS)
 world.addEffectSource((key) => sponsors.effect(key));
 // Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
 const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).filter((p) => !p.own).map((p) => p.id) }); // Milestone 24: not on your console
@@ -207,6 +210,12 @@ const lanes = () => stageById(world.stage).lanes;
 hardware = createHardware({ bus, clock, world, business, research, studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
 const consoles = createConsoles({ bus, clock, world, business, projects, hardware, engines: () => engines, studioName: () => profile.name || 'Studio', seed: () => business.marketing.seed }); // Milestone 24
 const distribution = createDistribution({ bus, clock, world, business, projects, consoles: () => consoles }); // Milestone 26 (registers itself with the business)
+// Milestone 27: events, milestone moments, the Inbox and toasts (one blocking pop-up at a time).
+const studioEvents = createStudioEvents({ bus, clock, world, business, projects, research, sponsors: () => sponsors, consoles: () => consoles, hardware: () => hardware, seed: () => business.marketing.seed });
+// Milestone 27: IronPeak's obligation — an IronPeak part in a hardware project started during its deal.
+bus.on('hardware:start', ({ job }) => {
+  if (Object.values(job.data.parts ?? {}).some((id) => IRONPEAK.includes(id))) sponsors.signal('ironPeakPart');
+});
 const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
 let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
@@ -244,6 +253,7 @@ const loop = new FixedStepLoop({
     router.update(dt);
     dialog.update(dt);
     sheet.update(dt);
+    if (started) eventFlow.update(dt); // Milestone 27
     feedback.height = renderer.height;
     feedback.update(dt);
     // Floating +Credits only over the studio with nothing on top; otherwise they wait (and old ones are dropped).
@@ -295,6 +305,14 @@ const feedback = new MajorFeedback({
     clock.pause();
   },
 });
+// Milestone 27: every big moment is also kept in the Inbox.
+{
+  const show = feedback.show.bind(feedback);
+  feedback.show = (m) => {
+    if (!m.noInbox) studioEvents?.note({ title: m.title, body: m.subtitle ?? '', level: 'major', read: true });
+    return show(m);
+  };
+}
 // After a big moment: back to the speed from before it — unless another one is showing now (they queue).
 function afterFeedback() {
   if (feedback.active) return;
@@ -365,7 +383,7 @@ const menus = createStudioMenus({
   buyFacility: (id) => {
     const r = shop.buy(id);
     sheet.close();
-    if (r.ok) beat = { entry: { title: `${r.station.def.name} built!`, body: 'Drag it where you want it. Done when finished.' }, age: 0 };
+    if (r.ok) showBeat({ title: `${r.station.def.name} built!`, body: 'Drag it where you want it. Done when finished.' });
     else showTip(r.why);
   },
   sellFacility: (id) => {
@@ -519,7 +537,7 @@ const topBarOptions = {
   onLockedSpeed: (speed) => showTip(business.speedLockReason(speed)),
   onInbox: () => openMenu('inbox'),
   onHelp: () => openMenu('help'),
-  inboxCount: () => badgeFor('inbox') ?? 0,
+  inboxCount: () => (debugBadges ? 1 : studioEvents.unread()), // Milestone 27: unread messages
 };
 const topBar = createTopBar({ ...topBarOptions, home: true });
 const subTopBar = createTopBar({ ...topBarOptions, home: false, back: { label: '‹ Back', onTap: () => router.back() } });
@@ -575,7 +593,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -664,6 +682,7 @@ async function playSlot(i) {
   hardware.load(data.hardware ?? null); // Milestone 23
   consoles.load(data.consoles ?? null); // Milestone 24
   distribution.load(data.distribution ?? null); // Milestone 26
+  studioEvents.load(data.studioEvents ?? null); // Milestone 27
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
@@ -696,6 +715,7 @@ async function startStudio(i, setup) {
   hardware.newGame(); // Milestone 23
   consoles.newGame(); // Milestone 24
   distribution.newGame(); // Milestone 26
+  studioEvents.newGame(); // Milestone 27
   profile.create(setup);
   slot = slots.slot(i);
   slotIndex = i;
@@ -865,10 +885,16 @@ const devPops = createDevPops({
 // A milestone done (medium feedback, style guide §7): a short banner under the top bar that goes by itself, and a
 // sparkle over the Starter Desks. The last one is "Game finished!" (big), so it has no banner.
 let beat = null; // { entry: { title, body }, age }
+// A medium banner over the studio; it is also kept in the Inbox (Milestone 27).
+function showBeat(entry) {
+  beat = { entry, age: 0 };
+  studioEvents.note({ title: entry.title, body: entry.body ?? '', read: true });
+  return beat;
+}
 bus.on('project:phase', ({ job, phase }) => {
   const next = projects.phases[job.phaseIndex + 1];
   if (!next) return;
-  beat = { entry: { title: `${phase.name} done!`, body: `${job.name} · next: ${next.name}` }, age: 0 };
+  showBeat({ title: `${phase.name} done!`, body: `${job.name} · next: ${next.name}` });
   if (router.currentName !== 'studio') return;
   const at = studio.popPoint(world.stationById(makerId));
   vfx.sparks('world', at.x, at.y, { count: 14, speedMin: 160, speedMax: 380, spread: 3.2 });
@@ -878,7 +904,7 @@ bus.on('project:phase', ({ job, phase }) => {
 bus.on('elements:unlocked', ({ ids }) => {
   const names = ids.map((id) => elementById(id)?.name).filter(Boolean);
   const body = names.length > 4 ? `${names.slice(0, 4).join(', ')} and ${names.length - 4} more` : names.join(', ');
-  beat = { entry: { title: names.length === 1 ? 'New game element!' : 'New game elements!', body }, age: 0 };
+  showBeat({ title: names.length === 1 ? 'New game element!' : 'New game elements!', body });
   debug.log(`elements opened: ${ids.join(' ')}`);
 });
 function drawBeat(ctx) {
@@ -959,7 +985,7 @@ bus.on('project:complete', ({ record }) => {
 // Stations that open with the rank (Milestone 9: the Marketing Wall at Rank D) are placed by themselves.
 function checkStations() {
   for (const st of openStations(world, business.reputation.highestRankIndex)) {
-    beat = { entry: { title: `New station: ${st.def.name}!`, body: 'Tap it to plan your marketing.' }, age: 0 };
+    showBeat({ title: `New station: ${st.def.name}!`, body: 'Tap it to plan your marketing.' });
     debug.log(`station opened: ${st.id}`);
   }
 }
@@ -967,7 +993,7 @@ bus.on('reputation:rankUp', () => started && checkStations());
 // A franchise reaches a higher status (Milestone 10): a short banner (Legendary gets the big moment).
 bus.on('franchise:status', ({ ip, status }) => {
   if (status.id === 'legendary') return;
-  beat = { entry: { title: `${ip.name} is now ${status.name}!`, body: 'Your franchise is growing. See it in Catalogue → Franchises.' }, age: 0 };
+  showBeat({ title: `${ip.name} is now ${status.name}!`, body: 'Your franchise is growing. See it in Catalogue → Franchises.' });
 });
 bus.on('franchise:legendary', ({ ip }) => {
   debug.log(`legendary franchise: ${ip.name}`);
@@ -986,7 +1012,7 @@ function drawCrown(ctx, t) {
 bus.on('research:complete', ({ node, fired }) => {
   elements.check();
   const names = (fired ?? []).map((a) => (a.type === 'element' ? elementName(a.id)?.name : facilityById(a.id)?.name)).filter(Boolean);
-  beat = { entry: { title: `Research done: ${node.name}`, body: names.length ? `Opens ${names.join(', ')}` : 'The studio knows more now.' }, age: 0 };
+  showBeat({ title: `Research done: ${node.name}`, body: names.length ? `Opens ${names.join(', ')}` : 'The studio knows more now.' });
   debug.log(`research done: ${node.id}`);
 });
 // A combo found in a finished game (Milestone 15): a short banner (RP the first time in this run).
@@ -999,24 +1025,24 @@ bus.on('combo:found', ({ combo, firstInRun, rp }) => {
 });
 // Publisher and contract banners (Milestone 17).
 bus.on('deal:signed', ({ deal }) => {
-  beat = { entry: { title: `Deal signed: ${publishers.publisherName(deal.publisher)}`, body: `+${deal.advance.toLocaleString('en-GB')} Credits advance · pick it on your next New Game` }, age: 0 };
+  showBeat({ title: `Deal signed: ${publishers.publisherName(deal.publisher)}`, body: `+${deal.advance.toLocaleString('en-GB')} Credits advance · pick it on your next New Game` });
 });
 bus.on('deal:missed', ({ deal, milestone, penalty }) => {
-  beat = { entry: { title: `Missed milestone: ${milestone.name}`, body: `${publishers.publisherName(deal.publisher)} charges ${penalty.toLocaleString('en-GB')} Credits` }, age: 0 };
+  showBeat({ title: `Missed milestone: ${milestone.name}`, body: `${publishers.publisherName(deal.publisher)} charges ${penalty.toLocaleString('en-GB')} Credits` });
 });
 bus.on('deal:lapsed', ({ deal, repaid }) => {
-  beat = { entry: { title: `Deal lapsed: ${publishers.publisherName(deal.publisher)}`, body: `No game started in time: ${repaid.toLocaleString('en-GB')} Credits paid back` }, age: 0 };
+  showBeat({ title: `Deal lapsed: ${publishers.publisherName(deal.publisher)}`, body: `No game started in time: ${repaid.toLocaleString('en-GB')} Credits paid back` });
 });
 bus.on('contract:success', ({ contract }) => {
-  beat = { entry: { title: `Contract done for ${contract.client}`, body: `+${contract.pay.toLocaleString('en-GB')} Credits` }, age: 0 };
+  showBeat({ title: `Contract done for ${contract.client}`, body: `+${contract.pay.toLocaleString('en-GB')} Credits` });
 });
 bus.on('contract:failed', ({ contract, reason }) => {
-  beat = { entry: { title: `Contract ${reason === 'cancelled' ? 'dropped' : 'missed'}: ${contract.client}`, body: 'No pay.' }, age: 0 };
+  showBeat({ title: `Contract ${reason === 'cancelled' ? 'dropped' : 'missed'}: ${contract.client}`, body: 'No pay.' });
 });
 // Awards (Milestone 19): a win is a big moment with its trophy, and it hands out the award's extra; a place is a banner.
 bus.on('award:result', ({ award, result }) => {
   if (result.winner === 'player' || !result.playerPlace) return;
-  beat = { entry: { title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` }, age: 0 };
+  showBeat({ title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` });
 });
 bus.on('award:won', ({ award, result }) => {
   if (award.extra === 'rp') research.system.addRp(award.rp, `Award: ${award.name}`, clock.totalDays);
@@ -1045,18 +1071,18 @@ bus.on('award:won', ({ award, result }) => {
 });
 // Post-launch banners (Milestone 20).
 bus.on('support:done', ({ job, record, effects }) => {
-  if (!job) return (beat = { entry: { title: `${record.result.title}: support ended`, body: 'Moved on.' }, age: 0 });
+  if (!job) return showBeat({ title: `${record.result.title}: support ended`, body: 'Moved on.' });
   const o = SUPPORT_OPTION_BY_ID(job.option);
   const bits = [effects.bugsFixed ? `${effects.bugsFixed} bugs fixed` : null, effects.playerScore ? `player score +${effects.playerScore}` : null, effects.trust ? `Fan Trust +${Math.round(effects.trust)}` : null, effects.tailPct ? `tail +${effects.tailPct}%` : null, effects.addonRevenue ? `add-on: ${effects.addonRevenue.toLocaleString('en-GB')} Credits over time` : null, effects.port?.ok ? `launches ${clock.shortLabel(effects.port.launchDay)}` : null].filter(Boolean);
-  beat = { entry: { title: `${o.name} done: ${record.result.title}`, body: bits.join(' · ') || 'Done.' }, age: 0 };
+  showBeat({ title: `${o.name} done: ${record.result.title}`, body: bits.join(' · ') || 'Done.' });
 });
 // Hardware (Milestone 23): a banner when a prototype starts; the first prototype is a big moment.
 bus.on('hardware:start', ({ job }) => {
-  beat = { entry: { title: 'Console prototype started', body: job.name }, age: 0 };
+  showBeat({ title: 'Console prototype started', body: job.name });
 });
 bus.on('hardware:prototype', ({ prototype, first }) => {
   const v = prototype.validation;
-  if (!first) return (beat = { entry: { title: `${prototype.name} built`, body: v.passed ? 'It passed validation.' : `Failed: ${v.required.find((c) => !c.ok).why}` }, age: 0 });
+  if (!first) return showBeat({ title: `${prototype.name} built`, body: v.passed ? 'It passed validation.' : `Failed: ${v.required.find((c) => !c.ok).why}` });
   feedback.show({
     title: 'Your first console prototype!',
     subtitle: `${prototype.name} · ${v.passed ? 'passed validation' : `failed validation: ${v.required.find((c) => !c.ok).why}`}. See it in Create → Hardware.`,
@@ -1100,59 +1126,191 @@ bus.on('console:launched', ({ console: c, previous }) => {
   });
 });
 bus.on('console:defects', ({ console: c, cost }) => {
-  beat = { entry: { title: `${c.name}: a wave of faulty consoles`, body: `Repairs ${cost.toLocaleString('en-GB')} Credits · Fan Trust −${CONSOLE.defects.trustHit}` }, age: 0 };
+  showBeat({ title: `${c.name}: a wave of faulty consoles`, body: `Repairs ${cost.toLocaleString('en-GB')} Credits · Fan Trust −${CONSOLE.defects.trustHit}` });
   if (router.currentName === 'studio') {
     const p = studio.screenPointOf(makerId);
     vfx.sprite('screen', CONSOLE.defectVfx, p.x, p.y - 160, { size: 260, life: 1.6, from: 0.4, to: 1, rise: 60, hold: 0.6 });
   }
 });
+// Milestone 27: the event flow. At most one blocking pop-up: a choice event's sheet (the clock waits while it is up) or
+// a milestone moment; the next one only comes when nothing else is up. Toasts show one at a time as banners. The
+// Inbox (top bar) keeps every message; an unanswered choice can be answered there.
+let speedBeforeEvent = null;
+let freeSec = 0; // how long the studio has been free: a pop-up waits EVENT_RULES.graceSec after anything else closes
+function resumeAfterEvent() {
+  if (speedBeforeEvent && !feedback.active) clock.setSpeed(speedBeforeEvent);
+  speedBeforeEvent = null;
+}
+function showPopup(e) {
+  if (e.kind === 'choice') {
+    speedBeforeEvent = clock.paused ? null : clock.speed;
+    clock.pause();
+    openMenu('event', e.data.uid);
+    return;
+  }
+  // A milestone moment with its picture.
+  const ok = feedback.show({
+    title: e.title,
+    subtitle: e.body,
+    accent: COL.gold,
+    noInbox: true,
+    onShow: () => celebrate.confetti('screen', W / 2, renderer.height * 0.72, { count: 36, speed: 850, spreadX: 120 }),
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const k = Math.min(1, t / 0.35);
+      const size = 560 * (0.6 + 0.4 * k);
+      ctx.save();
+      ctx.globalAlpha = k;
+      if (e.art) assets.drawContained(ctx, e.art, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.3 - size / 2, w: size, h: size });
+      ctx.restore();
+    },
+    onAck: () => {
+      studioEvents.done();
+      afterFeedback();
+    },
+  });
+  if (!ok) studioEvents.done();
+}
+const eventFlow = {
+  update(dt) {
+    const E = studioEvents;
+    const cur = E.showing;
+    // A choice sheet closed without an answer: it waits in the Inbox.
+    if (cur?.kind === 'choice' && !(sheet.active && sheet.menu?.eventUid === cur.uid)) {
+      E.dismiss();
+      resumeAfterEvent();
+    }
+    const busy = feedback.active || sheet.active || dialog.active || textPrompt.active || router.currentName !== 'studio' || studio.buildMode;
+    freeSec = busy ? 0 : freeSec + dt;
+    if (!E.showing) {
+      const e = E.pump({ busy: busy || freeSec < EVENT_RULES.graceSec });
+      if (e) showPopup(e);
+    }
+    E.notes.update(dt, { hold: router.currentName !== 'studio' || sheet.active || feedback.active });
+    const t = E.notes.toasts[0];
+    if (t && !beat && !feedback.active) {
+      beat = { entry: { title: t.entry.title, body: `${t.entry.body}${t.more ? ` (+${t.more} more in the Inbox)` : ''}`, icon: t.entry.icon }, age: 0 };
+      E.notes.toasts.shift();
+    }
+  },
+};
+// A choice event's sheet.
+menus.register('event', (uid) => {
+  const v = studioEvents.view(uid);
+  if (!v) return null;
+  const answered = v.open ? null : v.choices[v.choice];
+  return {
+    eventUid: uid,
+    title: v.title,
+    subtitle: v.cls,
+    art: v.icon,
+    accent: COL.progress,
+    sections: [
+      { lines: [v.text, ...(answered ? [{ text: `You chose: ${answered.label}${v.auto ? ' (it went ahead by itself)' : ''}`, color: COL.good }] : [])] },
+      {
+        columns: 1,
+        buttons: v.open
+          ? v.choices.map((c, i) => ({
+              id: `choice${i}`,
+              label: c.label,
+              sub: c.line,
+              accent: COL.progress,
+              onTap: () => {
+                studioEvents.answer(uid, i);
+                sheet.close();
+                resumeAfterEvent();
+              },
+            }))
+          : [],
+      },
+    ],
+  };
+});
+// One message (not a choice).
+menus.register('message', (id) => {
+  const e = studioEvents.notes.get(id);
+  if (!e) return null;
+  return { title: e.title, subtitle: clock.shortLabel?.(e.day) ?? '', art: e.art ?? e.icon ?? 'dev_ui_05', accent: COL.progress, sections: [{ lines: [e.body || ' '] }, { columns: 1, buttons: [{ id: 'back', label: '‹ Inbox', accent: COL.progress, onTap: () => openMenu('inbox') }] }] };
+});
+// The Inbox: newest first, unread marked, choices still waiting first.
+menus.register('inbox', () => {
+  const N = studioEvents.notes;
+  const waiting = N.inbox.filter((e) => e.kind === 'choice' && studioEvents.openChoice(e.data?.uid));
+  const rest = N.inbox.filter((e) => !waiting.includes(e)).slice(0, 40);
+  const row = (e) => {
+    const open = e.kind === 'choice' && studioEvents.openChoice(e.data?.uid);
+    const sub = open ? 'Waiting for your answer' : e.answer ? `You chose: ${e.answer.label}${e.answer.auto ? ' (by itself)' : ''}` : e.body;
+    return {
+      id: `msg${e.id}`,
+      label: `${e.read ? '' : '● '}${e.title}`,
+      sub: `${(sub ?? '').slice(0, 90)}${(sub ?? '').length > 90 ? '…' : ''}`,
+      icon: e.art ?? e.icon ?? 'dev_ui_05',
+      accent: open ? COL.action : e.read ? COL.progress : COL.purple,
+      onTap: () => {
+        N.markRead(e.id);
+        if (e.kind === 'choice') openMenu('event', e.data.uid);
+        else openMenu('message', e.id);
+      },
+    };
+  };
+  return {
+    title: 'Inbox',
+    subtitle: `${N.unread} unread · ${N.inbox.length} message${N.inbox.length === 1 ? '' : 's'}`,
+    accent: COL.progress,
+    sections: [
+      ...(waiting.length ? [{ title: 'Waiting for you', columns: 1, buttons: waiting.map(row) }] : []),
+      { title: 'Messages', columns: 1, buttons: rest.length ? rest.map(row) : [{ id: 'none', label: 'No messages yet', sub: 'News, events and big moments arrive here.', disabled: true }] },
+      ...(N.unread ? [{ columns: 1, buttons: [{ id: 'readAll', label: 'Mark all read', accent: COL.progress, onTap: () => N.markAllRead() }] }] : []),
+    ],
+  };
+});
 // Milestone 26: Early Access banners.
 bus.on('ea:started', ({ record }) => {
-  beat = { entry: { title: `${record.result.title} is in Early Access`, body: 'Players buy it early and report bugs. Full launch from Create when it is ready.' }, age: 0 };
+  showBeat({ title: `${record.result.title} is in Early Access`, body: 'Players buy it early and report bugs. Full launch from Create when it is ready.' });
 });
 bus.on('ea:month', ({ record, fixed, trust }) => {
-  beat = { entry: { title: `Early Access: ${record.result.title}`, body: `${fixed} bug${fixed === 1 ? '' : 's'} fixed from player reports${trust ? ` · fans are impatient: Fan Trust −${trust}` : ''}` }, age: 0 };
+  showBeat({ title: `Early Access: ${record.result.title}`, body: `${fixed} bug${fixed === 1 ? '' : 's'} fixed from player reports${trust ? ` · fans are impatient: Fan Trust −${trust}` : ''}` });
 });
 // Milestone 25: a revision and a retired generation are banners.
 bus.on('console:revised', ({ console: c }) => {
-  beat = { entry: { title: `${consoles.modelName(c)} is on sale`, body: `${CONSOLE.revisions[c.revision.kind].line}` }, age: 0 };
+  showBeat({ title: `${consoles.modelName(c)} is on sale`, body: `${CONSOLE.revisions[c.revision.kind].line}` });
 });
 bus.on('console:retired', ({ console: c }) => {
-  beat = { entry: { title: `${consoles.modelName(c)} retired`, body: `${c.sold.toLocaleString('en-GB')} sold in its life · see Create → Consoles` }, age: 0 };
+  showBeat({ title: `${consoles.modelName(c)} retired`, body: `${c.sold.toLocaleString('en-GB')} sold in its life · see Create → Consoles` });
 });
 bus.on('console:verdict', ({ console: c, verdict }) => {
-  beat = { entry: { title: `${c.name} after a year: ${verdict === 'hit' ? 'a hit!' : verdict === 'flop' ? 'a flop' : 'steady'}`, body: `${c.installBase.toLocaleString('en-GB')} players · see Create → Consoles` }, age: 0 };
+  showBeat({ title: `${c.name} after a year: ${verdict === 'hit' ? 'a hit!' : verdict === 'flop' ? 'a flop' : 'steady'}`, body: `${c.installBase.toLocaleString('en-GB')} players · see Create → Consoles` });
 });
 // Global business banners (Milestone 21).
 bus.on('licence:signed', ({ licence }) => {
-  beat = { entry: { title: `Engine licensed to ${licence.customer}`, body: `${licence.label}: fees every month for a year` }, age: 0 };
+  showBeat({ title: `Engine licensed to ${licence.customer}`, body: `${licence.label}: fees every month for a year` });
 });
 bus.on('external:released', ({ project }) => {
-  beat = { entry: { title: `${project.studio}'s game is out: review ${project.result.review}`, body: `Your share: ${project.result.share.toLocaleString('en-GB')} Credits over the next months` }, age: 0 };
+  showBeat({ title: `${project.studio}'s game is out: review ${project.result.review}`, body: `Your share: ${project.result.share.toLocaleString('en-GB')} Credits over the next months` });
 });
 bus.on('acquisition:offered', ({ target }) => {
-  beat = { entry: { title: `${target.studio} is for sale`, body: 'See Business → Acquisitions.' }, age: 0 };
+  showBeat({ title: `${target.studio} is for sale`, body: 'See Business → Acquisitions.' });
 });
 bus.on('acquisition:done', ({ target }) => {
-  beat = { entry: { title: `You bought ${target.studio}!`, body: target.line }, age: 0 };
+  showBeat({ title: `You bought ${target.studio}!`, body: target.line });
 });
 // Sponsor banners (Milestone 18).
 bus.on('sponsor:signed', ({ deal }) => {
-  beat = { entry: { title: `Sponsor signed: ${sponsorName(deal.id)}`, body: 'A stipend every month for 6 months. See its obligation in Business → Sponsors.' }, age: 0 };
+  showBeat({ title: `Sponsor signed: ${sponsorName(deal.id)}`, body: 'A stipend every month for 6 months. See its obligation in Business → Sponsors.' });
 });
 bus.on('sponsor:ended', ({ deal, met, bonus, tier }) => {
-  beat = { entry: { title: `${sponsorName(deal.id)}: deal ${met ? 'completed' : 'ended'}`, body: met ? `+${bonus.toLocaleString('en-GB')} Credits bonus · now ${tier.name}` : 'Obligation not met: no bonus this time.' }, age: 0 };
+  showBeat({ title: `${sponsorName(deal.id)}: deal ${met ? 'completed' : 'ended'}`, body: met ? `+${bonus.toLocaleString('en-GB')} Credits bonus · now ${tier.name}` : 'Obligation not met: no bonus this time.' });
 });
 // Engine banners (Milestone 16).
 bus.on('engine:start', ({ job }) => {
-  beat = { entry: { title: `Engine project started`, body: job.name }, age: 0 };
+  showBeat({ title: `Engine project started`, body: job.name });
 });
 bus.on('engine:complete', ({ job, version, kind }) => {
-  beat = { entry: { title: version ? `${job.data.name} ${version.label} ready!` : `${job.name} done`, body: version ? 'Pick it on New Game → Engine.' : kind === 'researchPrototype' ? 'Research points gained.' : '' }, age: 0 };
+  showBeat({ title: version ? `${job.data.name} ${version.label} ready!` : `${job.name} done`, body: version ? 'Pick it on New Game → Engine.' : kind === 'researchPrototype' ? 'Research points gained.' : '' });
 });
 // A marketing action starts: a short banner.
 bus.on('marketing:run', ({ action, gain, title }) => {
-  beat = { entry: { title: `${action.name} started`, body: `${title}: +${Math.round(gain)} Hype over ${action.days} days` }, age: 0 };
+  showBeat({ title: `${action.name} started`, body: `${title}: +${Math.round(gain)} Hype over ${action.days} days` });
 });
 
 // Released: the launch rocket takes off through confetti, then the four reviews come in one by one (big feedback:
@@ -1429,17 +1587,17 @@ function confirmLetGo(id) {
 }
 // Short banners for the staff events (Milestone 13).
 bus.on('staff:hired', ({ staff, station }) => {
-  beat = { entry: { title: `${staff.name} joined!`, body: `They're walking in to the ${station?.def.name ?? 'studio'}.` }, age: 0 };
+  showBeat({ title: `${staff.name} joined!`, body: `They're walking in to the ${station?.def.name ?? 'studio'}.` });
 });
 bus.on('staff:letGo', ({ name }) => {
-  beat = { entry: { title: `${name} left the studio`, body: 'Their career record stays in the studio history.' }, age: 0 };
+  showBeat({ title: `${name} left the studio`, body: 'Their career record stays in the studio history.' });
 });
 bus.on('training:complete', ({ staff, course, gains }) => {
   const g = Object.entries(gains).map(([k, v]) => `${STATS.find((x) => x.key === k)?.label ?? k} +${v}`).join(', ');
-  beat = { entry: { title: `${staff.name} finished ${course.name}`, body: g || 'Already at the tier cap' }, age: 0 };
+  showBeat({ title: `${staff.name} finished ${course.name}`, body: g || 'Already at the tier cap' });
 });
 bus.on('mentor:tag', ({ mentor, mentee, trait }) => {
-  beat = { entry: { title: `${mentee.name} learned ${TRAITS[trait]?.name ?? trait}`, body: `From their mentor ${mentor.name}.` }, age: 0 };
+  showBeat({ title: `${mentee.name} learned ${TRAITS[trait]?.name ?? trait}`, body: `From their mentor ${mentor.name}.` });
 });
 const staffDetail = createStaffDetailScreen({
   layout,
@@ -1468,7 +1626,7 @@ function skipYear() {
 }
 // Sent to certification: a short banner with the launch day.
 bus.on('game:certifying', ({ record }) => {
-  beat = { entry: { title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` }, age: 0 };
+  showBeat({ title: 'Sent to certification', body: `${record.result.title} launches ${clock.shortLabel(record.cert.launchDay)}` });
 });
 const catalogueScreen = createCatalogueScreen({ dateLabel: (d) => clock.shortLabel(d), layout, assets, business, projects, topBar: subTopBar, openRelease: (n) => openMenu('release', n), openArchive: () => router.go('archive'), openDiscoveries: () => router.go('discoveries'), openSupport: (n) => openMenu('support', n) });
 const engineScreen = createEngineScreen({ layout, assets, engines, topBar: subTopBar, textPrompt, openProject: (kind) => openMenu('engineStart', kind), dateLabel: (d) => clock.shortLabel(d) }); // Milestone 16
@@ -1543,7 +1701,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
