@@ -1060,10 +1060,12 @@ bus.on('hardware:prototype', ({ prototype, first }) => {
   });
 });
 // Consoles (Milestone 24): the launch moment, defect waves (warning smoke over the studio), the verdict.
-bus.on('console:launched', ({ console: c }) => {
+bus.on('console:launched', ({ console: c, previous }) => {
   feedback.show({
     title: `${c.name} launches!`,
-    subtitle: `Your ${CONSOLE.forms[c.form].name.toLowerCase()} is on sale for ${c.price} Credits. Release your games on it; third-party studios follow when it sells.`,
+    subtitle: previous
+      ? `Generation ${c.gen}: your ${CONSOLE.forms[c.form].name.toLowerCase()} is on sale for ${c.price} Credits. ${previous.name} starts declining; its players and history stay in the Console Portfolio.`
+      : `Your ${CONSOLE.forms[c.form].name.toLowerCase()} is on sale for ${c.price} Credits. Release your games on it; third-party studios follow when it sells.`,
     accent: COL.gold,
     onShow: () => {
       const H = renderer.height;
@@ -1075,7 +1077,7 @@ bus.on('console:launched', ({ console: c }) => {
       const size = 560 * (0.6 + 0.4 * s);
       ctx.save();
       ctx.globalAlpha = s;
-      assets.drawContained(ctx, CONSOLE.launchArt, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.28 - size / 2, w: size, h: size });
+      assets.drawContained(ctx, previous ? c.art : CONSOLE.launchArt, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.28 - size / 2, w: size, h: size }); // Gen 2+ show the new console
       const v = 220 * (0.5 + 0.5 * s); // the launch sparkle under the picture
       assets.drawContained(ctx, CONSOLE.launchVfx, { x: W / 2 - v / 2, y: sr.y + sr.h * 0.28 + size / 2 + 10, w: v, h: v });
       ctx.restore();
@@ -1089,6 +1091,13 @@ bus.on('console:defects', ({ console: c, cost }) => {
     const p = studio.screenPointOf(makerId);
     vfx.sprite('screen', CONSOLE.defectVfx, p.x, p.y - 160, { size: 260, life: 1.6, from: 0.4, to: 1, rise: 60, hold: 0.6 });
   }
+});
+// Milestone 25: a revision and a retired generation are banners.
+bus.on('console:revised', ({ console: c }) => {
+  beat = { entry: { title: `${consoles.modelName(c)} is on sale`, body: `${CONSOLE.revisions[c.revision.kind].line}` }, age: 0 };
+});
+bus.on('console:retired', ({ console: c }) => {
+  beat = { entry: { title: `${consoles.modelName(c)} retired`, body: `${c.sold.toLocaleString('en-GB')} sold in its life · see Create → Consoles` }, age: 0 };
 });
 bus.on('console:verdict', ({ console: c, verdict }) => {
   beat = { entry: { title: `${c.name} after a year: ${verdict === 'hit' ? 'a hit!' : verdict === 'flop' ? 'a flop' : 'steady'}`, body: `${c.installBase.toLocaleString('en-GB')} players · see Create → Consoles` }, age: 0 };
@@ -1477,7 +1486,7 @@ const hardwareScreen = createHardwareScreen({
   },
 });
 // Milestone 24: the Console Portfolio.
-const consoleScreen = createConsoleScreen({ layout, assets, topBar: subTopBar, consoles, projects, dateLabel: (d) => clock.shortLabel(d), onLaunch: () => { const r = consoles.launch(); if (!r.ok) showTip(r.why); }, onRecover: (id) => { const r = consoles.recover(id); if (!r.ok) showTip(r.why); } });
+const consoleScreen = createConsoleScreen({ layout, assets, topBar: subTopBar, consoles, projects, dateLabel: (d) => clock.shortLabel(d), onLaunch: () => { const r = consoles.launch(); if (!r.ok) showTip(r.why); }, onRecover: (id) => { const r = consoles.recover(id); if (!r.ok) showTip(r.why); }, onRevise: (kind) => { const r = consoles.revise(kind); if (!r.ok) showTip(r.why); }, onDesignNext: (c) => { hardware.designNext(c.family, c.parts); router.go('hardware'); } });
 // Milestone 21: the global business screens.
 const licensingScreen = createLicensingScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = global.signLicence(id); if (!r.ok) showTip(r.why); }, onDecline: (id) => global.declineLicence(id) });
 const publishingOfficeScreen = createPublishingOfficeScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onChoose: (id, choice) => { const r = global.fund(id, choice); if (!r.ok) showTip(r.why); } });

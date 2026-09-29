@@ -9,9 +9,13 @@
 // unit cost, a CPU / GPU that match) — plain reasons when one fails — and capability checks (3D, online, streaming
 // worlds, a digital store) that say what games it could run. Manufacturing and sales are Milestone 24.
 //
+// Milestone 25: a later generation starts from the console on sale (designNext: its family and parts, to reuse or
+// upgrade); each part already built into an earlier prototype takes CONSOLE.generations.reuseWorkPct off the work.
+//
 // Events: 'hardware:start' { job }, 'hardware:prototype' { prototype, first }.
 import { ProjectSystem } from '../../../../core/ProjectSystem.js';
 import { HW_SLOTS, COMPONENTS, componentById, componentsOf, HW_RATINGS, HARDWARE as H } from '../../data/hardware.js';
+import { CONSOLE } from '../../data/consoles.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const r0 = (x) => Math.round(clamp(x, 0, 100));
@@ -61,7 +65,9 @@ export function createHardware({ bus, clock, world, business, research, studioNa
   let nextId = 1;
   let draft = null; // { family, parts }
 
-  const workOf = (parts) => H.work.base + H.work.perTier * HW_SLOTS.reduce((t, s) => t + (componentById(parts[s.id])?.tier ?? 0), 0);
+  // Parts already built into an earlier prototype (reused by a later generation) need less work.
+  const reusedOf = (parts) => HW_SLOTS.filter((s) => prototypes.some((p) => p.parts[s.id] === parts[s.id])).length;
+  const workOf = (parts) => Math.round((H.work.base + H.work.perTier * HW_SLOTS.reduce((t, s) => t + (componentById(parts[s.id])?.tier ?? 0), 0)) * (1 - (CONSOLE.generations.reuseWorkPct * reusedOf(parts)) / 100));
   const costPerDayOf = (parts) => H.costPerDay.base + H.costPerDay.perTier * HW_SLOTS.reduce((t, s) => t + (componentById(parts[s.id])?.tier ?? 0), 0);
 
   const system = new ProjectSystem({
@@ -109,6 +115,12 @@ export function createHardware({ bus, clock, world, business, research, studioNa
     ensureDraft().parts[slot] = id;
     return true;
   }
+  // The next generation's design starts from a console's family and parts (keep, or upgrade slot by slot).
+  function designNext(family, parts) {
+    draft = { family, parts: { ...parts } };
+    ensureDraft();
+    return draft;
+  }
   function rename(name) {
     const n = `${name ?? ''}`.trim().slice(0, 24);
     if (!n) return false;
@@ -118,7 +130,7 @@ export function createHardware({ bus, clock, world, business, research, studioNa
   const preview = () => {
     const d = ensureDraft();
     const ratings = ratingsFor(d.parts);
-    return ratings ? { ...d, ratings, validation: validate(d.parts, ratings), work: workOf(d.parts), costPerDay: costPerDayOf(d.parts) } : { ...d, ratings: null, validation: null };
+    return ratings ? { ...d, ratings, validation: validate(d.parts, ratings), work: workOf(d.parts), reused: reusedOf(d.parts), costPerDay: costPerDayOf(d.parts) } : { ...d, ratings: null, validation: null };
   };
 
   // --- building ----------------------------------------------------------------------------------------------------
@@ -174,6 +186,8 @@ export function createHardware({ bus, clock, world, business, research, studioNa
     },
     pick,
     rename,
+    designNext,
+    reusedOf,
     preview,
     startWhy,
     start,

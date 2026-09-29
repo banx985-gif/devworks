@@ -48,7 +48,7 @@ export function createHardwareScreen({ layout, assets, topBar, hardware, dateLab
                     logo: 'dev_ui_27',
                     title: `Ratings · ${fmt(pv.ratings.unitCost)} Credits a console to make`,
                     highlight: true,
-                    lines: [...ratingLines(pv.ratings), ...checkLines(pv.validation), { text: `Prototype: ${fmt(pv.work)} work, ${fmt(pv.costPerDay)} Credits a day`, color: C.textMuted }],
+                    lines: [...ratingLines(pv.ratings), ...checkLines(pv.validation), { text: `Prototype: ${fmt(pv.work)} work${pv.reused ? ` (${pv.reused} part${pv.reused === 1 ? '' : 's'} built before: less work)` : ''}, ${fmt(pv.costPerDay)} Credits a day`, color: C.textMuted }],
                     buttons: [{ id: 'build', label: act ? 'Building one already' : 'Build Prototype', accent: C.good, disabled: !!act, onTap: () => openBuild() }],
                   },
                 ]
@@ -71,7 +71,7 @@ export function createHardwareScreen({ layout, assets, topBar, hardware, dateLab
       return {
         title: 'Hardware',
         icon: 'dev_ui_26',
-        subtitle: `${why ? `${why}. ` : ''}Design your own console: one part for each of the six slots, then build a prototype at the Hardware Prototype Lab and see how it validates. Optional — a studio never has to make hardware. Selling consoles comes later.`,
+        subtitle: `${why ? `${why}. ` : ''}Design your own console: one part for each of the six slots, then build a prototype at the Hardware Prototype Lab and see how it validates. Optional — a studio never has to make hardware. A validated prototype launches as a console (up to 3 generations).`,
         sections,
       };
     },

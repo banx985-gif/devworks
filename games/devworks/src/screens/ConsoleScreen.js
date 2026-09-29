@@ -3,6 +3,9 @@
 // cost, dev-kit policy, royalty rate, launch marketing, launch titles (your games in development) — and Launch. After
 // launch: the console's install base, sales, stock, third-party interest and library, money in and out, the verdict,
 // the failure reasons that hold (plain words), price / production steps and the recovery actions. A card list.
+// Milestone 25: revisions (Slim / Portable) of the console on sale, the next generation (its plan with backwards
+// compatibility, or why it can't launch yet, and Design next generation) and the portfolio: every generation's lifetime
+// units, install base, profit and games.
 import { THEME } from '../../../../core/Theme.js';
 import { createCardListScreen } from '../ui/cardListScreen.js';
 import { CONSOLE as K } from '../../data/consoles.js';
@@ -11,11 +14,10 @@ const C = THEME.color;
 const fmt = (n) => Math.round(n).toLocaleString('en-GB');
 const VERDICT = { hit: 'A hit!', steady: 'Steady', flop: 'A flop' };
 
-export function createConsoleScreen({ layout, assets, topBar, consoles, projects, dateLabel, onLaunch, onRecover, showTip = () => {} }) {
-  const cycle = (obj, cur) => {
-    const keys = Object.keys(obj);
-    return keys[(keys.indexOf(cur) + 1) % keys.length];
-  };
+const STATUS_COLOR = { Growing: C.good, Peak: C.good, Declining: C.textMuted, Dead: C.textMuted };
+
+export function createConsoleScreen({ layout, assets, topBar, consoles, projects, dateLabel, onLaunch, onRecover, onRevise = (kind) => consoles.revise(kind), onDesignNext = null, showTip = () => {} }) {
+  const cycle = (obj, cur, keys = Object.keys(obj)) => keys[(keys.indexOf(cur) + 1) % keys.length];
   return createCardListScreen({
     layout,
     assets,
@@ -25,19 +27,21 @@ export function createConsoleScreen({ layout, assets, topBar, consoles, projects
       const sections = [];
       if (c) {
         const f = K.forms[c.form];
+        const name = consoles.modelName(c);
         const r = consoles.ratingsNow(c);
         const last = c.history.at(-1);
         sections.push({
-          heading: `${c.name} · ${f.name}`,
+          heading: `Generation ${c.gen}: ${name} · ${f.name}`,
           cards: [
             {
               id: 'console',
-              logo: f.art,
-              title: `${c.name} · ${consoles.statusOf(c)}${c.verdict ? ` · ${VERDICT[c.verdict]}` : ''}`,
+              logo: c.art ?? f.art,
+              title: `${name} · ${consoles.statusOf(c)}${c.verdict ? ` · ${VERDICT[c.verdict]}` : ''}`,
               highlight: true,
               lines: [
                 { text: `Install base ${fmt(c.installBase)} · ${fmt(c.sold)} sold · ${fmt(c.stock)} in stock`, color: C.actionDark, bold: true },
-                `Price ${c.price} Credits · making ${fmt(c.production)} a month · ${K.devKits[c.devKit].name} · royalty ${c.royalty}%`,
+                `Price ${c.price} Credits · making ${fmt(c.production)} a month at ${consoles.unitCostNow(c)} each · ${K.devKits[c.devKit].name} · royalty ${c.royalty}%`,
+                ...(c.backCompat ? [{ text: "Backwards compatible: the older generations' games count for it", color: C.actionDark }] : []),
                 `Your games on it: ${consoles.firstParty(c)} · third-party games: ${consoles.thirdPartyCount?.(c) ?? c.thirdParty.reduce((t, g) => t + g.count, 0) + c.exclusives} · third-party interest ${Math.round(c.interest)}`,
                 `Reliability ${r.reliability} (${consoles.defectPct(c)}% defects) · Developer Friendliness ${r.devFriendly}`,
                 { text: `Money: ${fmt(c.income)} in, ${fmt(c.costs)} out · profit ${fmt(c.income - c.costs)}`, color: c.income >= c.costs ? C.good : C.bad, bold: true },
@@ -60,38 +64,73 @@ export function createConsoleScreen({ layout, assets, topBar, consoles, projects
           ],
         });
         sections.push({
+          heading: c.revision ? `Revision: ${name}` : 'Revision (once)',
+          cards: Object.entries(K.revisions).map(([kind, V]) => {
+            const why = consoles.revisionWhy(kind);
+            const done = c.revision?.kind === kind;
+            return { id: `rev-${kind}`, logo: done ? c.art : 'dev_ui_29', title: `${done ? '✓ ' : ''}${V.name} · ${c.name} ${V.suffix} · ${fmt(V.cost)} Credits`, highlight: done, lines: [V.line, ...(why && !c.revision ? [{ text: why, color: C.textMuted }] : [])], buttons: c.revision ? [] : [{ id: 'go', label: `Make the ${V.suffix}`, accent: C.good, disabled: !!why, onTap: () => onRevise(kind) }] };
+          }),
+        });
+        sections.push({
           heading: 'Recovery',
-          cards: K.recovery.map((R) => {
+          cards: K.recovery.filter((R) => !R.revision).map((R) => {
             const why = consoles.recoveryWhy(R.id);
             return { id: `rec-${R.id}`, logo: R.id === 'devKit' ? 'dev_ui_28' : 'dev_ui_29', title: `${R.name}${R.cost ? ` · ${fmt(R.cost)} Credits` : ''}`, lines: [R.line, ...(why ? [{ text: why, color: C.textMuted }] : [])], buttons: [{ id: 'go', label: R.name, accent: C.good, disabled: !!why, onTap: () => onRecover(R.id) }] };
           }),
         });
-      } else {
+      }
+      {
         const why = consoles.launchWhy();
         const pv = why ? null : consoles.planPreview();
         if (pv) {
           const p = pv.plan;
           const jobs = projects.jobs;
           sections.push({
-            heading: `Launch plan: ${pv.prototype.name}`,
+            heading: `Launch plan: Generation ${pv.gen} · ${pv.name}`,
             cards: [
-              { id: 'proto', logo: K.forms[p.form].art, title: `${pv.prototype.family} · ${K.forms[p.form].name}`, lines: [`Prototype ${pv.prototype.name} · Launch Appeal ${pv.prototype.ratings.launchAppeal} · Performance ${pv.prototype.ratings.performance}`, `Defects about ${pv.defectPct}%`], buttons: [{ id: 'form', label: 'Home / Handheld', accent: C.progress, onTap: () => consoles.setPlan('form', cycle(K.forms, p.form)) }, ...(consoles.validPrototypes().length > 1 ? [{ id: 'proto', label: 'Other prototype', accent: C.progress, onTap: () => { const list = consoles.validPrototypes(); consoles.setPlan('prototypeId', list[(list.findIndex((x) => x.id === p.prototypeId) + 1) % list.length].id); } }] : [])] },
+              { id: 'proto', logo: pv.art, title: `${pv.name} · ${K.forms[p.form].name}`, lines: [`Prototype ${pv.prototype.name} · Launch Appeal ${pv.prototype.ratings.launchAppeal} · Performance ${pv.prototype.ratings.performance}`, `Defects about ${pv.defectPct}%`], buttons: [{ id: 'form', label: 'Home / Handheld', accent: C.progress, onTap: () => consoles.setPlan('form', cycle(K.forms, p.form, consoles.formsOpen())) }, ...(consoles.validPrototypes().length > 1 ? [{ id: 'proto', label: 'Other prototype', accent: C.progress, onTap: () => { const list = consoles.validPrototypes(); consoles.setPlan('prototypeId', list[(list.findIndex((x) => x.id === p.prototypeId) + 1) % list.length].id); } }] : [])] },
               { id: 'price', logo: 'dev_ui_29', title: `Price: ${p.price} Credits`, lines: [{ text: `Players think it is worth about ${pv.fairPrice} · value ${pv.value}`, color: p.price > pv.fairPrice * (1 + K.reasons.priceOverPct / 100) ? C.bad : C.actionDark }, `Costs ${pv.unitCost} to make · ${pv.margin >= 0 ? `${pv.margin} profit` : `${-pv.margin} loss`} a console`], buttons: [{ id: 'down', label: '−', accent: C.progress, onTap: () => consoles.setPlan('price', -1) }, { id: 'up', label: '+', accent: C.progress, onTap: () => consoles.setPlan('price', 1) }] },
               { id: 'production', logo: 'dev_ui_29', title: `Manufacturing: ${fmt(p.production)} a month`, lines: [`${pv.unitCost} Credits each · the first batch costs ${fmt(pv.firstBatchCost)}`, 'Unsold consoles cost storage every month.'], buttons: [{ id: 'down', label: '−', accent: C.progress, onTap: () => consoles.setPlan('production', -1) }, { id: 'up', label: '+', accent: C.progress, onTap: () => consoles.setPlan('production', 1) }] },
               { id: 'devKit', logo: 'dev_ui_28', title: `Dev kits: ${K.devKits[p.devKit].name}`, lines: [`Third-party interest ${K.devKits[p.devKit].interest >= 0 ? '+' : ''}${K.devKits[p.devKit].interest} · ${fmt(K.devKits[p.devKit].feePerGame)} Credits per new game`], buttons: [{ id: 'next', label: 'Change', accent: C.progress, onTap: () => consoles.setPlan('devKit', cycle(K.devKits, p.devKit)) }] },
               { id: 'royalty', logo: 'dev_ui_28', title: `Royalty: ${p.royalty}% of third-party sales`, lines: ['Higher royalties earn more per game but fewer studios come.'], buttons: [{ id: 'down', label: '−', accent: C.progress, onTap: () => consoles.setPlan('royalty', -1) }, { id: 'up', label: '+', accent: C.progress, onTap: () => consoles.setPlan('royalty', 1) }] },
               { id: 'marketing', logo: 'business_ui_05', title: `${K.marketing[p.marketing].name} · ${fmt(K.marketing[p.marketing].cost)} Credits`, lines: [`Adoption × ${K.marketing[p.marketing].mult}`], buttons: [{ id: 'next', label: 'Change', accent: C.progress, onTap: () => consoles.setPlan('marketing', cycle(K.marketing, p.marketing)) }] },
+              ...(pv.gen > 1 ? [{ id: 'backCompat', logo: 'dev_ui_28', title: `Backwards compatibility: ${p.backCompat ? 'On' : 'Off'}`, lines: [`On: ${fmt(K.backCompat.cost)} Credits once and ${K.backCompat.unitCostPct}% more a console; the older generations' games count for it and more third-party studios come across.`, ...(pv.previous ? [{ text: `${consoles.modelName(pv.previous)} starts declining when this launches.`, color: C.textMuted }] : [])], buttons: [{ id: 'toggle', label: p.backCompat ? 'Turn off' : 'Turn on', accent: C.progress, onTap: () => consoles.setPlan('backCompat') }] }] : []),
               ...jobs.map((j) => ({ id: `title-${j.id}`, logo: 'dev_ui_07', title: `${p.launchTitles.includes(j.id) ? '✓ Launch title: ' : ''}${j.name}`, lines: ['Release it on your console in its first 3 months: it counts twice for the lineup.'], buttons: [{ id: 'toggle', label: p.launchTitles.includes(j.id) ? 'Not a launch title' : 'Make it a launch title', accent: C.progress, onTap: () => consoles.setPlan('launchTitle', j.id) }] })),
-              { id: 'launch', logo: K.forms[p.form].art, title: `Launch ${pv.prototype.family}`, highlight: true, lines: [`Now: ${fmt(pv.marketingCost + pv.firstBatchCost)} Credits (marketing and the first batch). It goes on sale today and joins the Platform Market.`], buttons: [{ id: 'go', label: 'Launch!', accent: C.good, onTap: () => onLaunch() }] },
+              { id: 'launch', logo: pv.art, title: `Launch ${pv.name}`, highlight: true, lines: [`Now: ${fmt(pv.marketingCost + pv.backCompatCost + pv.firstBatchCost)} Credits (marketing and the first batch). It goes on sale today and joins the Platform Market.`], buttons: [{ id: 'go', label: 'Launch!', accent: C.good, onTap: () => onLaunch() }] },
             ],
           });
         }
-        if (why) sections.push({ heading: 'Your console', cards: [], empty: why });
+        const nextArt = K.generations.art[consoles.nextGen() - 1]?.model ?? 'console_visual_03';
+        if (why && !c) sections.push({ heading: consoles.consoles.length ? 'Next generation' : 'Your console', cards: [], empty: why });
+        else if (why && consoles.consoles.length < K.generations.max) sections.push({ heading: `Generation ${consoles.nextGen()}`, cards: [{ id: 'next', logo: nextArt, title: `Next: ${c.family} ${consoles.nextGen()}`, lines: [{ text: why, color: C.textMuted }, "A new generation is a new prototype: start from this console's parts, keep or upgrade them (parts built before take less work)."], buttons: onDesignNext ? [{ id: 'design', label: 'Design next generation', accent: C.progress, onTap: () => onDesignNext(c) }] : [] }] });
+        else if (why) sections.push({ heading: 'Generations', cards: [], empty: why });
+      }
+      const all = consoles.portfolio();
+      if (all.length) {
+        sections.push({
+          heading: 'Console Portfolio · every generation',
+          cards: [...all].reverse().map((x) => {
+            const cx = consoles.consoles.find((y) => y.id === x.id);
+            const live = x.status !== 'Dead' && cx !== c;
+            return {
+              id: `gen-${x.gen}`,
+              logo: x.art,
+              title: `Gen ${x.gen} · ${x.name} · ${x.status}${x.verdict ? ` · ${VERDICT[x.verdict]}` : ''}`,
+              lines: [
+                { text: `${fmt(x.units)} sold · install base ${fmt(x.installBase)} · ${x.months} month${x.months === 1 ? '' : 's'} on sale`, color: STATUS_COLOR[x.status] ?? C.actionDark, bold: true },
+                `Games: ${x.games} of yours · ${x.thirdPartyGames} third-party${x.backCompat ? ' · backwards compatible' : ''}${x.revision ? ` · ${K.revisions[x.revision].name}` : ''}`,
+                { text: `Lifetime profit ${fmt(x.profit)}`, color: x.profit >= 0 ? C.good : C.bad },
+                ...(live ? [{ text: `Making ${fmt(cx.production)} a month · ${fmt(cx.stock)} in stock`, color: C.textMuted }] : []),
+              ],
+              buttons: live ? [{ id: 'prodDown', label: 'Make −', accent: C.progress, onTap: () => consoles.adjust('production', -1, x.id) }, { id: 'prodUp', label: 'Make +', accent: C.progress, onTap: () => consoles.adjust('production', 1, x.id) }] : [],
+            };
+          }),
+        });
       }
       return {
         title: 'Console Portfolio',
         icon: 'dev_ui_29',
-        subtitle: 'Launch a console from a prototype that passed validation, and run it as a platform: price, manufacturing, dev kits and royalties. A flop costs money, never the studio.',
+        subtitle: `Launch a console from a prototype that passed validation, and run it as a platform: price, manufacturing, dev kits and royalties. Up to ${K.generations.max} generations. A flop costs money, never the studio.`,
         sections,
       };
     },

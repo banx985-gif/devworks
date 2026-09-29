@@ -14,7 +14,17 @@
 // Credit line — manufacturing is cut back (and says so) and the other costs are paid only as far as that allows — so a
 // flop can never lock the save. Money goes on the ledger as "hardware".
 //
-// Events: 'console:launched' { console }, 'console:defects' { console, cost }, 'console:verdict' { console, verdict }.
+// Milestone 25 — generations and revisions (bible §32). Up to CONSOLE.generations.max consoles per run, launched in
+// order: a new generation needs a prototype built (and validated) after the current one launched, and the current one
+// on sale for generations.minMonths. It is named family + number ("Nova 2") and is its own platform (OWN2, OWN3); the
+// one before becomes a legacy console (Declining on the market, slower sales, fewer new third-party games, a smaller
+// monthly run, retired after legacyMonths) — its install base, library and history stay in the portfolio. Backwards
+// compatibility (a plan choice from Gen 2) costs more but counts the old libraries and carries more goodwill. A
+// revision (Slim / Portable, once per console) makes the live console cheaper and sturdier with a new look. Each
+// console records the stats the hardware secrets (HW-01…HW-05, Milestone 28) will read: secretStats().
+//
+// Events: 'console:launched' { console, previous }, 'console:defects' { console, cost }, 'console:verdict' { console,
+// verdict }, 'console:revised' { console }, 'console:retired' { console }.
 import { Rng } from '../../../../core/Rng.js';
 import { registerPlatform, unregisterPlatform, PLATFORMS } from '../../data/platforms.js';
 import { releasable } from './platformMarket.js';
@@ -40,8 +50,9 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
   const today = () => clock.totalDays;
   const month = () => Math.floor(today() / clock.daysPerMonth);
   const eco = () => business.economy;
-  let consoles = []; // at most one (Gen 1) for now
-  let plan = null; // the launch plan being made: { prototypeId, form, price, production, devKit, royalty, marketing, launchTitles: [jobId] }
+  const G = K.generations;
+  let consoles = []; // one per generation, in order (Gen 1 first)
+  let plan = null; // the launch plan being made: { prototypeId, form, price, production, devKit, royalty, marketing, backCompat, launchTitles: [jobId] }
   let rng = new Rng('devworks-consoles');
 
   // --- money that never passes the safety line --------------------------------------------------------------------
@@ -63,14 +74,21 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
   }
 
   // --- the platform ------------------------------------------------------------------------------------------------
-  const own = () => consoles.find((c) => c.status !== 'retired') ?? null;
+  // The current generation (the newest console still 'launched'); older ones are 'legacy', then 'retired'.
+  const own = () => consoles.findLast((c) => c.status === 'launched') ?? null;
+  const modelName = (c) => (c.revision ? `${c.name} ${K.revisions[c.revision.kind].suffix}` : c.name);
+  const artFor = (gen, form, revised) => {
+    const a = G.art[gen - 1] ?? G.art.at(-1);
+    return revised ? a.revision : (a.model ?? a[form] ?? K.forms[form].art);
+  };
   function platformDef(c) {
     const f = K.forms[c.form];
-    return { id: c.platformId, name: c.name, holder: studioName(), era: { from: Math.floor(c.launchDay / (clock.daysPerMonth * clock.monthsPerYear)) + 1, to: null }, audienceLabel: f.name, group: f.group, friendliness: 'Very High', identity: `Your own ${f.name.toLowerCase()}`, art: f.art, open: true, own: true };
+    return { id: c.platformId, name: modelName(c), holder: studioName(), era: { from: Math.floor(c.launchDay / (clock.daysPerMonth * clock.monthsPerYear)) + 1, to: null }, audienceLabel: f.name, group: f.group, friendliness: 'Very High', identity: `Your own ${f.name.toLowerCase()} (generation ${c.gen})`, art: c.art, open: true, own: true };
   }
   function statusOf(c, day = today()) {
     if (!c || day < c.launchDay) return 'Upcoming';
     if (c.status === 'retired') return 'Dead';
+    if (c.status === 'legacy') return 'Declining';
     const months = c.history.length;
     if (months < K.growingMonths) return 'Growing';
     const best = Math.max(...c.history.map((h) => h.sold));
@@ -88,19 +106,35 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
   };
 
   // --- the plan -----------------------------------------------------------------------------------------------------
-  const validPrototypes = () => hardware.prototypes.filter((p) => p.validation.passed);
+  // Prototypes that can launch the next generation: passed validation, not launched yet, and (after Gen 1) built after
+  // the current generation launched — a new generation is a new hardware project.
+  const validPrototypes = () => {
+    const cur = own();
+    return hardware.prototypes.filter((p) => p.validation.passed && !consoles.some((c) => c.prototypeId === p.id) && (!cur || p.builtDay >= cur.launchDay));
+  };
+  const nextGen = () => consoles.length + 1;
+  const monthsOn = (c) => month() - c.launchMonth;
   function launchWhy() {
-    if (own()) return 'Your console is already on sale (new generations come later)';
+    if (consoles.length >= G.max) return `All ${G.max} console generations made: a studio makes at most ${G.max}`;
+    const cur = own();
+    if (cur && monthsOn(cur) < G.minMonths) {
+      const n = G.minMonths - monthsOn(cur);
+      return `${modelName(cur)} is already on sale: the next generation can launch in ${n} month${n === 1 ? '' : 's'}`;
+    }
+    if (cur && !validPrototypes().length) return `Generation ${nextGen()} needs a new prototype that passed validation, built after ${cur.name} launched (Create → Hardware)`;
     if (!validPrototypes().length) return 'Needs a prototype that passed validation (Create → Hardware)';
     return null;
   }
+  const formOpen = (form) => (K.forms[form]?.minGen ?? 1) <= nextGen();
   function ensurePlan() {
-    if (launchWhy() && !own()) return null;
-    if (!plan || !hardware.prototypes.some((p) => p.id === plan.prototypeId && p.validation.passed)) {
+    if (launchWhy()) return null;
+    if (!plan || !validPrototypes().some((p) => p.id === plan.prototypeId)) {
       const p = validPrototypes().at(-1);
       if (!p) return null;
-      plan = { prototypeId: p.id, form: 'home', price: K.priceSteps[3], production: K.productionSteps[3], devKit: 'standard', royalty: K.royaltySteps[2], marketing: 'standard', launchTitles: [] };
+      plan = { prototypeId: p.id, form: 'home', price: K.priceSteps[3], production: K.productionSteps[3], devKit: 'standard', royalty: K.royaltySteps[2], marketing: 'standard', backCompat: false, launchTitles: [] };
     }
+    plan.backCompat ??= false;
+    if (nextGen() === 1) plan.backCompat = false;
     return plan;
   }
   const protoOf = (id) => hardware.prototypes.find((p) => p.id === id) ?? null;
@@ -115,7 +149,8 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     else if (key === 'royalty') p.royalty = step(K.royaltySteps, p.royalty, v);
     else if (key === 'devKit' && K.devKits[v]) p.devKit = v;
     else if (key === 'marketing' && K.marketing[v]) p.marketing = v;
-    else if (key === 'form' && K.forms[v]) p.form = v;
+    else if (key === 'form' && K.forms[v] && formOpen(v)) p.form = v;
+    else if (key === 'backCompat' && nextGen() > 1) p.backCompat = v == null ? !p.backCompat : !!v;
     else if (key === 'prototypeId' && validPrototypes().some((x) => x.id === v)) p.prototypeId = v;
     else if (key === 'launchTitle') p.launchTitles = p.launchTitles.includes(v) ? p.launchTitles.filter((x) => x !== v) : [...p.launchTitles, v];
     else return false;
@@ -126,8 +161,11 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     const p = ensurePlan();
     const proto = p && protoOf(p.prototypeId);
     if (!proto) return null;
-    const unitCost = unitCostOf(proto.ratings, p.production);
-    return { plan: p, prototype: proto, unitCost, fairPrice: fairPriceOf(proto.ratings), value: r2(valueOf(proto.ratings, p.price)), margin: r2(p.price - unitCost), marketingCost: K.marketing[p.marketing].cost, firstBatchCost: Math.round(unitCost * p.production), defectPct: defectPctOf(proto.ratings.reliability, world.effect?.('certFailPct') ?? 0) };
+    const unitCost = unitCostOf(proto.ratings, p.production, p.backCompat ? K.backCompat.unitCostPct : 0);
+    const gen = nextGen();
+    const family = consoles[0]?.family ?? proto.family;
+    const backCompatCost = p.backCompat ? K.backCompat.cost : 0;
+    return { plan: p, prototype: proto, gen, name: gen === 1 ? family : `${family} ${gen}`, art: artFor(gen, p.form, false), unitCost, fairPrice: fairPriceOf(proto.ratings), value: r2(valueOf(proto.ratings, p.price)), margin: r2(p.price - unitCost), marketingCost: K.marketing[p.marketing].cost, backCompatCost, firstBatchCost: Math.round(unitCost * p.production), defectPct: defectPctOf(proto.ratings.reliability, world.effect?.('certFailPct') ?? 0), previous: own() };
   }
 
   // --- launch -------------------------------------------------------------------------------------------------------
@@ -138,11 +176,18 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     if (!pv) return { ok: false, why: 'No plan' };
     const p = pv.plan;
     const proto = pv.prototype;
+    const prev = own();
+    const gen = pv.gen;
     const c = {
-      id: `C${consoles.length + 1}`,
-      platformId: K.platformId,
-      name: proto.family,
-      gen: 1,
+      id: `C${gen}`,
+      platformId: gen === 1 ? K.platformId : `OWN${gen}`,
+      name: pv.name,
+      family: consoles[0]?.family ?? proto.family,
+      gen,
+      art: pv.art,
+      marketMult: G.marketMult[gen - 1] ?? G.marketMult.at(-1),
+      backCompat: !!p.backCompat,
+      revision: null,
       prototypeId: proto.id,
       parts: { ...proto.parts },
       ratings: { ...proto.ratings },
@@ -165,7 +210,7 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
       thirdPartyTotal: 0,
       exclusives: 0,
       carry: 0,
-      bonus: { reliability: 0, devFriendly: 0, unitCostPct: 0, adoptionPct: 0, adoptionMonths: 0 },
+      bonus: { reliability: 0, devFriendly: 0, unitCostPct: 0, usability: 0, appeal: 0, reachPlus: 0, adoptionPct: 0, adoptionMonths: 0 },
       used: {}, // recovery id → month last used
       history: [], // { month, sold, installBase, stock, income, costs, interest, thirdParty }
       income: 0,
@@ -175,22 +220,47 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
       reasons: [],
       verdict: null,
       notes: [],
+      stats: freshStats(),
     };
+    // Third-party goodwill comes across from the generation before (more with backwards compatibility).
+    if (prev) c.interest = r2(prev.interest * (c.backCompat ? K.backCompat.goodwill : G.goodwill));
     consoles.push(c);
     registerPlatform(platformDef(c));
+    if (prev) toLegacy(prev);
     spendSafe(c, K.marketing[c.marketing].cost, `Console marketing: ${c.name}`);
+    if (c.backCompat) spendSafe(c, K.backCompat.cost, `Backwards compatibility: ${c.name}`);
     manufacture(c);
     plan = null;
-    bus.emit('console:launched', { console: c });
+    bus.emit('console:launched', { console: c, previous: prev });
     return { ok: true, console: c };
+  }
+  // The generation before goes Declining: a smaller monthly run; its history stays.
+  function toLegacy(c) {
+    c.status = 'legacy';
+    c.legacyMonth = month();
+    c.production = K.productionSteps.filter((x) => x <= Math.min(c.production, G.legacyProduction)).at(-1) ?? 0;
+    c.notes.push({ month: month(), text: `Generation ${c.gen + 1} launched: ${c.name} is now declining` });
+  }
+  function retire(c) {
+    c.status = 'retired';
+    c.retiredMonth = month();
+    c.production = 0;
+    if (c.stock) c.notes.push({ month: month(), text: `Retired: ${c.stock.toLocaleString('en-GB')} unsold consoles written off` });
+    c.stock = 0;
+    bus.emit('console:retired', { console: c });
+  }
+  // Stats for the hardware secrets (read by Milestone 28): kept per console, updated each month end.
+  function freshStats() {
+    return { defectUnits: 0, peakDevFriendly: 0, maxRoyalty: 0, sold6: null, target6: null, missedLaunch: false, firstPartyHits: 0, exclusiveHits: 0 };
   }
 
   // --- the month --------------------------------------------------------------------------------------------------
-  const ratingsNow = (c) => ({ ...c.ratings, reliability: clamp(c.ratings.reliability + c.bonus.reliability, 0, 100), devFriendly: clamp(c.ratings.devFriendly + c.bonus.devFriendly, 0, 100) });
+  const ratingsNow = (c) => ({ ...c.ratings, reliability: clamp(c.ratings.reliability + c.bonus.reliability, 0, 100), devFriendly: clamp(c.ratings.devFriendly + c.bonus.devFriendly, 0, 100), usability: clamp(c.ratings.usability + (c.bonus.usability ?? 0), 0, 100), launchAppeal: clamp(c.ratings.launchAppeal + (c.bonus.appeal ?? 0), 0, 100) });
   const defectPct = (c) => defectPctOf(ratingsNow(c).reliability, world.effect?.('certFailPct') ?? 0);
+  const unitCostNow = (c, production = c.production) => unitCostOf(c.ratings, production, c.bonus.unitCostPct + (c.backCompat ? K.backCompat.unitCostPct : 0));
   function manufacture(c) {
     if (!c.production) return 0;
-    const unit = unitCostOf(c.ratings, c.production, c.bonus.unitCostPct);
+    const unit = unitCostNow(c);
     const units = Math.min(c.production, Math.floor(room() / unit));
     if (units < c.production) c.notes.push({ month: month(), text: units ? `Only ${units.toLocaleString('en-GB')} consoles made: not enough Credits` : 'Manufacturing paused: not enough Credits' });
     if (units > 0) spendSafe(c, units * unit, `Manufacturing: ${units.toLocaleString('en-GB')} × ${c.name}`);
@@ -210,6 +280,13 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     return n;
   }
   const thirdPartyCount = (c) => c.thirdParty.reduce((t, g) => t + g.count, 0) + c.exclusives;
+  // Backwards compatibility: the older generations' games (yours and third-party ones ever made) count for this one.
+  function oldLibrary(c) {
+    if (!c.backCompat) return { first: 0, third: 0 };
+    const older = consoles.filter((x) => x.gen < c.gen);
+    const share = K.backCompat.libraryShare;
+    return { first: share * older.reduce((t, x) => t + firstParty(x), 0), third: share * older.reduce((t, x) => t + x.thirdPartyTotal + x.exclusives, 0) };
+  }
   // Rival platforms that launched in the last year (bad timing).
   const rivalLaunches = () => PLATFORMS.filter((p) => {
     const st = business.platforms.state(p.id, today());
@@ -219,15 +296,17 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
   function demandOf(c) {
     const r = ratingsNow(c);
     const M = K.market;
-    const market = M.size * (0.5 + r.launchAppeal / 100) * (M.reach[c.form] ?? 1);
+    const market = M.size * (c.marketMult ?? 1) * (0.5 + r.launchAppeal / 100) * ((M.reach[c.form] ?? 1) + (c.bonus.reachPlus ?? 0));
     const value = valueOf(r, c.price);
-    const library = Math.min(M.libMax, M.libBase + M.perFirstParty * firstParty(c) + M.perThirdParty * thirdPartyCount(c));
+    const old = oldLibrary(c);
+    const library = Math.min(M.libMax, M.libBase + M.perFirstParty * (firstParty(c) + old.first) + M.perThirdParty * (thirdPartyCount(c) + old.third));
     const mkt = K.marketing[c.marketing].mult * (c.bonus.adoptionMonths > 0 ? 1 + c.bonus.adoptionPct / 100 : 1);
     const rel = Math.max(0.5, 1 - (defectPct(c) / 100) * M.defectAdoption);
     const timing = 1 - Math.min(M.timingMax, M.timingPct * rivalLaunches()) / 100;
-    const adoption = M.adoption * value * library * mkt * rel * timing;
+    const legacy = c.status === 'legacy' ? G.legacyAdoption : 1;
+    const adoption = M.adoption * value * library * mkt * rel * timing * legacy;
     const exact = Math.max(0, market - c.installBase) * adoption + c.carry;
-    return { market, value, library, mkt, rel, timing, adoption, exact };
+    return { market, value, library, mkt, rel, timing, legacy, adoption, exact };
   }
   function thirdPartyTarget(c) {
     const T = K.thirdParty;
@@ -252,7 +331,8 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     return out;
   }
   function monthEnd(c) {
-    if (c.status !== 'launched' || month() <= c.launchMonth) return;
+    if ((c.status !== 'launched' && c.status !== 'legacy') || month() <= c.launchMonth) return;
+    if (c.status === 'legacy' && month() - c.legacyMonth >= G.legacyMonths) return retire(c);
     const inc0 = c.income;
     const cost0 = c.costs;
     // 1. Sell from stock (last month's make is in the warehouse).
@@ -279,7 +359,7 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     c.interest = r2(c.interest + (thirdPartyTarget(c) - c.interest) * T.pull);
     c.thirdParty = c.thirdParty.filter((g) => month() - g.month < T.gameMonths);
     const lib = thirdPartyCount(c);
-    const want3 = (c.interest / 100) * T.gamesPerMonth + (c.thirdCarry ?? 0);
+    const want3 = (c.interest / 100) * T.gamesPerMonth * (c.status === 'legacy' ? G.legacyThirdParty : 1) + (c.thirdCarry ?? 0);
     const newGames = Math.max(0, Math.min(Math.floor(want3), T.libraryMax - lib));
     c.thirdCarry = r2(want3 - Math.floor(want3));
     if (newGames) {
@@ -293,11 +373,34 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     if (c.bonus.adoptionMonths > 0) c.bonus.adoptionMonths--;
     c.history.push({ month: month(), sold, installBase: c.installBase, stock: c.stock, income: c.income - inc0, costs: c.costs - cost0, interest: c.interest, thirdParty: thirdPartyCount(c), adoption: r2(d.adoption * 100) });
     c.reasons = reasonsFor(c, d);
+    recordStats(c, sold, d);
     if (!c.verdict && c.history.length >= K.verdictMonth) {
       const profit = c.income - c.costs;
       c.verdict = c.installBase >= K.hitBase && profit >= 0 ? 'hit' : c.installBase < K.flopBase || profit < -K.flopLoss ? 'flop' : 'steady';
       bus.emit('console:verdict', { console: c, verdict: c.verdict, profit });
     }
+  }
+  function recordStats(c, sold, d) {
+    const s = (c.stats ??= freshStats());
+    const H = K.hooks;
+    s.defectUnits = r2(s.defectUnits + (sold * defectPct(c)) / 100);
+    s.peakDevFriendly = Math.max(s.peakDevFriendly, ratingsNow(c).devFriendly);
+    s.maxRoyalty = Math.max(s.maxRoyalty, c.royalty);
+    if (c.history.length === 6) {
+      s.sold6 = c.history.reduce((t, h) => t + h.sold, 0);
+      s.target6 = Math.round((d.market * H.target6Pct) / 100);
+      s.missedLaunch = s.sold6 <= s.target6 * (1 - H.missPct / 100);
+    }
+    let hits = 0;
+    let excl = 0;
+    for (const r of projects.catalogue.list()) {
+      const on = r.release?.platforms ?? [];
+      if (!on.includes(c.platformId)) continue;
+      if (r.release.score >= H.hitScore) hits++;
+      if (on.length === 1 && r.release.score >= H.exclusiveScore) excl++;
+    }
+    s.firstPartyHits = hits;
+    s.exclusiveHits = excl;
   }
   bus.on('clock:month', () => {
     for (const c of consoles) monthEnd(c);
@@ -313,6 +416,7 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     if (!c || !R) return 'No console on sale';
     if (id === 'priceCut' && c.price === K.priceSteps[0]) return 'Already the lowest price';
     if (id === 'reduce' && c.production === K.productionSteps[0]) return 'Manufacturing already stopped';
+    if (R.revision) return revisionWhy(R.revision);
     const last = c.used[id];
     if (last != null && R.cooldown == null) return 'Done already';
     if (last != null && month() - last < R.cooldown) return `Again in ${R.cooldown - (month() - last)} month${R.cooldown - (month() - last) === 1 ? '' : 's'}`;
@@ -324,6 +428,7 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     if (why) return { ok: false, why };
     const c = own();
     const R = recoveryById(id);
+    if (R.revision) return revise(R.revision);
     if (R.cost) spendSafe(c, R.cost, `${R.name}: ${c.name}`);
     if (id === 'priceCut') c.price = K.priceSteps[Math.max(0, K.priceSteps.indexOf(c.price) - 1)];
     if (id === 'reduce') c.production = K.productionSteps[Math.max(0, K.productionSteps.indexOf(c.production) - 1)];
@@ -336,9 +441,36 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     c.used[id] = month();
     return { ok: true };
   }
-  // A launched console's own price / production can be moved too.
-  function adjust(key, dir) {
+  // A revision of the live console (once each): cheaper to make, sturdier (or more portable), a new model name and look.
+  function revisionWhy(kind) {
     const c = own();
+    const V = K.revisions[kind];
+    if (!c || !V) return 'No console on sale';
+    if (c.revision) return `Done already: ${modelName(c)} is on sale`;
+    if (room() < V.cost) return `Needs ${V.cost.toLocaleString('en-GB')} Credits`;
+    return null;
+  }
+  function revise(kind) {
+    const why = revisionWhy(kind);
+    if (why) return { ok: false, why };
+    const c = own();
+    const V = K.revisions[kind];
+    spendSafe(c, V.cost, `${V.name}: ${c.name}`);
+    c.bonus.reliability += V.reliability;
+    c.bonus.unitCostPct += V.unitCostPct;
+    c.bonus.usability = (c.bonus.usability ?? 0) + V.usability;
+    c.bonus.appeal = (c.bonus.appeal ?? 0) + V.appeal;
+    c.bonus.reachPlus = (c.bonus.reachPlus ?? 0) + (V.reachPlus ?? 0);
+    c.revision = { kind, month: month(), art: artFor(c.gen, c.form, true) };
+    c.art = c.revision.art;
+    c.used.revisedModel = month();
+    registerPlatform(platformDef(c));
+    bus.emit('console:revised', { console: c });
+    return { ok: true, console: c };
+  }
+  // A console's own price / production can be moved too (the current generation unless an id is given).
+  function adjust(key, dir, id = null) {
+    const c = id ? consoles.find((x) => x.id === id && x.status !== 'retired') : own();
     if (!c) return false;
     const list = key === 'price' ? K.priceSteps : key === 'production' ? K.productionSteps : null;
     if (!list) return false;
@@ -361,7 +493,30 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     launch,
     recoveryWhy,
     recover,
+    revisionWhy,
+    revise,
     adjust,
+    modelName,
+    unitCostNow,
+    nextGen,
+    formsOpen: () => Object.keys(K.forms).filter(formOpen),
+    // Every generation's lifetime record (the Console Portfolio).
+    portfolio: () =>
+      consoles.map((c) => ({ id: c.id, gen: c.gen, name: modelName(c), platformId: c.platformId, status: statusOf(c), units: c.sold, installBase: c.installBase, profit: c.income - c.costs, games: firstParty(c), thirdPartyGames: c.thirdPartyTotal + c.exclusives, verdict: c.verdict, revision: c.revision?.kind ?? null, backCompat: c.backCompat, art: c.art, months: c.history.length })),
+    // What the hardware secrets need (Milestone 28 reads it; no rewards yet).
+    secretStats() {
+      const each = consoles.map((c) => {
+        const s = c.stats ?? freshStats();
+        return { id: c.id, gen: c.gen, form: c.form, revision: c.revision?.kind ?? null, units: c.sold, installBase: c.installBase, profit: c.income - c.costs, defectRatePct: c.sold ? r2((s.defectUnits / c.sold) * 100) : 0, peakDevFriendly: s.peakDevFriendly, thirdPartyReleases: c.thirdPartyTotal, maxRoyalty: s.maxRoyalty, missedLaunch: s.missedLaunch, sold6: s.sold6, target6: s.target6, firstPartyHits: s.firstPartyHits, exclusiveHits: s.exclusiveHits };
+      });
+      return {
+        consoles: each,
+        generations: consoles.length,
+        profitableGenerations: each.filter((x) => x.profit > 0).length,
+        // A handheld / hybrid revision (HW-04): a Portable revision, or any revision of a handheld / hybrid console.
+        handheldRevision: consoles.some((c) => c.revision && (c.revision.kind === 'portable' || c.form !== 'home')),
+      };
+    },
     statusOf,
     demandOf,
     thirdPartyTarget,
@@ -384,6 +539,16 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     load(data) {
       for (const c of consoles) unregisterPlatform(c.platformId);
       consoles = JSON.parse(JSON.stringify(data?.consoles ?? []));
+      // A Milestone 24 save: its one console is Generation 1.
+      for (const c of consoles) {
+        c.family ??= c.name;
+        c.art ??= K.forms[c.form]?.art ?? 'console_visual_01';
+        c.marketMult ??= 1;
+        c.backCompat ??= false;
+        c.revision ??= c.used?.revisedModel != null ? { kind: 'slim', month: c.used.revisedModel, art: artFor(c.gen, c.form, true) } : null;
+        c.stats ??= freshStats();
+        Object.assign(c.bonus, { usability: 0, appeal: 0, reachPlus: 0, ...c.bonus });
+      }
       plan = data?.plan ? JSON.parse(JSON.stringify(data.plan)) : null;
       rng = new Rng(`${seed()}|consoles`);
       if (data?.rng) rng.setState(data.rng);
