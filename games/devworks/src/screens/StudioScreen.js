@@ -43,7 +43,7 @@ const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes b
 const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -264,6 +264,17 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       debugBadge = b;
     },
 
+    // Milestone 34: a worker's box on the screen (the guide's coach mark points at the Founder), or null off screen.
+    workerScreenRect(id) {
+      const w = world.workerById(id);
+      if (!w || w.away) return null;
+      const r = workerRect(w);
+      const a = camera.worldToScreen(r.x, r.y);
+      const b = camera.worldToScreen(r.x + r.w, r.y + r.h);
+      const box = { x: Math.min(a.x, b.x) - 10, y: Math.min(a.y, b.y) - 10, w: Math.abs(b.x - a.x) + 20, h: Math.abs(b.y - a.y) + 20 };
+      const sr = layout.safeRect;
+      return box.x + box.w < sr.x || box.x > sr.x + sr.w || box.y + box.h < sr.y || box.y > sr.y + sr.h ? null : box;
+    },
     // Screen point at the middle of a station's art / a worker (tests).
     screenPointOf(id) {
       const w = world.workerById(id);
@@ -772,8 +783,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const tagW = tw + 36;
     const h = TAG_H;
     const icons = [];
-    if (w.tiredIcon) icons.push(STATUS_ICONS.tired);
-    if (w.staff.status.stressed) icons.push(STATUS_ICONS.stressed);
+    if (w.tiredIcon && workerIcons()) icons.push(STATUS_ICONS.tired); // Milestone 34: Reduced worker detail hides them
+    if (w.staff.status.stressed && workerIcons()) icons.push(STATUS_ICONS.stressed);
     const iconS = 56;
     const total = tagW + icons.length * (iconS + 6);
     fixedSize(ctx, r.x + r.w / 2, r.y - 10, () => {

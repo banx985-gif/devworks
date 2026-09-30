@@ -163,7 +163,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     if (st) return { station: st.id, name: st.def.name };
     const id = RECRUIT.roleStations[role];
     const s = shop?.status(id);
-    if (s && !s.owned && !s.hidden && !s.why) return { build: id, cost: s.def.cost, name: s.def.name };
+    if (s && !s.owned && !s.hidden && !s.why) return { build: id, cost: s.price ?? s.def.cost, name: s.def.name };
     if (s && !s.owned && s.why && /Credits$/.test(s.why)) return { why: `Needs ${s.def.cost.toLocaleString('en-GB')} Credits for a ${s.def.name} to work at` };
     return { why: 'No free station: build one in Build Mode' };
   }
@@ -366,6 +366,8 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     specialArrival,
     suggestFor,
     newGame,
+    // Milestone 33: a Legacy worker (hired by the NG+ start, not the board) starts their career record here.
+    joinCareer: (staff, day = today()) => careers.join(staff, day),
     // ?debug=1 / tests: someone joins without the board or the rules (to try mentoring with an Elite early).
     debugJoin(personId) {
       const def = staffDefById(personId);

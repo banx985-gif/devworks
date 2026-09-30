@@ -69,6 +69,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
   function pickIp(x) {
     setup.ipId = x.id;
     if (setup.type === 'sequel') {
+      if (x.blueprint) Object.assign(setup.recipe, x.blueprint.recipe); // Milestone 33: a Legacy Game Blueprint is the whole template
       setup.recipe.genre = x.genre;
       setup.title = trimTitle(`${x.name} ${x.entries.length + (x.acquired ? 2 : 1)}`);
     } else if (setup.type === 'spinoff') {

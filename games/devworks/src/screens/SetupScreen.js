@@ -26,6 +26,7 @@ const pick = (list, not = null) => {
 
 export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart }) {
   let slot = 0;
+  let ngPlus = 0; // Milestone 33: an NG+ run's setup (filled in from the finished run; the title says New Game+ n)
   let setup = null; // { studio, director, colour, founder }
   let confirming = false;
 
@@ -237,7 +238,8 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
     enter(params = {}) {
       slot = params.slot ?? 0;
       confirming = false;
-      setup = { studio: '', director: '', colour: STUDIO_COLOURS[0].id, founder: FOUNDERS[0].id };
+      ngPlus = params.ngPlus ?? 0;
+      setup = { studio: '', director: '', colour: STUDIO_COLOURS[0].id, founder: FOUNDERS[0].id, ...(params.prefill ?? {}) };
       scroll.scrollY = 0;
     },
     exit() {
@@ -287,7 +289,7 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       const hr = headerRect();
       const sr = layout.safeRect;
       drawButton(ctx, hr, '‹ Back', { accent: C.progress });
-      text(ctx, 'New Studio', sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 - 20, { size: S.title, bold: true, align: 'center', baseline: 'middle' });
+      text(ctx, ngPlus ? `New Game+ ${ngPlus}` : 'New Studio', sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 - 20, { size: S.title, bold: true, align: 'center', baseline: 'middle' });
       text(ctx, `Save slot ${slot + 1}`, sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 + 34, { size: S.small, color: C.textMuted, align: 'center', baseline: 'middle' });
       const r = panelRect();
       ctx.fillStyle = C.panel;

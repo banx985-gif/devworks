@@ -11,8 +11,9 @@ export const SAVE = {
   accountKey: 'devworks:account', // Milestone 15: what every run shares (the combos discovered)
   secretsAccountKey: 'devworks:account:secrets',
   achievementsKey: 'devworks:account:achievements', // Milestone 32: achievements, the Hall of Fame, account records // Milestone 28: secrets found in any run, prestige tokens, account flags
+  legacyAccountKey: 'devworks:account:legacy', // Milestone 33: legacy summaries of finished runs, the staff you have worked with
   rolling: 3, // each slot keeps its last 3 saves; a damaged newest copy falls back to the one before
   version: 2,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)
-  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp', 'studio:stage', 'marketing:run', 'research:start', 'research:complete', 'combo:found', 'staff:hired', 'staff:letGo', 'training:start', 'training:complete', 'mentor:start', 'engine:start', 'engine:complete', 'deal:signed', 'deal:attached', 'contract:accepted', 'contract:success', 'sponsor:signed', 'sponsor:ended', 'award:result', 'support:start', 'support:done'],
+  triggers: ['clock:month', 'clock:speed', 'world:moved', 'project:start', 'project:phase', 'project:complete', 'game:released', 'reputation:rankUp', 'studio:stage', 'marketing:run', 'research:start', 'research:complete', 'combo:found', 'staff:hired', 'staff:letGo', 'training:start', 'training:complete', 'mentor:start', 'engine:start', 'engine:complete', 'deal:signed', 'deal:attached', 'contract:accepted', 'contract:success', 'sponsor:signed', 'sponsor:ended', 'award:result', 'support:start', 'support:done', 'campaign:ending', 'ending:stage'],
 };

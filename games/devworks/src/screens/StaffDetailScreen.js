@@ -19,7 +19,7 @@ const PAD = 36;
 // history(id) → { crunchDays, crunches } (Milestone 7: crunch exposure) or null.
 // career(id) → the record from recruitment.careerOf (Milestone 13) or null; actions(id) → [{ id, label, sub, disabled,
 // accent, onTap }]; dateLabel(day) for "since".
-export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null, career = () => null, actions = () => [], dateLabel = (d) => `day ${d}`, nameOf = (id) => id }) {
+export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null, career = () => null, actions = () => [], dateLabel = (d) => `day ${d}`, nameOf = (id) => id, advanced = () => false, legacy = () => false }) {
   let buttons = []; // screen rects of this frame's action buttons
   let id = null;
   let scrollY = 0;
@@ -73,7 +73,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     let ty = pr.y;
     text(ctx, s.name, tx, ty, { size: S.title, bold: true, maxWidth: tw });
     ty += 70;
-    text(ctx, `${ROLES[s.role].name} · ${TIERS[s.tier].name}`, tx, ty, { color: C.textMuted, maxWidth: tw });
+    text(ctx, `${ROLES[s.role].name} · ${TIERS[s.tier].name}${legacy(s.id) ? ' · Legacy' : ''}`, tx, ty, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxWidth: tw }); // Milestone 33: Legacy Staff
     ty += 60;
     const need = sys.xpNeeded(s.level);
     text(ctx, `Level ${s.level}`, tx, ty, { bold: true });
@@ -111,8 +111,8 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       const main = st.key === primary;
       text(ctx, `${main ? '★ ' : ''}${st.label}`, x, y, { bold: true, color: main ? C.actionDark : C.text });
       text(ctx, st.name, x + 150, y + 4, { size: S.small, color: C.textMuted });
-      bar(ctx, x + 340, y + 6, cw - 340 - 110, 28, v / cap, main ? C.action : C.progress);
-      text(ctx, String(v), x + cw, y, { size: S.heading, bold: true, align: 'right' });
+      bar(ctx, x + 340, y + 6, cw - 340 - (advanced() ? 170 : 110), 28, v / cap, main ? C.action : C.progress);
+      text(ctx, advanced() ? `${v}/${cap}` : String(v), x + cw, y, { size: advanced() ? S.body : S.heading, bold: true, align: 'right' }); // Milestone 34: Advanced stats
       y += 70;
     }
     y += 20;

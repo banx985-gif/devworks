@@ -51,6 +51,8 @@
 // Milestone 24: console launch and market — Create → Consoles (Console Portfolio): the launch plan from a validated
 // prototype, then the console as a platform (install base, third-party games, royalties, defects, failure reasons,
 // recovery); spending never passes the Emergency Credit line.
+// Milestone 33: the Year-20 ending (src/systems/ending.js: the grade, the ceremony screen, postgame) and New Game+
+// (src/systems/ngplus.js: Legacy Staff, blueprints, research conversion, the token shop; NG+ starts in another slot).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -114,6 +116,10 @@ import { createRumourScreen } from './screens/RumourScreen.js';
 import { createPrestige, PROJECT_ONE } from './systems/prestige.js'; // Milestone 31
 import { createAchievements } from './systems/achievements.js'; // Milestone 32
 import { createAchievementsScreen, createHallOfFameScreen } from './screens/AchievementsScreens.js';
+import { createEnding } from './systems/ending.js'; // Milestone 33
+import { createNgPlus } from './systems/ngplus.js';
+import { createEndingScreen } from './screens/EndingScreen.js';
+import { createNgPlusScreen } from './screens/NgPlusScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -170,7 +176,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -196,7 +202,7 @@ let engines = null; // Milestone 16 (made below, after research)
 const projects = createGameProjects({ engineFor: (versionId, tech) => engines?.forGame(versionId, tech) ?? null, recipeBonus: (recipe) => secrets.recipeBonus(recipe), bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
 const business = createBusiness({ bus, clock, world, projects });
 const research = createResearch({ bus, clock, world }); // Milestone 12
-const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched(), secretOpen: (id) => secrets.opened('unlocks', id) }); // Milestone 11 (Milestone 29: F34 / F35)
+const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched(), secretOpen: (id) => secrets.opened('unlocks', id), discountPct: (id) => profile.facilityDiscount(id), usedDiscount: (id) => profile.useFacilityDiscount(id) }); // Milestone 11 (Milestone 29: F34 / F35; Milestone 33: the NG+ facility blueprint)
 // Busy elsewhere (Milestones 16–17): the engine, a contract.
 let contracts = null;
 const engineBusy = (id) => (engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : hardware?.jobOf(id) ? 'Building a console prototype' : null);
@@ -282,6 +288,7 @@ const loop = new FixedStepLoop({
     dialog.update(dt);
     sheet.update(dt);
     if (started) eventFlow.update(dt); // Milestone 27
+    if (started) endingWatch(); // Milestone 33
     feedback.height = renderer.height;
     feedback.update(dt);
     // Floating +Credits only over the studio with nothing on top; otherwise they wait (and old ones are dropped).
@@ -393,6 +400,8 @@ const menus = createStudioMenus({
   distribution: () => distribution, // Milestone 26
   prestige: () => prestige, // Milestone 31
   achievements: () => achievements, // Milestone 32
+  knownBefore: (id) => !!ngplus.known[id], // Milestone 33: discovered staff identities
+  yearEnding: () => yearEnding(),
   rumours: () => { const r = secrets.rumours(); return r.length ? `${r.filter((x) => x.stage >= 4).length} found · ${r.filter((x) => x.stage < 4).length} rumours` : 'Whispers about secrets'; }, // Milestone 28
   fullLaunch: (number) => {
     sheet.close();
@@ -625,7 +634,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ ending: ending.serialize(), secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -644,6 +653,7 @@ async function prepareSaves() {
     combos.loadAccount(await adapter.get(SAVE.accountKey)); // Milestone 15: combos found in any slot
     secrets.loadAccount(await adapter.get(SAVE.secretsAccountKey)); // Milestone 28: secrets found in any run
     achievements.loadAccount(await adapter.get(SAVE.achievementsKey)); // Milestone 32
+    ngplus.loadAccount(await adapter.get(SAVE.legacyAccountKey)); // Milestone 33: legacy summaries, staff worked with
   } catch (err) {
     console.error('[DEVWORKS] account record unreadable', err);
   }
@@ -718,8 +728,10 @@ async function playSlot(i) {
   distribution.load(data.distribution ?? null); // Milestone 26
   studioEvents.load(data.studioEvents ?? null); // Milestone 27
   secrets.load(data.secrets ?? null); // Milestone 28
+  ending.load(data.ending ?? null); // Milestone 33 (a save from before it: the ending fires at the next check if Year 20 is over)
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   achievements.checkAll(); // Milestone 32: a run from before achievements catches up (nothing is ever granted twice)
+  ngplus.knowAll(); // Milestone 33: everyone here is someone the account has worked with
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -730,8 +742,9 @@ async function playSlot(i) {
 }
 
 // START STUDIO: a new studio in an empty slot, with the founder's starting team at their stations.
-async function startStudio(i, setup) {
-  if (sessionUsed) return reloadInto({ action: 'new', slot: i, setup });
+// Milestone 33: carry = a New Game+ package (src/systems/ngplus.js buildCarry), applied once the new run exists.
+async function startStudio(i, setup, carry = null) {
+  if (sessionUsed) return reloadInto({ action: 'new', slot: i, setup, carry });
   const founder = founderById(setup.founder);
   world.newGame(founder.team.map(startStaffById));
   business.newGame({ seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // the run's platform market seed
@@ -753,14 +766,17 @@ async function startStudio(i, setup) {
   distribution.newGame(); // Milestone 26
   studioEvents.newGame(); // Milestone 27
   secrets.newGame(); // Milestone 28
+  ending.newGame(); // Milestone 33
   profile.create(setup);
+  if (carry) ngplus.apply(carry); // Milestone 33: NG+ level, Legacy Staff, blueprints, RP, tokens paid
+  ngplus.knowAll();
   slot = slots.slot(i);
   slotIndex = i;
   sessionUsed = true;
   started = true;
   await slot.save(saveData());
   await slots.setLastUsed(i);
-  debug.log(`new studio in slot ${i + 1}: ${setup.studio}, founder ${founder.id}`);
+  debug.log(`new studio in slot ${i + 1}: ${setup.studio}, founder ${founder.id}${carry ? `, NG+${carry.level} from slot ${(carry.parent?.slot ?? 0) + 1}` : ''}`);
   router.go('studio');
 }
 
@@ -817,7 +833,7 @@ const titleScreen = createTitleScreen({
   onDelete: (i) => deleteSlot(i),
   onSettings: () => sheet.open({ title: 'Settings', subtitle: 'Sound, text size and other options will live here.', accent: COL.progress }),
 });
-const setupScreen = createSetupScreen({ layout, assets, textPrompt, onBack: () => router.go('title', { view: 'slots' }), onStart: (i, setup) => startStudio(i, setup) });
+const setupScreen = createSetupScreen({ layout, assets, textPrompt, onBack: () => (pendingNg ? router.go('ngplus', { keep: true, view: 'slot' }) : router.go('title', { view: 'slots' })), onStart: (i, setup) => (pendingNg && pendingNg.slot === i ? startNgPlusRun(i, setup) : startStudio(i, setup)) });
 
 // ---------------------------------------------------------------------------
 // Boot screen: shows while the images and the save load, then hands over to the studio (or the test screen).
@@ -844,7 +860,7 @@ const bootScreen = {
         intent = null;
       }
       if (START_SCREEN === 'title' && slots && intent?.action === 'play') playSlot(intent.slot);
-      else if (START_SCREEN === 'title' && slots && intent?.action === 'new') startStudio(intent.slot, intent.setup);
+      else if (START_SCREEN === 'title' && slots && intent?.action === 'new') startStudio(intent.slot, intent.setup, intent.carry ?? null);
       else router.go(START_SCREEN);
     });
   },
@@ -1317,6 +1333,81 @@ bus.on('achievement:unlocked', ({ def }) => showBeat({ title: `Achievement: ${de
 bus.on('halloffame:entry', ({ entry }) => showBeat({ title: `Hall of Fame: ${entry.name}`, body: entry.why.join(' · ') }));
 // Milestone 31: PROJECT ONE / PROJECT X (the templates) and Studio Singularity (the true ending).
 const prestige = createPrestige({ clock, world, projects, secrets, awards: () => awards, hardware: () => hardware, profile: () => profile, lanes });
+// ---------------------------------------------------------------------------
+// Milestone 33: the Year-20 ending (always, whatever the grade) and New Game+.
+const ending = createEnding({ bus, clock, world, projects, business, research, engines: () => engines, global: () => global, awards: () => awards, combos: () => combos, secrets: () => secrets, consoles: () => consoles, profile: () => profile, debug: log });
+const ngplus = createNgPlus({ bus, clock, world, business, research, projects, profile, secrets, combos, achievements, recruitment, shop, engines: () => engines, sponsors: () => sponsors, publishers: () => publishers, contracts: () => contracts, consoles: () => consoles, global: () => global, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.legacyAccountKey, data).catch((e) => console.error('[DEVWORKS] legacy account save failed', e)) });
+bus.on('campaign:ending', () => {
+  const r = ending.result;
+  if (!r) return;
+  profile.setEnding({ band: r.grade.band, total: r.grade.total, title: r.title });
+  ngplus.noteEnding(r); // the account's legacy summary
+  studioEvents.note({ title: `Year-20 ending: grade ${r.grade.band}`, body: `${r.grade.total} / ${r.grade.max} · ${r.title}`, level: 'major', read: true });
+});
+// The ceremony opens as soon as nothing else is on screen (C10's own moment first), with the clock stopped.
+function endingWatch() {
+  if (!ending.pending || ['ending', 'ngplus', 'setup'].includes(router.currentName) || feedback.active || dialog.active || textPrompt.active) return;
+  sheet.close();
+  clock.pause();
+  router.go('ending');
+}
+const endingCredits = () => {
+  const f = profile.data?.founder;
+  const founderName = f ? (staffDefById(f.id)?.name ?? f.id) : '';
+  return [
+    { heading: profile.name || 'Your studio', names: [`Studio Director ${profile.data?.director ?? ''}`, ...(founderName ? [`Founding Developer ${founderName}`] : [])] },
+    { heading: 'The team', names: world.staffSystem.staff.filter((s) => s.id !== f?.id).map((s) => s.name) },
+    { heading: 'DEVWORKS', names: ['A Banx Gamex game', 'Canvas Management Series'] },
+  ];
+};
+const endingScreen = createEndingScreen({
+  layout,
+  assets,
+  ending,
+  credits: endingCredits,
+  ngLevel: () => ngplus.offer().level,
+  // The offer: the finished run is saved here (ending included); starting NG+ never writes it again.
+  onOffer: () => {
+    if (ending.stage === 'ceremony') ending.setStage('offer');
+    autosave.request('ending');
+  },
+  onContinue: () => {
+    ending.continuePostgame();
+    autosave.request('ending');
+    router.go('studio');
+    showBeat({ title: 'Postgame', body: 'The years keep counting. New Game+ waits in Business → Studio.' });
+  },
+  onNgPlus: () => router.go('ngplus'),
+});
+let pendingNg = null; // { slot, choices } from the NG+ slot pick until START STUDIO
+const ngplusScreen = createNgPlusScreen({
+  layout,
+  assets,
+  topBar: subTopBar,
+  ngplus,
+  slots: () => slotCards,
+  parentSlot: () => slotIndex,
+  confirm: (o) => dialog.confirm(o),
+  onChoose: (i, choices) => {
+    pendingNg = { slot: i, choices };
+    const d = profile.data;
+    router.go('setup', { slot: i, ngPlus: ngplus.offer().level, prefill: { studio: d?.name ?? '', director: d?.director ?? '', colour: d?.colour, founder: d?.founder?.id } });
+  },
+});
+// START STUDIO for an NG+ run: the package is built from the finished run, which is never saved again from here (it
+// stays in its slot byte for byte), then the page reloads into the new slot (no state crosses between studios).
+async function startNgPlusRun(i, setup) {
+  const ng = pendingNg;
+  pendingNg = null;
+  await refreshSlots(); // the slot cards the NG+ screen showed are current
+  const carry = ngplus.buildCarry(ng.choices, { slot: slotIndex, grade: ending.result?.grade?.band ?? null });
+  // Every account record written now (the new run reads them after the reload).
+  await Promise.all([accountStore?.set(SAVE.secretsAccountKey, secrets.serializeAccount()), accountStore?.set(SAVE.achievementsKey, achievements.serializeAccount()), accountStore?.set(SAVE.accountKey, combos.serializeAccount()), accountStore?.set(SAVE.legacyAccountKey, ngplus.serializeAccount())].map((x) => x?.catch?.((e) => console.error('[DEVWORKS] account save before NG+ failed', e))));
+  slot = null; // nothing writes the parent slot again
+  started = false;
+  reloadInto({ action: 'new', slot: i, setup, carry });
+}
+const yearEnding = () => (ending.reached && !ending.pending ? { sub: `Grade ${ending.result?.grade?.band ?? '?'} · start NG+${ngplus.offer().level} in another slot`, onTap: () => { sheet.close(); clock.pause(); router.go('ending', { step: 'offer' }); } } : null);
 const peakLines = (why, parts) => [...parts, why ? { text: why, color: COL.bad } : { text: 'Everything is in place.', color: COL.good }];
 menus.register('projectOne', () => {
   const why = prestige.projectOneWhy();
@@ -1826,7 +1917,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1860,6 +1951,8 @@ router
   .register('rumours', rumourScreen) // Milestone 28
   .register('achievements', achievementsScreen) // Milestone 32
   .register('hallOfFame', hallOfFameScreen)
+  .register('ending', endingScreen) // Milestone 33
+  .register('ngplus', ngplusScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

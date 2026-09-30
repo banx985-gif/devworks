@@ -3,8 +3,8 @@
 // five start staff, and Continue (the last-played slot), Load / Slots, New Game and Settings (a placeholder sheet).
 // Load / Slots shows the four save slots as cards: an occupied slot shows the studio name, "Studio Director <name>",
 // the founder's portrait and name, Year / Month, rank, NG+ level (0 for now) and play time, with Play and Delete
-// (Delete asks first); an empty one says NEW STUDIO and starts the setup for that slot. The ending grade and the
-// console icon stay hidden until those systems exist.
+// (Delete asks first); an empty one says NEW STUDIO and starts the setup for that slot.
+// Milestone 33: an NG+ run says where it came from ("NG+1 from Slot 1"), and a finished run shows its Year-20 grade.
 // Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
@@ -184,7 +184,7 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
     y += 50 * k;
     text(ctx, `Year ${m.year} · Month ${m.month} · Rank ${m.rank}`, tx, y, { size: S.body, bold: true, color: C.actionDark, maxWidth: tw });
     y += 50 * k;
-    text(ctx, `NG+ ${m.ngPlus} · Played ${playTimeLabel(m.playSec)}`, tx, y, { size: S.small, color: C.textMuted, maxWidth: tw });
+    text(ctx, `${m.ngPlus ? `NG+${m.ngPlus}${m.parentSlot != null ? ` from Slot ${m.parentSlot + 1}` : ''}` : 'NG+ 0'}${m.grade ? ` · Grade ${m.grade}` : ''} · Played ${playTimeLabel(m.playSec)}`, tx, y, { size: S.small, color: C.textMuted, maxWidth: tw });
     drawButton(ctx, play, 'Play');
     drawButton(ctx, del, 'Delete', { accent: C.bad });
     if (crown()) drawCrown(ctx, play.x - 110, r.y + 14, 84); // Milestone 31: the account crown

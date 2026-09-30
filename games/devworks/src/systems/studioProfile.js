@@ -66,6 +66,11 @@ export function slotSummary(data) {
     rank: rankId,
     ngPlus: p.ngPlus ?? 0,
     playSec: p.playSec ?? 0,
+    // Milestone 33: "NG+1 from Slot 1" and the Year-20 grade once the ending has been reached.
+    parentSlot: p.parent?.slot ?? null,
+    grade: p.ending?.band ?? null,
+    gradeTotal: p.ending?.total ?? null,
+    console: (data.consoles?.consoles ?? []).length > 0,
   };
 }
 // The rank from the saved reputation (core ReputationSystem keeps the highest rank index reached).
@@ -103,6 +108,36 @@ export function createStudioProfile({ bus, clock }) {
     },
     get colour() {
       return colourById(p?.colour).hex;
+    },
+    // Milestone 33: New Game+ — where the run came from, its Legacy Staff / blueprints, the facility discount.
+    get parent() {
+      return p?.parent ?? null;
+    },
+    // How many runs in a row the longest-carried Legacy worker has been carried (SEC-NGP-03: 3 by NG+3).
+    get legacyRuns() {
+      return Math.max(0, ...(p?.legacy ?? []).map((l) => l.runs ?? 0));
+    },
+    get legacyOnC10() {
+      return !!p?.legacyOnC10;
+    },
+    isLegacy: (id) => !!p?.legacy?.some((l) => l.id === id),
+    setLegacyOnC10() {
+      if (p) p.legacyOnC10 = true;
+    },
+    startNgPlus({ level, parent = null, legacy = [], blueprints = [], facilityBlueprint = null, shop = [], startFacility = null, researchRp = 0 }) {
+      if (!p) return;
+      Object.assign(p, { ngPlus: level, parent, legacy, blueprints, facilityBlueprint, ngShop: shop, startFacility, researchRp });
+    },
+    // The discounted facility blueprint: { id, pct } while unused, else null; use() when it is bought.
+    facilityDiscount: (id) => (p?.facilityBlueprint && !p.facilityBlueprint.used && p.facilityBlueprint.id === id ? p.facilityBlueprint.pct : 0),
+    useFacilityDiscount(id) {
+      if (p?.facilityBlueprint?.id === id) p.facilityBlueprint.used = true;
+    },
+    // The Year-20 ending, on the founder's history (spec §4) and the slot card: { band, total, title }.
+    setEnding(e) {
+      if (!p) return;
+      p.ending = e;
+      p.founder.ending = e;
     },
     // { id, perk } for the project system, or null.
     founder() {

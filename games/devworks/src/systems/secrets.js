@@ -459,6 +459,16 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
       return true;
     },
     addTokens: (n) => (acct().prestigeTokens = (acct().prestigeTokens ?? 0) + n),
+    // Milestone 33: the account record written now (before New Game+ reloads the page).
+    saveAccountNow: () => persistAccount(),
+    // Milestone 33: the first spend (the NG+ setup shop). Never below 0; logged in the account and saved at once.
+    spendTokens(n, reason = '') {
+      if (!(n > 0) || (acct().prestigeTokens ?? 0) < n) return false;
+      acct().prestigeTokens -= n;
+      (acct().tokenSpends ||= []).push({ n, reason, day: today() });
+      persistAccount();
+      return true;
+    },
     setOpened: (bag, id) => add(bag, id, today()),
     openedList: (bag) => Object.keys(acct()[bag] ?? {}),
     get counters() {

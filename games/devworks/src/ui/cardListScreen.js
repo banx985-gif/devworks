@@ -12,6 +12,12 @@ const S = THEME.size;
 const PAD = 32;
 const LOGO = 130;
 
+// Milestone 34: colour-blind-safe symbols (a setting): a good / bad line gets ✓ / ✗ in front. And the empty-state audit:
+// a section with no cards and no `empty` text is reported to globalThis.__dwEmptyAudit (tests), so no panel is blank.
+let symbols = false;
+export const setCardSymbols = (on) => (symbols = !!on);
+const mark = (l) => (!symbols || !l.color ? l : l.color === C.good ? { ...l, text: `✓ ${l.text}` } : l.color === C.bad ? { ...l, text: `✗ ${l.text}` } : l.color === C.warn ? { ...l, text: `! ${l.text}` } : l);
+
 export function createCardListScreen({ layout, assets, topBar, build }) {
   const panelRect = () => {
     const t = topBar.rect();
@@ -40,6 +46,7 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
         if (ctx) text(ctx, sec.heading, PAD, y, { size: S.heading, bold: true, maxWidth: cw });
         y += 70;
       }
+      if (!sec.cards.length && !sec.empty && globalThis.__dwEmptyAudit) globalThis.__dwEmptyAudit.push(`${m.title}: ${sec.heading ?? '(no heading)'}`);
       if (!sec.cards.length && sec.empty) {
         if (ctx) para(ctx, sec.empty, PAD, y, cw, { color: C.textMuted });
         y += wrapLines(sec.empty, cw, S.body).length * S.body * 1.3 + 30;
@@ -47,7 +54,7 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
       for (const c of sec.cards) {
         const tx = c.logo ? LOGO + 40 : 24;
         const tw = cw + 16 - tx - 24;
-        const lines = c.lines.map((l) => (typeof l === 'string' ? { text: l } : l));
+        const lines = c.lines.map((l) => mark(typeof l === 'string' ? { text: l } : l));
         const linesH = lines.reduce((t, l) => t + wrapLines(l.text, tw, S.small, l.bold).length * S.small * 1.3 + 8, 0);
         const bodyH = Math.max(c.logo ? LOGO + 10 : 0, 70 + linesH);
         const btnH = c.buttons?.length ? THEME.button.minH + 24 : 0;

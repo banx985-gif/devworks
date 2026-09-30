@@ -53,7 +53,7 @@ import { DISTRIBUTION } from '../../data/distribution.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -165,6 +165,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
         },
+        ...(yearEnding?.() ? [{ columns: 1, buttons: [{ id: 'yearEnding', label: 'Year-20 ending · New Game+', sub: yearEnding().sub, icon: 'dev_brand_06', accent: C.purple, onTap: yearEnding().onTap }] }] : []), // Milestone 33
         ...(toTitle ? [{ columns: 1, buttons: [{ id: 'mainMenu', label: 'Main Menu', sub: 'Saves your studio, then back to the title screen', icon: biz.icon, accent: C.progress, onTap: toTitle }] }] : []),
       ],
     };
@@ -332,7 +333,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         {
           columns: 1,
-          buttons: list.map((x) => ({ id: x.def.id, label: `${x.def.name} · ${x.def.cost.toLocaleString('en-GB')}`, sub: x.ok ? x.def.line + (x.def.later ? ` (with ${x.def.later})` : '') : x.why, icon: x.def.art, locked: !x.ok && !/Credits$/.test(x.why ?? ''), disabled: !x.ok, onTap: () => buyFacility?.(x.def.id) })),
+          buttons: list.map((x) => ({ id: x.def.id, label: `${x.def.name} · ${(x.price ?? x.def.cost).toLocaleString('en-GB')}${x.discount ? ' (blueprint)' : ''}`, sub: x.ok ? x.def.line + (x.def.later ? ` (with ${x.def.later})` : '') : x.why, icon: x.def.art, locked: !x.ok && !/Credits$/.test(x.why ?? ''), disabled: !x.ok, onTap: () => buyFacility?.(x.def.id) })),
         },
       ],
     };
@@ -434,7 +435,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
               columns: 1,
               buttons: cards.map((c) => {
                 const d = r.cardDef(c);
-                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
+                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : knownBefore(d.id) ? ' · worked with you in an earlier run' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
               }),
             }
           : { lines: [{ text: 'Nobody new on this board. Refresh, or try another channel when it opens.', color: C.textMuted }] },

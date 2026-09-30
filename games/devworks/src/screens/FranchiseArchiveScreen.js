@@ -95,9 +95,9 @@ export function createFranchiseArchiveScreen({ layout, assets, business, project
         const cr = { x: r.x + 20 + k * (COVER.w + COVER.gap), y: r.y + 330, w: COVER.w, h: COVER.h };
         drawCover(ctx, assets, rec.result.cover, '', cr);
         const t = projectTypeById(rec.result.type ?? 'original');
-        text(ctx, rec.release ? `${t.name} · ${rec.release.score}` : t.name, cr.x + cr.w / 2, cr.y + cr.h + 12, { size: 24, bold: true, color: C.textMuted, align: 'center', maxWidth: cr.w + COVER.gap - 4 });
+        text(ctx, rec.release ? `${t.name} · ${rec.release.score}` : t.name, cr.x + cr.w / 2, cr.y + cr.h + 12, { size: S.small, bold: true, color: C.textMuted, align: 'center', maxWidth: cr.w + COVER.gap - 4 });
       });
-      if (recs.length > show.length) text(ctx, `+${recs.length - show.length} older`, r.x + r.w - 24, r.y + r.h - 20, { size: 24, color: C.textMuted, align: 'right', baseline: 'bottom' });
+      if (recs.length > show.length) text(ctx, `+${recs.length - show.length} older`, r.x + r.w - 24, r.y + r.h - 20, { size: S.small, color: C.textMuted, align: 'right', baseline: 'bottom' });
     });
     return HEAD_H + list.length * (CARD_H + 20) + PAD;
   }

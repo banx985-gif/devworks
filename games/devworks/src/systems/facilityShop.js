@@ -15,7 +15,8 @@ import { FAME } from '../../data/balance.js';
 import { researchById } from '../../data/research.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 
-export function createFacilityShop({ bus, world, business, clock, projects, researched = () => new Set(), secretOpen = () => false }) {
+// Milestone 33: discountPct(id) — an NG+ facility blueprint's first purchase costs that % less (usedDiscount(id) after).
+export function createFacilityShop({ bus, world, business, clock, projects, researched = () => new Set(), secretOpen = () => false, discountPct = () => 0, usedDiscount = () => {} }) {
   const rankIndex = () => business.reputation.highestRankIndex;
   const released = () => projects.catalogue.list().filter((r) => r.release);
   const awards = () => business.state.awards ?? 0;
@@ -35,13 +36,15 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     return why.length ? `Needs ${why.join(' + ')}` : null;
   }
 
+  const priceOf = (def) => Math.round((def.cost * (100 - (discountPct(def.id) ?? 0))) / 100);
   function status(id) {
     const def = facilityById(id);
     if (!def) return null;
+    const price = priceOf(def);
     const owned = !!world.stationById(id);
     const hidden = !!def.unlock?.secret && !secretOpen(def.id); // Milestone 29: F34 / F35 open with their secret
-    const why = owned ? 'Already in the studio' : hidden ? 'Secret' : lockReason(def) ?? (business.credits < def.cost ? `Needs ${def.cost.toLocaleString('en-GB')} Credits` : null);
-    return { def, owned, hidden, ok: !why, why };
+    const why = owned ? 'Already in the studio' : hidden ? 'Secret' : lockReason(def) ?? (business.credits < price ? `Needs ${price.toLocaleString('en-GB')} Credits` : null);
+    return { def, owned, hidden, ok: !why, why, price, discount: price < def.cost };
   }
 
   function buy(id) {
@@ -49,8 +52,9 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     if (!s?.ok) return { ok: false, why: s?.why ?? 'Unknown facility' };
     const st = world.addStation(id);
     if (!st) return { ok: false, why: 'No free spot: make room or move up a stage' };
-    business.economy.spend('credits', s.def.cost, `Built: ${s.def.name}`, 'facilities');
-    bus?.emit('facility:bought', { station: st, cost: s.def.cost });
+    business.economy.spend('credits', s.price, `Built: ${s.def.name}${s.discount ? ' (NG+ blueprint)' : ''}`, 'facilities');
+    if (s.discount) usedDiscount(id);
+    bus?.emit('facility:bought', { station: st, cost: s.price });
     return { ok: true, station: st };
   }
 
