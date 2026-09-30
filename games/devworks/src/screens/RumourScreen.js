@@ -1,7 +1,8 @@
 // The Rumour Archive (Milestone 28; Milestone 29: all 50 secrets), from Compete → Rumour Archive: every secret the
 // studio has heard of — a rumour (clue stage 1), a hint (2), nearly explicit (3) — shown as "???" with its stage, and
 // the ones found, with their group, recipe and reward (4). With ?debug=1 each card also has "Why not?", the why-false
-// inspector (every condition, its live value and what fails).
+// inspector (every condition, its live value and what fails). Milestone 31: the prestige records (PROJECT ONE, PROJECT X,
+// Studio Singularity — the run and date each was first reached), once any exists.
 import { THEME } from '../../../../core/Theme.js';
 import { createCardListScreen } from '../ui/cardListScreen.js';
 
@@ -35,6 +36,11 @@ export function createRumourScreen({ layout, assets, topBar, secrets, onWhy = nu
         sections: [
           { heading: 'Rumours', cards: open.map(card), empty: 'No rumours yet. Keep making games — people talk.' },
           ...(found.length ? [{ heading: 'Found', cards: found.map(card) }] : []),
+          ...(() => {
+            const rec = secrets.prestigeRecords?.() ?? {};
+            const rows = [['projectOne', 'PROJECT ONE', 'cover_27'], ['projectX', 'PROJECT X', 'console_visual_08'], ['singularity', 'Studio Singularity', 'award_trophy_08']].filter(([id]) => rec[id]);
+            return rows.length ? [{ heading: 'Prestige records', cards: rows.map(([id, name, logo]) => ({ id: `rec-${id}`, logo, title: name, highlight: true, lines: [{ text: `First reached in NG+${rec[id].value} · Year ${rec[id].info.year}, Month ${rec[id].info.month}`, color: C.good, bold: true }, { text: `Run ${rec[id].runId ?? rec[id].info.runId}`, color: C.textMuted }], buttons: [] })) }] : [];
+          })(),
         ],
       };
     },

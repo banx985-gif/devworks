@@ -43,14 +43,15 @@ export function ratingsFor(parts) {
 }
 
 // Validation — pure: { passed, required: [{ id, name, ok, why }], capabilities: [{ id, name, ok, why }] }.
-export function validate(parts, ratings = ratingsFor(parts)) {
+// Milestone 31: a PROJECT X design (projectX) is a flagship — its unit cost is no object (the cost check always passes).
+export function validate(parts, ratings = ratingsFor(parts), { projectX = false } = {}) {
   const K = H.checks;
   const cpu = componentById(parts.CPU);
   const gpu = componentById(parts.GPU);
   const required = [
     { id: 'reliability', name: 'Reliability', ok: ratings.reliability >= K.minReliability, why: `Too unreliable (Reliability ${ratings.reliability}, needs ${K.minReliability}): pick sturdier parts` },
     { id: 'devFriendly', name: 'Developer Friendliness', ok: ratings.devFriendly >= K.minDevFriendly, why: `Too hard to make games for (Developer Friendliness ${ratings.devFriendly}, needs ${K.minDevFriendly})` },
-    { id: 'unitCost', name: 'Unit cost', ok: ratings.unitCost <= K.maxUnitCost, why: `Too expensive to make: ${ratings.unitCost} Credits a console (at most ${K.maxUnitCost})` },
+    { id: 'unitCost', name: 'Unit cost', ok: projectX || ratings.unitCost <= K.maxUnitCost, why: `Too expensive to make: ${ratings.unitCost} Credits a console (at most ${K.maxUnitCost})` },
     { id: 'balance', name: 'CPU / GPU match', ok: Math.abs(cpu.tier - gpu.tier) <= K.maxTierGap, why: `${cpu.name} and ${gpu.name} don't match: one holds the other back` },
   ];
   const capabilities = H.capabilities.map((c) => ({ id: c.id, name: c.name, ok: componentById(parts[c.slot]).tier >= c.tier, why: c.why }));
@@ -131,7 +132,7 @@ export function createHardware({ bus, clock, world, business, research, studioNa
   const preview = () => {
     const d = ensureDraft();
     const ratings = ratingsFor(d.parts);
-    return ratings ? { ...d, ratings, validation: validate(d.parts, ratings), work: workOf(d.parts), reused: reusedOf(d.parts), costPerDay: costPerDayOf(d.parts) } : { ...d, ratings: null, validation: null };
+    return ratings ? { ...d, ratings, validation: validate(d.parts, ratings, { projectX: !!d.projectX }), work: workOf(d.parts), reused: reusedOf(d.parts), costPerDay: costPerDayOf(d.parts) } : { ...d, ratings: null, validation: null };
   };
 
   // --- building ----------------------------------------------------------------------------------------------------
@@ -159,7 +160,7 @@ export function createHardware({ bus, clock, world, business, research, studioNa
     const n = prototypes.filter((p) => p.family === d.family).length + 1;
     const job = system.createJob({ type: 'hardware', name: `${d.family} prototype ${n}`, phaseTarget: 1, slots: team.length, data: {} });
     job.slots = [...team];
-    job.data = { family: d.family, parts: { ...d.parts }, work: workOf(d.parts), costPerDay: costPerDayOf(d.parts), cost: 0, startedDay: today() };
+    job.data = { family: d.family, parts: { ...d.parts }, work: workOf(d.parts), costPerDay: costPerDayOf(d.parts), cost: 0, startedDay: today(), projectX: !!d.projectX };
     system.start(job);
     bus.emit('hardware:start', { job });
     return { ok: true, job };
@@ -167,7 +168,7 @@ export function createHardware({ bus, clock, world, business, research, studioNa
   function finish(job) {
     const d = job.data;
     const ratings = ratingsFor(d.parts);
-    const proto = { id: `HW${nextId++}`, name: job.name, family: d.family, parts: { ...d.parts }, ratings, validation: validate(d.parts, ratings), builtDay: today(), startedDay: d.startedDay, cost: d.cost, team: [...job.slots] };
+    const proto = { id: `HW${nextId++}`, name: job.name, family: d.family, parts: { ...d.parts }, ratings, validation: validate(d.parts, ratings, { projectX: !!d.projectX }), builtDay: today(), startedDay: d.startedDay, cost: d.cost, team: [...job.slots], ...(d.projectX ? { projectX: true } : {}) };
     prototypes.push(proto);
     bus.emit('hardware:prototype', { prototype: proto, first: prototypes.length === 1 });
   }

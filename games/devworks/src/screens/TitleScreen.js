@@ -18,7 +18,13 @@ const S = THEME.size;
 const BTN_H = 130;
 
 // slots(): [{ index, summary, error }] (null summary = empty); last(): index of the last-played slot or null.
-export function createTitleScreen({ layout, assets, slots, last, onContinue, onPlay, onNewGame, onNewInSlot, onDelete, onSettings }) {
+// Milestone 31: crown() → the account crown (Studio Singularity, SEC-X-03): a permanent badge by the logo and on every
+// save slot (the Prestige Legends Crown over the Prestige Aura).
+export function createTitleScreen({ layout, assets, slots, last, onContinue, onPlay, onNewGame, onNewInSlot, onDelete, onSettings, crown = () => false }) {
+  const drawCrown = (ctx, x, y, size) => {
+    assets.drawContained(ctx, 'dev_vfx_12', { x: x - size * 0.2, y: y - size * 0.2, w: size * 1.4, h: size * 1.4 });
+    assets.drawContained(ctx, 'award_trophy_08', { x, y, w: size, h: size });
+  };
   let view = 'main';
   let note = null; // a line shown over the slots (e.g. "All 4 slots are full…")
 
@@ -46,6 +52,7 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
       const lw = Math.min(sr.w - 80, logoH * assets.aspect('dev_brand_03'));
       const lh = lw / assets.aspect('dev_brand_03');
       assets.draw(ctx, 'dev_brand_03', cx - lw / 2, y + (logoH - lh) / 2, lw, lh);
+      if (crown()) drawCrown(ctx, cx + lw / 2 - 60, y - 10, 150); // Milestone 31
       text(ctx, 'Build a game studio, one hit at a time.', cx, y + logoH + 16, { size: S.body, bold: true, color: C.textMuted, align: 'center', maxWidth: sr.w - 80 });
     } else if (ctx) {
       ctx.save();
@@ -180,6 +187,7 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
     text(ctx, `NG+ ${m.ngPlus} · Played ${playTimeLabel(m.playSec)}`, tx, y, { size: S.small, color: C.textMuted, maxWidth: tw });
     drawButton(ctx, play, 'Play');
     drawButton(ctx, del, 'Delete', { accent: C.bad });
+    if (crown()) drawCrown(ctx, play.x - 110, r.y + 14, 84); // Milestone 31: the account crown
   }
 
   function drawEmpty(ctx, r, s) {

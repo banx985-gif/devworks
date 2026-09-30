@@ -31,6 +31,7 @@
 // Events: core's 'secret:unlocked' / 'secret:clue'; 'secret:arrival' { staffId, rule }.
 import { SecretEngine, FactRegistry } from '../../../../core/SecretEngine.js';
 import { UnlockRunner } from '../../../../core/UnlockActions.js';
+import { AccountRecords } from '../../../../core/AccountRecords.js';
 import { COUNTERS as K, SECRET_REWARD_CURRENCIES, SECRET_RECIPES, FAMILY_GENRES } from '../../data/secrets.js';
 import { staffDefById, PRESTIGE_TIERS } from '../../data/staff.js';
 import { platformById } from '../../data/platforms.js';
@@ -109,6 +110,7 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
       family: FAMILY_GENRES.includes(rec.genre),
       finalYear: plats.some((id) => platformById(id)?.era?.to === relYear),
       deal: !!r.result.deal,
+      projectOne: !!r.result.projectOne, // Milestone 31
     };
   }
   // The exact measurements of one release (plan review C), fixed at launch.
@@ -133,7 +135,7 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     const s = consoles()?.secretStats?.() ?? { consoles: [], generations: 0, profitableGenerations: 0, handheldRevision: false };
     const sold = s.consoles.filter((x) => x.units > 0);
     const list = consoles()?.consoles ?? [];
-    return { ...s, hits: list.filter((c) => c.verdict === 'hit').length, bestDefectRate: sold.length ? Math.min(...sold.map((x) => x.defectRatePct)) : null, maxUnits: Math.max(0, ...s.consoles.map((x) => x.units)), peakDevFriendly: Math.max(0, ...s.consoles.map((x) => x.peakDevFriendly)), thirdPartyReleases: s.consoles.reduce((t, x) => t + x.thirdPartyReleases, 0), missedLaunch: s.consoles.some((x) => x.missedLaunch) };
+    return { ...s, projectXLaunched: list.some((c) => c.projectX), hits: list.filter((c) => c.verdict === 'hit').length, bestDefectRate: sold.length ? Math.min(...sold.map((x) => x.defectRatePct)) : null, maxUnits: Math.max(0, ...s.consoles.map((x) => x.units)), peakDevFriendly: Math.max(0, ...s.consoles.map((x) => x.peakDevFriendly)), thirdPartyReleases: s.consoles.reduce((t, x) => t + x.thirdPartyReleases, 0), missedLaunch: s.consoles.some((x) => x.missedLaunch) };
   };
   const byTitle = () => Object.fromEntries(released().map((r) => [r.result.title, r]));
   function awardWins() {
@@ -242,14 +244,14 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     .define('hwSecretsEver', () => everCount(rulesIn('SEC-HW-').filter((r) => r.id !== 'SEC-HW-06')))
     .define('secretEver', () => engine.rules.filter((r) => engine.everUnlocked(r.id)).map((r) => r.id))
     .define('secretRun', () => Object.keys(engine.run.unlocked))
-    .define('prestigeEngineTech', () => !!engine.account.flags.tech?.prestigeBuildSystem)
+    .define('prestigeEngineTech', () => has('tech', 'prestigeBuildSystem'))
     .define('legacyStaffRuns', () => profile()?.legacyRuns ?? 0) // NG+ carry-over is Milestone 33: 0 until then
     .define('legacyOnC10', () => !!profile()?.legacyOnC10)
     .defineGroup('hw', (key) => hwStats()[key])
     .defineGroup('hallOfFame', (key) => hallOfFame()[key])
     .defineGroup('employed', (who) => employedYears(who))
     .defineGroup('clueStage', (id) => stageOf(id))
-    .defineGroup('flags', (id) => !!counters.flags[id])
+    .defineGroup('flags', (id) => counters.flags[id] != null)
     .defineGroup('account', (name) => engine.accountFact(name));
 
   // --- rewards, once ------------------------------------------------------------------------------------------------
@@ -294,9 +296,14 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
         }),
     },
   });
+  // Milestone 31: the prestige records — which peaks were reached, in which run (its NG+ level and id) and when; the
+  // first time is kept (core AccountRecords, 'min' on the NG+ level), saved in the account record.
+  const records = new AccountRecords({ bus, defs: [{ id: 'projectOne', better: 'min' }, { id: 'projectX', better: 'min' }, { id: 'singularity', better: 'min' }], now: () => ({ day: today(), runId: runId() }) });
+  const PEAKS = { 'SEC-X-02': 'projectOne', 'SEC-HW-06': 'projectX', 'SEC-X-03': 'singularity' };
   engine = new SecretEngine({ bus, rules, facts, runner, ngPlus: () => profile()?.ngPlus ?? 0, currencyTypes: SECRET_REWARD_CURRENCIES, now: () => ({ day: today(), year: clock.year, runId: runId() }) });
-  const persistAccount = () => saveAccount?.(engine.serializeAccount());
-  bus.on('secret:unlocked', () => {
+  const persistAccount = () => saveAccount?.({ ...engine.serializeAccount(), records: records.serialize() });
+  bus.on('secret:unlocked', ({ rule }) => {
+    if (PEAKS[rule.id]) records.submit(PEAKS[rule.id], profile()?.ngPlus ?? 0, { year: clock.year, month: clock.month, runId: runId(), ngPlus: profile()?.ngPlus ?? 0 });
     engine.setRunFact('secretsFound', Object.keys(engine.run.unlocked));
     persistAccount();
     queueMicrotask?.(() => notify('secretFound'));
@@ -487,7 +494,14 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
       }
       if (!counters.starters.length) counters.starters = Object.entries(counters.hired).filter(([, d]) => d === 0).map(([id]) => id).sort();
     },
-    serializeAccount: () => engine.serializeAccount(),
-    loadAccount: (data) => engine.loadAccount(data ?? null),
+    serializeAccount: () => ({ ...engine.serializeAccount(), records: records.serialize() }),
+    loadAccount(data) {
+      const { records: rec, ...rest } = data ?? {};
+      engine.loadAccount(data ? rest : null);
+      records.records = {};
+      records.load(rec ?? null);
+    },
+    // Milestone 31: the prestige records (projectOne / projectX / singularity → { value: NG+ level, info, runId, day }).
+    prestigeRecords: () => ({ projectOne: records.get('projectOne'), projectX: records.get('projectX'), singularity: records.get('singularity') }),
   };
 }

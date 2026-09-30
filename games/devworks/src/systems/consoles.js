@@ -108,13 +108,19 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
   // --- the plan -----------------------------------------------------------------------------------------------------
   // Prototypes that can launch the next generation: passed validation, not launched yet, and (after Gen 1) built after
   // the current generation launched — a new generation is a new hardware project.
+  // Milestone 31: a PROJECT X prototype (hardware.designProjectX) may launch after the three generations, once.
+  const projectXReady = () => hardware.prototypes.find((p) => p.projectX && p.validation.passed && !consoles.some((c) => c.prototypeId === p.id)) ?? null;
+  const projectXDone = () => consoles.some((c) => c.projectX);
   const validPrototypes = () => {
     const cur = own();
-    return hardware.prototypes.filter((p) => p.validation.passed && !consoles.some((c) => c.prototypeId === p.id) && (!cur || p.builtDay >= cur.launchDay));
+    const px = !projectXDone() ? projectXReady() : null;
+    if (px) return [px];
+    return hardware.prototypes.filter((p) => !p.projectX && p.validation.passed && !consoles.some((c) => c.prototypeId === p.id) && (!cur || p.builtDay >= cur.launchDay));
   };
   const nextGen = () => consoles.length + 1;
   const monthsOn = (c) => month() - c.launchMonth;
   function launchWhy() {
+    if (!projectXDone() && projectXReady()) return null; // Milestone 31: PROJECT X launches whenever it is built
     if (consoles.length >= G.max) return `All ${G.max} console generations made: a studio makes at most ${G.max}`;
     const cur = own();
     if (cur && monthsOn(cur) < G.minMonths) {
@@ -178,13 +184,15 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     const proto = pv.prototype;
     const prev = own();
     const gen = pv.gen;
+    const px = !!proto.projectX; // Milestone 31
     const c = {
-      id: `C${gen}`,
-      platformId: gen === 1 ? K.platformId : `OWN${gen}`,
-      name: pv.name,
+      id: px ? 'CX' : `C${gen}`,
+      platformId: px ? 'OWNX' : gen === 1 ? K.platformId : `OWN${gen}`,
+      name: px ? 'PROJECT X' : pv.name,
+      projectX: px,
       family: consoles[0]?.family ?? proto.family,
       gen,
-      art: pv.art,
+      art: px ? K.projectXArt : pv.art,
       marketMult: G.marketMult[gen - 1] ?? G.marketMult.at(-1),
       backCompat: !!p.backCompat,
       revision: null,

@@ -111,6 +111,7 @@ import { SYNTHETIC_SECRETS, SECRETS } from '../data/secrets.js';
 import { GHOSTLIGHT } from '../data/rivals.js'; // Milestone 30
 import { PRESTIGE_TIERS } from '../data/staff.js';
 import { createRumourScreen } from './screens/RumourScreen.js';
+import { createPrestige, PROJECT_ONE } from './systems/prestige.js'; // Milestone 31
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -386,6 +387,7 @@ const menus = createStudioMenus({
   today: () => clock.totalDays,
   debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
   distribution: () => distribution, // Milestone 26
+  prestige: () => prestige, // Milestone 31
   rumours: () => { const r = secrets.rumours(); return r.length ? `${r.filter((x) => x.stage >= 4).length} found · ${r.filter((x) => x.stage < 4).length} rumours` : 'Whispers about secrets'; }, // Milestone 28
   fullLaunch: (number) => {
     sheet.close();
@@ -797,6 +799,7 @@ async function newGameFromMenu() {
 const titleScreen = createTitleScreen({
   layout,
   assets,
+  crown: () => secrets.opened("cosmetics", "accountCrown"), // Milestone 31
   slots: () => slotCards,
   last: () => lastSlot,
   onContinue: (i) => playSlot(i),
@@ -1299,6 +1302,22 @@ menus.register('secretWhy', (id) => {
   return { title: `Why not? ${w.name}`, subtitle: `${w.ok ? 'All conditions hold' : `${w.failing.length} failing`} · clue stage ${w.stage} · checked on ${w.triggers.join(', ')}${w.eased ? ' · eased' : ''}`, art: 'dev_ui_29', accent: COL.progress, sections: [{ lines: w.lines.map((l) => ({ text: `${l.ok ? '✓' : '✗'} ${l.text}`, color: l.ok ? COL.good : COL.bad })) }] };
 });
 bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: `${rule.rewardText ?? 'See Compete → Rumour Archive.'}` }));
+// Milestone 31: PROJECT ONE / PROJECT X (the templates) and Studio Singularity (the true ending).
+const prestige = createPrestige({ clock, world, projects, secrets, awards: () => awards, hardware: () => hardware, profile: () => profile, lanes });
+const peakLines = (why, parts) => [...parts, why ? { text: why, color: COL.bad } : { text: 'Everything is in place.', color: COL.good }];
+menus.register('projectOne', () => {
+  const why = prestige.projectOneWhy();
+  return { title: 'PROJECT ONE', subtitle: 'The ultimate game (NG+3)', art: PROJECT_ONE.cover, accent: COL.purple, sections: [{ lines: peakLines(why, ['RPG + Science Fiction + Management + Neural Tools + Mixed Media + User Creation, at Mega scope.', `Your ${PROJECT_ONE.prestigeStaff} Prestige people lead it with the rest of the free team. Launch it with at most ${PROJECT_ONE.maxBugs} bugs.`]) }, { columns: 1, buttons: [{ id: 'start', label: 'Start PROJECT ONE', sub: why ?? 'Premium audio, balanced budget', disabled: !!why, accent: COL.good, onTap: () => { const r = prestige.startProjectOne(studioRng); sheet.close(); if (!r.ok) showTip(r.why); else showBeat({ title: 'PROJECT ONE has begun', body: 'The whole studio is on it.' }); } }] }] };
+});
+menus.register('projectX', () => {
+  const why = prestige.projectXWhy();
+  return { title: 'PROJECT X', subtitle: 'The ultimate console (NG+3)', art: 'console_visual_08', accent: COL.purple, sections: [{ lines: peakLines(why, ['All six Prestige parts: Neural CPU, Render Core, Memory Fabric, Crystal Storage, Haptic Deck, Adaptive OS.', 'Build the prototype at the lab, then launch it from the Console Portfolio.']) }, { columns: 1, buttons: [{ id: 'design', label: 'Design PROJECT X', sub: why ?? 'Opens Hardware with the six parts', disabled: !!why, accent: COL.good, onTap: () => { const r = prestige.designProjectX(); sheet.close(); if (!r.ok) showTip(r.why); else router.go('hardware'); } }] }] };
+});
+bus.on('secret:unlocked', ({ rule }) => {
+  if (rule.id === 'SEC-X-02') prestigeMoment({ title: 'PROJECT ONE', subtitle: 'The ultimate game is out. The software hidden ending is yours — and 5 Prestige Tokens.', art: 'dev_event_17', badge: PROJECT_ONE.cover });
+  if (rule.id === 'SEC-HW-06') prestigeMoment({ title: 'PROJECT X', subtitle: 'The ultimate console is in the shops. The hardware hidden ending is yours.', art: 'dev_event_18', badge: 'console_visual_08' });
+  if (rule.id === 'SEC-X-03') prestigeMoment({ title: 'Studio Singularity', subtitle: 'Both peaks in one lifetime. The true hidden ending — and the account crown, forever.', art: 'dev_event_19', badge: 'dev_vfx_12' });
+});
 // Milestone 30: a big moment with a picture (the Ghostlight reveal, C11, C12).
 function prestigeMoment({ title, subtitle, art, badge = null }) {
   feedback.show({

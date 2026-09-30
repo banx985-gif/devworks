@@ -97,6 +97,10 @@ export function createStudioProfile({ bus, clock }) {
     get name() {
       return p?.name ?? '';
     },
+    // The run's NG+ level (Milestone 5b field; read by the secrets, Milestones 28–31).
+    get ngPlus() {
+      return p?.ngPlus ?? 0;
+    },
     get colour() {
       return colourById(p?.colour).hex;
     },

@@ -105,6 +105,7 @@ export const CONSOLE = {
   // Secret hooks (HW-01…HW-05, Milestone 28 gives the rewards): the stats are recorded per console. A launch "misses"
   // when its first 6 months sell under target6 (market × target6Pct%) by missPct% or more.
   hooks: { target6Pct: 20, missPct: 30, hitScore: 85, exclusiveScore: 80 },
+  projectXArt: 'console_visual_08', // Milestone 31: the PROJECT X console
   safety: { margin: 5000 }, // console spending never takes the studio within this of the Emergency Credit line
   launchArt: 'dev_event_11',
   launchVfx: 'dev_vfx_10',
