@@ -53,7 +53,7 @@ import { DISTRIBUTION } from '../../data/distribution.js';
 
 const C = THEME.color;
 
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, distribution = null, fullLaunch = null, setStorefront = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
     menus.register(def.id, () => {
@@ -91,6 +91,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           { id: 'rivals', label: 'Rivals', sub: 'The other studios and their games', icon: 'rival_logo_r01', accent: C.progress, onTap: () => openScreen('rivals') },
           { id: 'rankings', label: 'Rankings', sub: 'Studios by awards and sales', icon: 'dev_ui_04', accent: C.purple, onTap: () => openScreen('rankings') },
           ...(rumours ? [{ id: 'rumours', label: 'Rumour Archive', sub: rumours(), icon: 'dev_ui_29', accent: C.purple, onTap: () => openScreen('rumours') }] : []), // Milestone 28
+          ...(achievements ? [{ id: 'achievements', label: 'Achievements', sub: `${achievements().count()} of ${achievements().total()} earned`, icon: 'dev_ui_04', accent: C.progress, onTap: () => openScreen('achievements') }, { id: 'hallOfFame', label: 'Hall of Fame', sub: `${achievements().hall.length} entr${achievements().hall.length === 1 ? 'y' : 'ies'}`, icon: 'dev_reward_10', accent: C.purple, onTap: () => openScreen('hallOfFame') }] : []), // Milestone 32
         ] }],
       }));
       continue;
@@ -159,6 +160,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                 ]
               : []),
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
+            ...(achievements ? [{ id: 'studioHall', label: 'Hall of Fame', sub: 'Your studio’s legends and records', icon: 'dev_reward_10', accent: C.purple, onTap: () => openScreen('hallOfFame') }, { id: 'studioAchievements', label: 'Achievements', sub: `${achievements().count()} of ${achievements().total()} earned`, icon: 'dev_ui_04', accent: C.progress, onTap: () => openScreen('achievements') }] : []), // Milestone 32
             ...(distribution?.() && !distribution().storefrontWhy() ? [{ id: 'storefront', label: 'Storefront', sub: distribution().storefront.open ? `Open · ${Math.round(distribution().shareNow())}% of downloads` : 'Closed', icon: DISTRIBUTION.icon, accent: C.purple, onTap: () => open('storefront') }] : []), // Milestone 26
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],

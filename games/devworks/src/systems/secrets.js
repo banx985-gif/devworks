@@ -44,7 +44,7 @@ const FAIL_DAYS = 168;
 const PATCH_DAYS = 84;
 const matches = (recipe, need) => Object.entries(need).every(([slot, ids]) => ids.includes(recipe?.[slot]));
 
-export function createSecrets({ bus, clock, world, business, projects, rules = [], profile = () => null, awards = () => null, combos = () => null, consoles = () => null, studioEvents = () => null, research = () => null, franchises = () => null, global = () => null, engines = () => null, sponsors = () => null, runId = () => 'run', saveAccount = null }) {
+export function createSecrets({ bus, clock, world, business, projects, rules = [], profile = () => null, awards = () => null, combos = () => null, consoles = () => null, studioEvents = () => null, research = () => null, franchises = () => null, global = () => null, engines = () => null, sponsors = () => null, runId = () => 'run', saveAccount = null, hallOfFame = null }) {
   const staff = world.staffSystem;
   const today = () => clock.totalDays;
   const blank = () => ({ games: {}, crashIncidents: 0, loadingComplaints: 0, chart: { start: 0, copies: {}, weeks: 0 }, chartByGame: {}, history: [], hired: {}, left: {}, flags: {}, starters: [], legendaryHired: [], awardStages: {}, researchPrototypes: 0 });
@@ -185,7 +185,10 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     }
     return [];
   }
-  const hallOfFame = () => ({
+  // Milestone 32: the Hall of Fame counts come from src/systems/achievements.js (hallOfFame option); this guess is only
+  // for a setup without it (the Milestone 28–31 tests).
+  const hallOfFameCounts = hallOfFame;
+  const hallOfFameGuess = () => ({
     games: released().filter((r) => r.release.score >= 85).length,
     engines: engines()?.engines?.length ?? 0,
     consoles: hwStats().hits,
@@ -248,7 +251,7 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     .define('legacyStaffRuns', () => profile()?.legacyRuns ?? 0) // NG+ carry-over is Milestone 33: 0 until then
     .define('legacyOnC10', () => !!profile()?.legacyOnC10)
     .defineGroup('hw', (key) => hwStats()[key])
-    .defineGroup('hallOfFame', (key) => hallOfFame()[key])
+    .defineGroup('hallOfFame', (key) => (hallOfFameCounts ? hallOfFameCounts() : hallOfFameGuess())[key]) // Milestone 32: the real Hall of Fame
     .defineGroup('employed', (who) => employedYears(who))
     .defineGroup('clueStage', (id) => stageOf(id))
     .defineGroup('flags', (id) => counters.flags[id] != null)

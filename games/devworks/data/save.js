@@ -9,7 +9,8 @@ export const SAVE = {
   slots: ['devworks:campaign', 'devworks:campaign:2', 'devworks:campaign:3', 'devworks:campaign:4'],
   metaKey: 'devworks:meta',
   accountKey: 'devworks:account', // Milestone 15: what every run shares (the combos discovered)
-  secretsAccountKey: 'devworks:account:secrets', // Milestone 28: secrets found in any run, prestige tokens, account flags
+  secretsAccountKey: 'devworks:account:secrets',
+  achievementsKey: 'devworks:account:achievements', // Milestone 32: achievements, the Hall of Fame, account records // Milestone 28: secrets found in any run, prestige tokens, account flags
   rolling: 3, // each slot keeps its last 3 saves; a damaged newest copy falls back to the one before
   version: 2,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)

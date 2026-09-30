@@ -112,6 +112,8 @@ import { GHOSTLIGHT } from '../data/rivals.js'; // Milestone 30
 import { PRESTIGE_TIERS } from '../data/staff.js';
 import { createRumourScreen } from './screens/RumourScreen.js';
 import { createPrestige, PROJECT_ONE } from './systems/prestige.js'; // Milestone 31
+import { createAchievements } from './systems/achievements.js'; // Milestone 32
+import { createAchievementsScreen, createHallOfFameScreen } from './screens/AchievementsScreens.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -168,7 +170,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -235,7 +237,9 @@ const studioEvents = createStudioEvents({ bus, clock, world, business, projects,
 // Milestone 29: the real 50 (bible §41); ?synthetic=1 swaps in the Milestone 28 test rules. ?debug=1 adds the inspector.
 const DEBUG_SECRETS = new URLSearchParams(window.location.search).has('debug');
 const SYNTHETIC = new URLSearchParams(window.location.search).has('synthetic');
-const secrets = createSecrets({ bus, clock, world, business, projects, rules: SYNTHETIC ? SYNTHETIC_SECRETS : SECRETS, research: () => research, franchises: () => business.franchises, global: () => global, engines: () => engines, sponsors: () => sponsors, profile: () => profile, awards: () => awards, combos: () => combos, consoles: () => consoles, studioEvents: () => studioEvents, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.secretsAccountKey, data).catch((e) => console.error('[DEVWORKS] secrets account save failed', e)) });
+const secrets = createSecrets({ bus, clock, world, business, projects, rules: SYNTHETIC ? SYNTHETIC_SECRETS : SECRETS, research: () => research, franchises: () => business.franchises, global: () => global, engines: () => engines, sponsors: () => sponsors, profile: () => profile, awards: () => awards, combos: () => combos, consoles: () => consoles, studioEvents: () => studioEvents, hallOfFame: () => achievements.hallCounts(), runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.secretsAccountKey, data).catch((e) => console.error('[DEVWORKS] secrets account save failed', e)) });
+// Milestone 32: achievements, the Hall of Fame and the account records (account-wide, their own save record).
+const achievements = createAchievements({ bus, clock, world, business, projects, secrets, awards: () => awards, global: () => global, engines: () => engines, sponsors: () => sponsors, consoles: () => consoles, hardware: () => hardware, research: () => research, runId: () => business.marketing.seed, ngPlus: () => profile.ngPlus, saveAccount: (data) => accountStore?.set(SAVE.achievementsKey, data).catch((e) => console.error('[DEVWORKS] achievements save failed', e)) });
 // Milestone 27: IronPeak's obligation — an IronPeak part in a hardware project started during its deal.
 bus.on('hardware:start', ({ job }) => {
   if (Object.values(job.data.parts ?? {}).some((id) => IRONPEAK.includes(id))) sponsors.signal('ironPeakPart');
@@ -388,6 +392,7 @@ const menus = createStudioMenus({
   debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
   distribution: () => distribution, // Milestone 26
   prestige: () => prestige, // Milestone 31
+  achievements: () => achievements, // Milestone 32
   rumours: () => { const r = secrets.rumours(); return r.length ? `${r.filter((x) => x.stage >= 4).length} found · ${r.filter((x) => x.stage < 4).length} rumours` : 'Whispers about secrets'; }, // Milestone 28
   fullLaunch: (number) => {
     sheet.close();
@@ -531,6 +536,7 @@ const openStation = (id) => {
   else if (id === 'F15') router.go('awards'); // the Awards Cabinet (Milestone 19)
   else if (id === 'F26') router.go('publishingOffice'); // the Publishing Office (Milestone 21)
   else if (id === 'F28') router.go('hardware'); // the Hardware Prototype Lab (Milestone 23)
+  else if (id === 'F33') router.go('hallOfFame'); // the Museum / Hall of Fame (Milestone 32)
   else openMenu(id);
 };
 const textPrompt = new TextPrompt({ renderer });
@@ -637,6 +643,7 @@ async function prepareSaves() {
   try {
     combos.loadAccount(await adapter.get(SAVE.accountKey)); // Milestone 15: combos found in any slot
     secrets.loadAccount(await adapter.get(SAVE.secretsAccountKey)); // Milestone 28: secrets found in any run
+    achievements.loadAccount(await adapter.get(SAVE.achievementsKey)); // Milestone 32
   } catch (err) {
     console.error('[DEVWORKS] account record unreadable', err);
   }
@@ -712,6 +719,7 @@ async function playSlot(i) {
   studioEvents.load(data.studioEvents ?? null); // Milestone 27
   secrets.load(data.secrets ?? null); // Milestone 28
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
+  achievements.checkAll(); // Milestone 32: a run from before achievements catches up (nothing is ever granted twice)
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -1302,6 +1310,11 @@ menus.register('secretWhy', (id) => {
   return { title: `Why not? ${w.name}`, subtitle: `${w.ok ? 'All conditions hold' : `${w.failing.length} failing`} · clue stage ${w.stage} · checked on ${w.triggers.join(', ')}${w.eased ? ' · eased' : ''}`, art: 'dev_ui_29', accent: COL.progress, sections: [{ lines: w.lines.map((l) => ({ text: `${l.ok ? '✓' : '✗'} ${l.text}`, color: l.ok ? COL.good : COL.bad })) }] };
 });
 bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: `${rule.rewardText ?? 'See Compete → Rumour Archive.'}` }));
+// Milestone 32: the Achievements and Hall of Fame screens and their banners.
+const achievementsScreen = createAchievementsScreen({ layout, assets, topBar: subTopBar, achievements });
+const hallOfFameScreen = createHallOfFameScreen({ layout, assets, topBar: subTopBar, achievements, museum: () => !!world.stationById('F33') });
+bus.on('achievement:unlocked', ({ def }) => showBeat({ title: `Achievement: ${def.name}`, body: def.text }));
+bus.on('halloffame:entry', ({ entry }) => showBeat({ title: `Hall of Fame: ${entry.name}`, body: entry.why.join(' · ') }));
 // Milestone 31: PROJECT ONE / PROJECT X (the templates) and Studio Singularity (the true ending).
 const prestige = createPrestige({ clock, world, projects, secrets, awards: () => awards, hardware: () => hardware, profile: () => profile, lanes });
 const peakLines = (why, parts) => [...parts, why ? { text: why, color: COL.bad } : { text: 'Everything is in place.', color: COL.good }];
@@ -1813,7 +1826,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1845,6 +1858,8 @@ router
   .register('hardware', hardwareScreen)
   .register('consoles', consoleScreen)
   .register('rumours', rumourScreen) // Milestone 28
+  .register('achievements', achievementsScreen) // Milestone 32
+  .register('hallOfFame', hallOfFameScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
 

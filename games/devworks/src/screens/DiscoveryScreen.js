@@ -29,7 +29,7 @@ export function createDiscoveryScreen({ layout, assets, combos, topBar }) {
     const cw = w - PAD * 2;
     const list = combos.found();
     text(ctx, 'Discovery Archive', PAD, PAD, { size: S.title, bold: true });
-    text(ctx, list.length ? `${list.length} of ${COMBOS.length} combos found · the rest are still secret` : `No combos found yet (${COMBOS.length} to find). Some recipes just work together.`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw });
+    text(ctx, list.length ? `${list.length} combo${list.length === 1 ? '' : 's'} found · more are still secret` : 'No combos found yet. Some recipes just work together.', PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw }); // Milestone 32: never a total of unrevealed items
     let y = HEAD_H;
     for (const f of list) {
       const h = cardH(f, cw + 16);

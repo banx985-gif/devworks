@@ -42,6 +42,8 @@ export const ASSETS = {
   ...Object.fromEntries([art('ui', 'dev_ui_26'), art('ui', 'dev_ui_27'), art('consoles', HARDWARE.prototypeArt), art('events', HARDWARE.firstPrototypeEvent)]),
   // Milestone 24: the console pictures, dev kit / manufacturing icons, the launch moment and the defect smoke.
   ...Object.fromEntries([art('consoles', 'console_visual_01'), art('consoles', 'console_visual_02'), art('ui', 'dev_ui_28'), art('ui', 'dev_ui_29'), art('events', 'dev_event_11'), art('vfx', 'dev_vfx_10'), art('vfx', 'dev_vfx_11')]),
+  // Milestone 32: the Hall of Fame Star and the achievement icons.
+  ...Object.fromEntries([art('rewards', 'dev_reward_10'), art('rewards', 'dev_reward_08'), art('ui', 'dev_ui_04'), art('ui', 'dev_ui_11'), art('ui', 'dev_ui_12'), art('ui', 'dev_ui_13'), art('business', 'business_ui_10'), art('business', 'business_ui_11'), ...['01', '02', '03', '04', '05', '06', '07'].map((n) => art('trophies', `award_trophy_${n}`))]),
   // Milestone 31: the two peaks and the true ending (reveals, the PROJECT X console, the Prestige Aura, the crown).
   ...Object.fromEntries([art('events', 'dev_event_17'), art('events', 'dev_event_18'), art('events', 'dev_event_19'), art('consoles', 'console_visual_08'), art('vfx', 'dev_vfx_12'), art('trophies', 'award_trophy_08')]),
   // Milestone 30: the Ghostlight reveal, the C11 / C12 moments and the Prestige Token icon.
