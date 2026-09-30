@@ -24,12 +24,16 @@ export const AWARDS = [
   { id: 'C08', name: 'Platform Excellence Awards', month: 10, unlock: { rank: 'A' }, entry: { platformFamily: 3 }, score: 'family3', fame: 900, major: true, trophy: 'award_trophy_06', rewardText: 'Platform deal (with the platform deals milestone)' },
   { id: 'C09', name: 'Global Interactive Awards', month: 11, unlock: { rank: 'A', trophies: 5 }, entry: { review: 88 }, score: 'review', fame: 1500, major: true, trophy: 'award_trophy_06', rewardText: 'The road to Rank S' },
   { id: 'C10', name: 'Game of the Year / Studio of the Year', month: 12, unlock: { rank: 'S', year: 20 }, entry: { review: 90, record: true }, score: 'review', fame: 3000, major: true, finale: true, trophy: 'award_trophy_07', extra: 'ending', rewardText: 'The Year-20 ending' },
-  // Secret prestige awards: never held, never shown (their SEC-COMP secrets come in Milestone 30).
-  { id: 'C11', name: 'Legends Summit', secret: 'SEC-COMP-01', month: 12, unlock: { secret: true }, entry: {}, score: 'review', fame: 0, trophy: 'award_trophy_08', hidden: true, rewardText: 'Prestige Tokens' },
-  { id: 'C12', name: 'Perfect Game Circle', secret: 'SEC-COMP-02', month: 12, unlock: { secret: true }, entry: {}, score: 'review', fame: 0, trophy: 'award_trophy_08', hidden: true, rewardText: 'Software endgame' },
+  // Secret prestige awards (Milestone 30): held every year at the end of Month 12 (after C10) once their SEC-COMP secret
+  // has opened them; never shown before that ("???").
+  //   C11 entry: a prestige-eligible game — review 90+, released this season, a Legendary or Prestige person credited.
+  //   C12 entry: a PROJECT ONE-eligible game (Milestone 31 defines it); until then review 95+ with zero launch bugs.
+  { id: 'C11', name: 'Legends Summit', secret: 'SEC-COMP-01', month: 12, unlock: { secret: true }, entry: { review: 90, prestige: true }, score: 'review', fame: 2000, major: true, trophy: 'award_trophy_08', hidden: true, event: 'dev_event_15', tokens: 2, rewardText: '2 Prestige Tokens (once per year won)' },
+  { id: 'C12', name: 'Perfect Game Circle', secret: 'SEC-COMP-02', month: 12, unlock: { secret: true }, entry: { review: 95, bugsZero: true }, score: 'review', fame: 2500, major: true, trophy: 'award_trophy_08', hidden: true, event: 'dev_event_16', rewardText: 'The software endgame (PROJECT ONE, Milestone 31)' },
 ];
 export const awardById = (id) => AWARDS.find((a) => a.id === id) ?? null;
 export const VISIBLE_AWARDS = AWARDS.filter((a) => !a.hidden);
+export const SECRET_AWARDS = AWARDS.filter((a) => a.hidden); // Milestone 30: C11, C12
 
 export const AWARD_BALANCE = {
   seasonMonths: 12, // releases in the 12 months up to the ceremony compete

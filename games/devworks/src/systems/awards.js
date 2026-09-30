@@ -12,14 +12,17 @@
 // changes it (and the seed would give the same anyway). A win: Fame, the trophy (Awards Cabinet), a count towards the
 // studio stages (business.state.awards) and, C04 and up, the major awards (Elite recruitment); plus the award's extra
 // ('award:won' — the game hands out RP, a recruitment refresh, an Elite, a publisher offer, the Year-20 hook).
-// C11 / C12 are secret: never held, never shown.
+// Milestone 30: C11 / C12 are secret awards — held (after C10, each December) only once secretOpen(id) says their
+// SEC-COMP secret has opened them; before that they are locked ("Secret") and accept nothing. C11 takes a
+// prestige-eligible game (a Legendary / Prestige person credited), C12 a 95+ game with zero launch bugs. Ghostlight's
+// prestige releases (src/systems/rivals.js) enter every award its games qualify for, C10 and C11 included.
 //
 // Events: 'award:result' { award, result }, 'award:won' { award, result }.
 import { Rng } from '../../../../core/Rng.js';
 import { Rankings } from '../../../../core/Rankings.js';
 import { TrophyCase } from '../../../../core/TrophyCase.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
-import { AWARDS, VISIBLE_AWARDS, awardById, AWARD_BALANCE as A } from '../../data/awards.js';
+import { AWARDS, VISIBLE_AWARDS, SECRET_AWARDS, awardById, AWARD_BALANCE as A } from '../../data/awards.js';
 import { FAME } from '../../data/balance.js';
 import { platformById } from '../../data/platforms.js';
 
@@ -31,6 +34,8 @@ const value = (o, key) => (key === 'tech' ? tech(o) : o[key] ?? 0);
 export function entryFor(award, games) {
   const e = award.entry;
   let ok = games;
+  if (e.prestige) ok = ok.filter((g) => g.prestige); // Milestone 30: C11
+  if (e.bugsZero) ok = ok.filter((g) => g.bugs === 0); // Milestone 30: C12
   if (e.scopes) ok = ok.filter((g) => e.scopes.includes(g.scope));
   if (e.review) ok = ok.filter((g) => g.review >= e.review);
   if (e.output) ok = ok.filter((g) => e.output.some((k) => value(g.outputs, k) >= e.min));
@@ -57,9 +62,10 @@ export function entryFor(award, games) {
   return { score: measure(best), title: best.title };
 }
 
-export function createAwards({ bus, clock, business, projects, rivals, seed = () => 'devworks-run', studioName = () => 'Your studio', hasEngine = () => false }) {
+// secretOpen(id) → C11 / C12 opened (Milestone 30); prestigeCredit(record) → a Legendary / Prestige person on its team.
+export function createAwards({ bus, clock, business, projects, rivals, seed = () => 'devworks-run', studioName = () => 'Your studio', hasEngine = () => false, secretOpen = () => false, prestigeCredit = () => false }) {
   const rankings = new Rankings({ bus: null, points: A.rankingPoints, focusId: 'player' });
-  const trophies = new TrophyCase({ bus, trophies: VISIBLE_AWARDS.map((a) => ({ id: a.id, name: a.name, art: a.trophy, rule: { award: a.id } })) });
+  const trophies = new TrophyCase({ bus, trophies: AWARDS.map((a) => ({ id: a.id, name: a.name, art: a.trophy, rule: { award: a.id } })) });
   let results = {}; // `${id}-Y${year}` → result
   let wins = []; // { award, year, title, day }
   const monthIndex = () => Math.floor(clock.totalDays / clock.daysPerMonth);
@@ -68,12 +74,12 @@ export function createAwards({ bus, clock, business, projects, rivals, seed = ()
     projects.catalogue
       .list()
       .filter((r) => r.release && r.release.day >= fromDay && r.release.day < toDay)
-      .map((r) => ({ title: r.result.title, review: r.release.score, outputs: r.result.outputs, scope: r.result.scope, platforms: r.release.platforms ?? [r.release.platform] }));
+      .map((r) => ({ title: r.result.title, review: r.release.score, outputs: r.result.outputs, scope: r.result.scope, platforms: r.release.platforms ?? [r.release.platform], prestige: prestigeCredit(r), bugs: (r.result.bugs ?? 0) + (r.release.qaBugs ?? 0) }));
 
   // Why the studio can't enter this award yet (null = open). year: the ceremony's year.
   function lockWhy(a, year = clock.year) {
     const u = a.unlock;
-    if (u.secret) return 'Secret';
+    if (u.secret && !secretOpen(a.id)) return 'Secret';
     const why = [];
     if (u.rank && rankIndex() < rankIndexOf(FAME.ranks, u.rank)) why.push(`Rank ${u.rank}`);
     if (u.trophies && wins.length < u.trophies) why.push(`${u.trophies} trophies`);
@@ -94,7 +100,7 @@ export function createAwards({ bus, clock, business, projects, rivals, seed = ()
     if (mine && a.entry.record && wins.length < 5) mine.score = -1; // C10: a studio record (5 trophies) too
     if (mine && mine.score >= 0) field.push({ id: 'player', name: studioName(), ...mine });
     for (const r of rivals.visible()) {
-      const rel = rivals.between(fromMonth, m).filter((x) => x.rival === r.id).map((x) => ({ title: x.title, review: x.review, outputs: x.outputs, scope: r.id === 'R01' ? 'small' : 'standard', platforms: [x.platform] }));
+      const rel = rivals.between(fromMonth, m).filter((x) => x.rival === r.id).map((x) => ({ title: x.title, review: x.review, outputs: x.outputs, scope: r.id === 'R01' ? 'small' : 'standard', platforms: [x.platform], prestige: !!x.prestige, bugs: x.prestige ? 0 : 1 }));
       const e = rel.length ? entryFor(a, rel) : null;
       if (e) field.push({ id: r.id, name: r.name, ...e });
     }
@@ -126,6 +132,7 @@ export function createAwards({ bus, clock, business, projects, rivals, seed = ()
     const year = Math.floor(m / 12) + 1;
     rivals.catchUp();
     for (const a of VISIBLE_AWARDS) if (a.month === moy && (!a.finale || year === 20)) hold(a, m);
+    for (const a of SECRET_AWARDS) if (a.month === moy && secretOpen(a.id)) hold(a, m); // Milestone 30: C11, C12
   });
 
   // The next time an award is held: { month (index), year, day }.
@@ -138,6 +145,8 @@ export function createAwards({ bus, clock, business, projects, rivals, seed = ()
     rankings,
     trophies,
     visible: () => VISIBLE_AWARDS,
+    // Milestone 30: the secret awards and whether each is open ({ award, open }).
+    secretAwards: () => SECRET_AWARDS.map((a) => ({ award: a, open: !!secretOpen(a.id) })),
     award: awardById,
     lockWhy,
     hold,

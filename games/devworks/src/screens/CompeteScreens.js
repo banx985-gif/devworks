@@ -1,6 +1,8 @@
 // Compete (Milestone 19): the Awards, Rivals and Rankings screens — card lists (src/ui/cardListScreen.js).
 //   Awards: the trophy cabinet (every award won), then C01–C10: when it's held next, whether the studio can enter
-//     (unlock) and what counts (entry), the reward, and last year's result (winner and your place). C11 / C12 never show.
+//     (unlock) and what counts (entry), the reward, and last year's result (winner and your place). Milestone 30: the
+//     secret awards C11 / C12 as "???" until their secret opens them, then like the rest; the Prestige Tokens
+//     (dev_reward_04) banked by the account.
 //   Rivals: every rival that has appeared (the rest: "arrives in Year N"; Ghostlight never), with its latest releases
 //     and awards.
 //   Rankings: the studios by award points (core Rankings), then trophies, copies sold and releases.
@@ -20,9 +22,11 @@ const ENTRY_TEXT = {
   C08: 'Three successful releases on one platform family',
   C09: 'A game reviewed 88+',
   C10: 'A top-tier release (90+) and a studio record (5 trophies)',
+  C11: 'A prestige-eligible game: reviewed 90+ this season, with a Legendary or Prestige person credited',
+  C12: 'A perfect game: reviewed 95+ with zero launch bugs (PROJECT ONE, later)',
 };
 
-export function createAwardsScreen({ layout, assets, topBar, awards, dateLabel, monthLabel }) {
+export function createAwardsScreen({ layout, assets, topBar, awards, dateLabel, monthLabel, prestigeTokens = () => 0 }) {
   return createCardListScreen({
     layout,
     assets,
@@ -44,8 +48,12 @@ export function createAwardsScreen({ layout, assets, topBar, awards, dateLabel, 
             }),
         },
         {
+          heading: 'Prestige',
+          cards: [{ id: 'prestige', logo: 'dev_reward_04', title: `Prestige Tokens: ${prestigeTokens()}`, lines: [{ text: 'Kept by your account in every run. Won through secrets and the secret awards; they will be spent in New Game+.', color: C.textMuted }], buttons: [] }],
+        },
+        {
           heading: 'The awards',
-          cards: awards.visible().map((a) => {
+          cards: [...awards.visible(), ...awards.secretAwards().filter((x) => x.open).map((x) => x.award)].map((a) => {
             const why = awards.lockWhy(a);
             const next = awards.nextOf(a);
             const last = awards.lastResult(a.id);
@@ -66,6 +74,7 @@ export function createAwardsScreen({ layout, assets, topBar, awards, dateLabel, 
             };
           }),
         },
+        ...(awards.secretAwards().some((x) => !x.open) ? [{ heading: 'Secret awards', cards: awards.secretAwards().filter((x) => !x.open).map((x) => ({ id: x.award.id, logo: 'dev_ui_29', title: '???', lines: [{ text: 'A secret award. Its way in is a secret too: listen for rumours (Compete → Rumour Archive).', color: C.textMuted }], buttons: [] })) }] : []),
       ],
     }),
   });

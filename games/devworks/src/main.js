@@ -108,6 +108,8 @@ import { createDistribution } from './systems/distribution.js'; // Milestone 26
 import { createStudioEvents } from './systems/studioEvents.js'; // Milestone 27
 import { createSecrets } from './systems/secrets.js'; // Milestone 28
 import { SYNTHETIC_SECRETS, SECRETS } from '../data/secrets.js';
+import { GHOSTLIGHT } from '../data/rivals.js'; // Milestone 30
+import { PRESTIGE_TIERS } from '../data/staff.js';
 import { createRumourScreen } from './screens/RumourScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
@@ -202,8 +204,19 @@ engines = createEngines({ bus, clock, world, business, projects, research, studi
 const sponsors = createSponsors({ bus, clock, world, business, needs: (n) => (n === 'hardwareLab' ? !!world.stationById('F28') : n === 'botworksEvents') }); // Milestone 18 (Milestone 27: IronPeak and BOTWORKS)
 world.addEffectSource((key) => sponsors.effect(key));
 // Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
-const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).filter((p) => !p.own).map((p) => p.id) }); // Milestone 24: not on your console
-const awards = createAwards({ bus, clock, business, projects, rivals, seed: () => business.marketing.seed, studioName: () => profile.name || 'Your studio', hasEngine: () => !!engines?.engines.length });
+// Milestone 30: Ghostlight (R08), once SEC-RIVAL-01 has enabled it: its yearly plan is the player's best-reviewed genre and
+// theme of the released games in the years before (never a game still being made) and that best review.
+function ghostSnapshot(year) {
+  const perYear = clock.daysPerMonth * clock.monthsPerYear;
+  const from = (year - 1 - GHOSTLIGHT.lookbackYears) * perYear;
+  const to = (year - 1) * perYear;
+  const recent = projects.catalogue.list().filter((r) => r.release && r.release.day >= from && r.release.day < to);
+  if (!recent.length) return null;
+  const best = [...recent].sort((a, b) => b.release.score - a.release.score || a.number - b.number)[0];
+  return { genre: best.result.recipe?.genre ?? 'GEN07', theme: best.result.recipe?.theme ?? 'THM02', best: best.release.score };
+}
+const rivals = createRivals({ bus, clock, seed: () => business.marketing.seed, ghostlight: { on: () => secrets.opened('unlocks', 'ghostlight'), snapshot: ghostSnapshot }, platformsOn: (m) => business.platforms.active(m * clock.daysPerMonth).filter((p) => !p.own).map((p) => p.id) }); // Milestone 24: not on your console
+const awards = createAwards({ bus, clock, business, projects, rivals, seed: () => business.marketing.seed, studioName: () => profile.name || 'Your studio', hasEngine: () => !!engines?.engines.length, secretOpen: (id) => secrets.opened('unlocks', id), prestigeCredit: (r) => (r.team ?? []).some((m) => PRESTIGE_TIERS.includes(staffDefById(m.id)?.tier)) }); // Milestone 30: C11 / C12
 // Milestone 20: post-launch support (takes a game lane while it runs).
 let support = null;
 support = createSupport({ bus, clock, world, business, projects, lanes: () => lanes(), isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engineBusy(id)) });
@@ -1286,6 +1299,39 @@ menus.register('secretWhy', (id) => {
   return { title: `Why not? ${w.name}`, subtitle: `${w.ok ? 'All conditions hold' : `${w.failing.length} failing`} · clue stage ${w.stage} · checked on ${w.triggers.join(', ')}${w.eased ? ' · eased' : ''}`, art: 'dev_ui_29', accent: COL.progress, sections: [{ lines: w.lines.map((l) => ({ text: `${l.ok ? '✓' : '✗'} ${l.text}`, color: l.ok ? COL.good : COL.bad })) }] };
 });
 bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: `${rule.rewardText ?? 'See Compete → Rumour Archive.'}` }));
+// Milestone 30: a big moment with a picture (the Ghostlight reveal, C11, C12).
+function prestigeMoment({ title, subtitle, art, badge = null }) {
+  feedback.show({
+    title,
+    subtitle,
+    accent: COL.purple,
+    onShow: () => celebrate.confetti('screen', W / 2, renderer.height * 0.72, { count: 40, speed: 900, spreadX: 120 }),
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const k = Math.min(1, t / 0.35);
+      const size = 540 * (0.6 + 0.4 * k);
+      ctx.save();
+      ctx.globalAlpha = k;
+      assets.drawContained(ctx, art, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.27 - size / 2, w: size, h: size });
+      if (badge) {
+        const p = 190 * (0.6 + 0.4 * k);
+        assets.drawContained(ctx, badge, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.27 + size / 2 - p * 0.35, w: p, h: p });
+      }
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
+}
+bus.on('secret:unlocked', ({ rule }) => {
+  if (rule.id === 'SEC-RIVAL-01') prestigeMoment({ title: 'Ghostlight Studio appears', subtitle: 'A secret rival that targets your strengths now releases prestige titles. See Compete → Rivals.', art: 'dev_event_14', badge: 'rival_logo_r08' });
+});
+// C11 / C12 wins: Prestige Tokens (once per year won, never twice even after a reload) and the software endgame flag.
+bus.on('award:won', ({ award: a, result }) => {
+  if (a.id !== 'C11' && a.id !== 'C12') return;
+  if (a.tokens) secrets.grantOnce(`award:${a.id}:Y${result.year}:${business.marketing.seed}`, () => secrets.addTokens(a.tokens));
+  if (a.id === 'C12') secrets.grantOnce(`award:C12:softwareEndgame`, () => secrets.setOpened('unlocks', 'softwareEndgame'));
+  prestigeMoment({ title: `${a.name}!`, subtitle: `"${result.entrants[0].title}" wins. ${a.rewardText}. Prestige Tokens: ${secrets.prestigeTokens}.`, art: a.event, badge: a.trophy });
+});
 // Milestone 29: a Legendary / Prestige arrival — the big moment (dev_event_13 and their portrait) and a special card for 56 days.
 bus.on('secret:arrival', ({ staffId }) => {
   const def = staffDefById(staffId);
@@ -1690,7 +1736,7 @@ const contractsScreen = createContractsScreen({ layout, assets, topBar: subTopBa
 const sponsorsScreen = createSponsorsScreen({ layout, assets, topBar: subTopBar, sponsors, dateLabel: (d) => clock.shortLabel(d), onSign: (id) => { const r = sponsors.sign(id); if (!r.ok) showTip(r.why); } }); // Milestone 18
 // Milestone 19: the Compete screens.
 const monthLabel = (m) => `Y${Math.floor(m / 12) + 1} M${(m % 12) + 1}`;
-const awardsScreen = createAwardsScreen({ layout, assets, topBar: subTopBar, awards, dateLabel: (d) => clock.shortLabel(d), monthLabel });
+const awardsScreen = createAwardsScreen({ prestigeTokens: () => secrets.prestigeTokens, layout, assets, topBar: subTopBar, awards, dateLabel: (d) => clock.shortLabel(d), monthLabel });
 const rivalsScreen = createRivalsScreen({ layout, assets, topBar: subTopBar, rivals, clock, monthLabel });
 const rankingsScreen = createRankingsScreen({ layout, assets, topBar: subTopBar, awards, rivals });
 // Milestone 23: the Hardware screen (Rename opens the text box over its button).

@@ -439,6 +439,17 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     summary,
     // What the rewards have opened (account-wide): arrivals, recipes, tech, parts, unlocks, cosmetics, accolades.
     opened: (bag, id) => has(bag, id),
+    // Milestone 30: a reward outside the rules (an award's Prestige Tokens, the software-endgame flag), granted at most
+    // once for its key in this account — reloading an older save and winning again grants nothing.
+    grantOnce(key, fn) {
+      if (ledger()[key] != null) return false;
+      ledger()[key] = today();
+      fn();
+      persistAccount();
+      return true;
+    },
+    addTokens: (n) => (acct().prestigeTokens = (acct().prestigeTokens ?? 0) + n),
+    setOpened: (bag, id) => add(bag, id, today()),
     openedList: (bag) => Object.keys(acct()[bag] ?? {}),
     get counters() {
       return counters;

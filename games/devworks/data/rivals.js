@@ -20,6 +20,14 @@ export const RIVALS = [
 ];
 export const rivalById = (id) => RIVALS.find((r) => r.id === id) ?? null;
 
+// Milestone 30 — Ghostlight Studio (R08), a secret rival: enabled by SEC-RIVAL-01. It makes prestige titles aimed at the
+// player's strengths, from a plan fixed at the start of each year (and saved): the genre and theme of the player's
+// best-reviewed released games of the last lookbackYears, and their best review. Each month: releaseChance of a
+// release, reviewed best − noiseDown … best + noiseUp, but never above best + maxAbove (bible §29: no exact
+// rubber-banding — it never reads a game still being made, and the plan never changes mid-year). No plan (nothing
+// released yet): no releases.
+export const GHOSTLIGHT = { id: 'R08', releaseChance: 0.3, lookbackYears: 3, noiseDown: 6, noiseUp: 4, maxAbove: 5, floor: 60, strengthBonus: 4, scale: 400000, bigChance: 0.5 };
+
 export const RIVAL_BALANCE = {
   // core RivalSystem rules: no specialty in releases (the weights are empty), growth clamped to ±40%.
   rules: { specialtyBase: 0, specialtyPctPerPoint: 0, ngPlusPct: 0, growthClampPct: 40 },
