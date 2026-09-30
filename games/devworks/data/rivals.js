@@ -30,8 +30,8 @@ export const GHOSTLIGHT = { id: 'R08', releaseChance: 0.3, lookbackYears: 3, noi
 
 export const RIVAL_BALANCE = {
   // core RivalSystem rules: no specialty in releases (the weights are empty), growth clamped to ±40%.
-  rules: { specialtyBase: 0, specialtyPctPerPoint: 0, ngPlusPct: 0, growthClampPct: 40 },
-  noise: 8, // review ± this (seeded)
+  rules: { specialtyBase: 0, specialtyPctPerPoint: 0, ngPlusPct: 0, growthClampPct: 25 }, // Milestone 40: 40 → 25 (late rivals top out in the 80s–low 90s, so C10 is winnable)
+  noise: 5, // review ± this (seeded). Milestone 40: 8 → 5
   strengthBonus: 6, // their strength outputs this much above their review
   outputNoise: 6,
   bigReview: 82, // a release this good is "big" too (a big launch-week clash)

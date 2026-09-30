@@ -318,7 +318,7 @@ let storage = null; // the storage adapter
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
-const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: research.researched(), stage: world.stage }) }); // Milestone 11: stages; Milestone 12: research
+const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business.reputation.highestRankIndex, year: clock.year, researched: research.researched(), stage: world.stage, megaBlocked: business.megaBlocked() }) }); // Milestone 11: stages; Milestone 12: research
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -1177,6 +1177,14 @@ bus.on('reputation:rankUp', () => started && checkStations());
 bus.on('franchise:status', ({ ip, status }) => {
   if (status.id === 'legendary') return;
   showBeat({ title: `${ip.name} is now ${status.name}!`, body: 'Your franchise is growing. See it in Catalogue → Franchises.' });
+});
+// Milestone 40: the Rescue Investor (bible §3) and its recovery objective.
+bus.on('business:rescue', ({ rescue, owed }) => {
+  debug.log(`rescue investor: ${owed} Credits restructured`);
+  feedback.show({ title: 'Rescue Investor', subtitle: `Your ${Math.round(owed).toLocaleString('en-GB')} Credits of debt are restructured.${rescue.fameTaken ? ` You lose ${rescue.fameTaken.toLocaleString('en-GB')} Fame.` : ''} Mega Projects wait a year. Objective: release a game reviewed ${rescue.objective.review}+ within 12 months.`, accent: COL.warning ?? COL.progress, onAck: afterFeedback });
+});
+bus.on('business:rescueObjective', ({ fameBack }) => {
+  feedback.show({ title: 'Recovery objective met', subtitle: `The Rescue Investor is pleased: +${fameBack.toLocaleString('en-GB')} Fame back.`, accent: COL.progress, onAck: afterFeedback });
 });
 bus.on('franchise:legendary', ({ ip }) => {
   debug.log(`legendary franchise: ${ip.name}`);

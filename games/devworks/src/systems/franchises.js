@@ -194,7 +194,10 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
         if (!r.release || !r.sales) continue;
         const c = (r.catalogue ||= { copies: 0, revenue: 0, spike: 0, carry: 0 });
         const old = today() - r.release.day >= C.afterDays;
-        const exact = (old ? (r.sales.lifetime * C.monthlyPct) / 100 : 0) + c.carry + c.spike;
+        // Milestone 40 (bible §44, late passive income diminishing): it fades with the game's age after its first year.
+        const age = today() - r.release.day - C.afterDays;
+        const fade = C.fadeYears ? Math.exp(-Math.max(0, age) / (C.fadeYears * 336)) : 1;
+        const exact = (old ? (r.sales.lifetime * C.monthlyPct * fade) / 100 : 0) + c.carry + c.spike;
         const copies = Math.floor(exact);
         c.carry = r4(exact - copies);
         c.spike = 0;

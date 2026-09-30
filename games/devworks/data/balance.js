@@ -40,19 +40,22 @@ export const STAFF_BALANCE = {
 //   Cost (paid from Credits since Milestone 4): the audio package up front, then the scope's production cost every
 //     day the project runs. Salaries are paid monthly for everyone, project or not.
 export const PROJECT_BALANCE = {
-  // Scopes (Milestone 7, bible §12; plan review B: the bible gives no numbers). totalWork = progress needed (the three
-  // starters make about 2 a day, so Tiny ≈ 2 months, Small ≈ 4, Standard ≈ 7 with the same team; more staff = faster).
+  // Scopes (Milestone 7, bible §12; plan review B: the bible gives no numbers). totalWork = progress needed. Milestone 40
+  // (the 20-year soak, bible §4 25–40 releases): a starter team takes about 5 months on a Tiny game; mid-game teams
+  // about half a year on a Standard, a year on a Large; late teams most of a year on a Blockbuster or a Mega.
+  // price = the Credits one copy brings in before the store cut (Milestone 40: copies stay on the bible's scale — a
+  // Million Seller is a million copies — so the money per copy is what keeps the economy in proportion).
   // baseCostPerDay = production cost each day (salaries are paid monthly). price and salesMult: bigger games sell for
   // more and to more players. qualityBonus: points a finished game's outputs get from the extra content (not AUDIO).
   // prodShift: bigger projects lean more on Production (the milestone role weights: every phase's weights × (1 −
   // shift), then PROD + shift). complexity: added to the bug multiplier.
   scopes: {
-    tiny: { totalWork: 112, bugsPerDay: 0.4, baseCostPerDay: 30, price: 12, salesMult: 1, qualityBonus: 0, prodShift: 0, complexity: 0 },
-    small: { totalWork: 210, bugsPerDay: 0.36, baseCostPerDay: 55, price: 18, salesMult: 1.6, qualityBonus: 3, prodShift: 0, complexity: 0.05 },
-    standard: { totalWork: 400, bugsPerDay: 0.4, baseCostPerDay: 110, price: 30, salesMult: 2.8, qualityBonus: 6, prodShift: 0.05, complexity: 0.1 },
-    large: { totalWork: 720, bugsPerDay: 0.45, baseCostPerDay: 220, price: 45, salesMult: 4.8, qualityBonus: 9, prodShift: 0.1, complexity: 0.2 },
-    blockbuster: { totalWork: 1150, bugsPerDay: 0.5, baseCostPerDay: 420, price: 60, salesMult: 8, qualityBonus: 12, prodShift: 0.15, complexity: 0.3 },
-    mega: { totalWork: 1700, bugsPerDay: 0.55, baseCostPerDay: 800, price: 70, salesMult: 12, qualityBonus: 15, prodShift: 0.2, complexity: 0.4 },
+    tiny: { totalWork: 224, bugsPerDay: 0.4, baseCostPerDay: 30, price: 5, salesMult: 1, qualityBonus: 0, prodShift: 0, complexity: 0 },
+    small: { totalWork: 520, bugsPerDay: 0.36, baseCostPerDay: 55, price: 6, salesMult: 1.6, qualityBonus: 3, prodShift: 0, complexity: 0.05 },
+    standard: { totalWork: 1800, bugsPerDay: 0.4, baseCostPerDay: 110, price: 7, salesMult: 2.8, qualityBonus: 6, prodShift: 0.05, complexity: 0.1 },
+    large: { totalWork: 4500, bugsPerDay: 0.45, baseCostPerDay: 220, price: 8, salesMult: 4.8, qualityBonus: 9, prodShift: 0.1, complexity: 0.2 },
+    blockbuster: { totalWork: 11000, bugsPerDay: 0.5, baseCostPerDay: 420, price: 9, salesMult: 8, qualityBonus: 12, prodShift: 0.15, complexity: 0.3 },
+    mega: { totalWork: 15000, bugsPerDay: 0.55, baseCostPerDay: 800, price: 10, salesMult: 12, qualityBonus: 15, prodShift: 0.2, complexity: 0.4 },
   },
   // Budget focus (bible §12, exact): costPct on the daily production cost; qualityPct on every output a phase builds
   // (not AUDIO); innovationPct on INNOVATION only; bugPct on bugs made; energyPct on the team's working Energy loss;
@@ -142,8 +145,8 @@ export const PROJECT_BALANCE = {
     polish: { code: 0.45, prod: 0.4, des: 0.15 },
     audienceFit: { prod: 0.45, des: 0.35, wrt: 0.2 },
   },
-  outputStart: 5, // every output starts here (0–100)
-  curveK: 180, // quality curve: a team strength of 180 reaches 63% of the way to 100
+  outputStart: 15, // every output starts here (0–100). Milestone 40: 5 → 15 (a starter team's first games review in the 40s)
+  curveK: 260, // quality curve: a team strength of 260 reaches 63% of the way to 100. Milestone 40: 180 → 260 (Elite staff no longer max every output)
   audio: {
     none: { value: 5, cost: 0 },
     basic: { value: 35, cost: 300 },
@@ -155,7 +158,7 @@ export const PROJECT_BALANCE = {
     tiredWeight: 1, // tiredness factor = 1 + tiredWeight × (100 − average Energy) ÷ 100
     fixCodeRef: 100, // fixing speed scales with the best Code ÷ this
   },
-  breakthrough: { chancePerDay: 0.05, min: 3, max: 6 },
+  breakthrough: { chancePerDay: 0.025, min: 3, max: 6 }, // Milestone 40: 0.05 → 0.025 (projects are ~2–4× longer; a year-long game no longer maxes out on breakthroughs)
 };
 
 // --- Money, release, reviews, sales, Fame (Milestone 4). The bible gives shapes, not numbers (plan review B). ---
@@ -171,6 +174,12 @@ export const ECONOMY = {
   // Milestone 39: the ledger keeps its newest lines (older ones fold into one "Earlier lines" line, same balance);
   // the Ledger screen's months and the ending's profitable years come from the month book, which keeps every month.
   ledgerLines: 4000,
+  // Milestone 40: the Rescue Investor (bible §3, a blocker fix — it had not been built): after `months` month-ends in a
+  // row below the emergency ceiling it restructures the debt (the balance back to 0), takes famePct % of the current
+  // Fame (never below the rank already reached), blocks Mega Projects for megaBlockMonths and sets one recovery
+  // objective: release a game reviewed objective.review or more within objective.months (it gives back
+  // objective.fameBackPct % of the Fame taken).
+  rescue: { months: 6, famePct: 15, megaBlockMonths: 12, objective: { review: 60, months: 12, fameBackPct: 50 } },
 };
 
 // One price and one release model (self-publish, digital). The store keeps a share of every copy.
@@ -313,8 +322,8 @@ export const FAME = {
     { id: 'A', min: 6500 },
     { id: 'S', min: 11000 },
   ],
-  release: { perPoint: 3, minus: 60 }, // Fame at release = max(0, review × 3 − 60)
-  copiesPerFame: 20, // then +1 Fame for every 20 copies sold
+  release: { perPoint: 2, minus: 40 }, // Fame at release = max(0, review × 2 − 40). Milestone 40: was × 3 − 60
+  copiesPerFame: 2000, // then +1 Fame for every 2,000 copies sold. Milestone 40: was 20 (Rank S by Year 3)
 };
 export const FAN_TRUST = { start: 50, pivot: 55, perPoint: 0.3 }; // release: + (review − 55) × 0.3, kept 0–100
 
@@ -364,7 +373,8 @@ export const MARKETING_BALANCE = {
 //   by relief.tech (other Technology than the last game), relief.art (other Art Direction) and relief.genre (other
 //   genre), then costs fatigueSalesPct % × fatigue / 100 of sales and fatigueReview × fatigue review points; then the
 //   entry's fatigueAdd is added.
-// Back catalogue: every month a game that has been out catalogue.afterDays sells catalogue.monthlyPct % of its
+// Back catalogue: every month a game that has been out catalogue.afterDays sells catalogue.monthlyPct % (fading with
+//   age: × e^(−years since then / fadeYears), Milestone 40) of its
 //   expected lifetime copies again, at catalogue.pricePct % of its price; when another game of its franchise launches
 //   it gets a spike of catalogue.spikePct % of its lifetime copies, sold at the next month's end.
 export const FRANCHISE_BALANCE = {
@@ -379,11 +389,11 @@ export const FRANCHISE_BALANCE = {
   fanScale: 2500,
   startHype: 0.5,
   fanSalesPct: 80,
-  fatigueDays: 200,
+  fatigueDays: 250, // Milestone 40: 200 → 250 (projects take about twice as long)
   fatigueSalesPct: 50,
   fatigueReview: 0.12,
   relief: { tech: 20, art: 10, genre: 15 },
-  catalogue: { afterDays: 336, monthlyPct: 0.4, pricePct: 60, spikePct: 8 },
+  catalogue: { afterDays: 336, monthlyPct: 0.4, pricePct: 60, spikePct: 8, fadeYears: 4 }, // Milestone 40: fadeYears — the monthly share × e^(−years past the first / fadeYears) (bible §44)
 };
 
 // Speed unlocks (bible §4): 2× after the first shipped game; 4× at Rank C or Year 4.

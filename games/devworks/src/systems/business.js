@@ -67,7 +67,7 @@ export function createBusiness({ bus, clock, world, projects }) {
   const economy = new EconomySystem({
     bus,
     currencies: { credits: { name: 'Credits' }, tokens: { name: 'Studio Tokens' } },
-    // No closure: nothing ends the studio (bible §3). The Rescue Investor comes in a later milestone.
+    // No closure: nothing ends the studio (bible §3). The Rescue Investor (Milestone 40) steps in instead: rescue() below.
     debt: { warnBelow: 0, limit: ECONOMY.emergencyCeiling, monthlyInterestPct: ECONOMY.monthlyInterestPct, closureMonths: Infinity, blockedWhileNegative: [] },
     now: () => clock.totalDays,
     maxLines: ECONOMY.ledgerLines, // Milestone 39: a 20-year save stays small (it was ~1 MB a year)
@@ -338,6 +338,29 @@ export function createBusiness({ bus, clock, world, projects }) {
     }
   });
 
+  // Milestone 40 — the Rescue Investor (bible §3): six month-ends in a row below the emergency ceiling.
+  function rescue() {
+    const R = ECONOMY.rescue;
+    const owed = -economy.balance('credits');
+    if (owed > 0) economy.add('credits', owed, 'Rescue Investor: debt restructured', 'rescue');
+    economy.badMonths = 0;
+    const before = reputation.value;
+    reputation.add(-Math.round((before * R.famePct) / 100), 'Rescue Investor');
+    const day = clock.totalDays;
+    state.rescue = { count: (state.rescue?.count ?? 0) + 1, day, fameTaken: before - reputation.value, megaUntil: day + R.megaBlockMonths * clock.daysPerMonth, objective: { review: R.objective.review, byDay: day + R.objective.months * clock.daysPerMonth, done: false } };
+    bus.emit('business:rescue', { rescue: JSON.parse(JSON.stringify(state.rescue)), owed });
+  }
+  const megaBlocked = () => !!state.rescue && clock.totalDays < state.rescue.megaUntil;
+  // The recovery objective: a game reviewed well enough before the deadline gives back part of the Fame taken.
+  bus.on('game:released', ({ record } = {}) => {
+    const o = state.rescue?.objective;
+    if (!o || o.done || clock.totalDays > o.byDay || (record?.release?.score ?? 0) < o.review) return;
+    o.done = true;
+    const back = Math.round((state.rescue.fameTaken * ECONOMY.rescue.objective.fameBackPct) / 100);
+    if (back) reputation.add(back, 'Rescue Investor: recovery objective met');
+    bus.emit('business:rescueObjective', { rescue: JSON.parse(JSON.stringify(state.rescue)), fameBack: back });
+  });
+
   bus.on('clock:month', () => {
     economy.monthEnd(); // Emergency Credit interest on anything owed
     const pay = world.staffSystem.staff.reduce((t, s) => t + s.salary, 0);
@@ -354,6 +377,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       reputation.add(whole, 'Copies sold', { quiet: true });
     }
     market.rollMonth();
+    if (economy.badMonths >= ECONOMY.rescue.months) rescue(); // Milestone 40: last, after the salaries (next month starts at 0)
   });
 
   // Speed unlocks (bible §4): is this speed open yet? And the one-line reason when it is not.
@@ -398,6 +422,10 @@ export function createBusiness({ bus, clock, world, projects }) {
     },
     get fame() {
       return reputation.value;
+    },
+    megaBlocked, // Milestone 40: the Rescue Investor blocks Mega Projects for a while
+    get rescueState() {
+      return state.rescue ?? null;
     },
     get inDebt() {
       return economy.inDebt;

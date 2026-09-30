@@ -28,12 +28,13 @@ export const DISTRIBUTION = {
   // price; each month end bugFixPct% of its bugs are fixed (player feedback). After okMonths each extra month costs
   // trustPerMonth Fan Trust; at maxMonths it launches on its own. Full launch: early buyers don't buy again
   // (fullLaunchPct% of the normal launch sales), and launching with more than buggyBugs bugs costs buggyTrust.
-  earlyAccess: { unlockYear: 3, salesPct: 30, poolDays: 300, pricePct: 70, bugFixPct: 30, okMonths: 6, maxMonths: 12, trustPerMonth: 2, buggyBugs: 3, buggyTrust: 5, fullLaunchPct: 80, types: ['original', 'sequel', 'spinoff'] },
+  earlyAccess: { unlockYear: 3, salesPct: 30, poolDays: 300, pricePct: 70, bugFixPct: 40, okMonths: 6, maxMonths: 12, trustPerMonth: 2, buggyBugs: 3, buggyTrust: 5, fullLaunchPct: 80, types: ['original', 'sequel', 'spinoff'] },
   // Own storefront (F32 Storefront Ops: Year 15 + BUS6). While open, share% of your games' digital copies sell there,
   // share = min(capPct, digital% × takePct ÷ 100): on those you also keep the platform store's cut. Your consoles'
   // third-party games pay thirdPartyPerThousand × (install base ÷ 1,000) × share ÷ 100 a month through it. It costs
   // opCost a month while open. It sells no copies of its own: every game still reaches players through platforms.
-  storefront: { facility: 'F32', capPct: 25, takePct: 30, opCost: 2000, thirdPartyPerThousand: 60 },
+  // Milestone 40: earlyAccess.bugFixPct 30 → 40 (longer projects ship with more bugs; a 4-month stay still cleans a small game).
+  storefront: { facility: 'F32', capPct: 25, takePct: 30, opCost: 500, thirdPartyPerThousand: 60 }, // Milestone 40: opCost 2,000 → 500 (money per copy is about a quarter of before)
   icon: 'business_ui_13',
 };
 export const modeById = (id) => DISTRIBUTION.modes[id] ?? null;

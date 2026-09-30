@@ -60,12 +60,14 @@ export function createElementUnlocks({ bus = null, state }) {
       return ids;
     },
     // Scopes (Milestone 7): open by studio stage, or by the debug unlock-all.
+    // Milestone 40: state().megaBlocked — the Rescue Investor has blocked Mega Projects for a while.
     scopeOpen: (id) => {
       const sc = scopeById(id);
-      return !!sc && (state().stage ?? 1) >= sc.stage;
+      return !!sc && (state().stage ?? 1) >= sc.stage && !(id === 'mega' && state().megaBlocked);
     },
     scopeReason: (id) => {
       const sc = scopeById(id);
+      if (sc && id === 'mega' && state().megaBlocked && (state().stage ?? 1) >= sc.stage) return 'Blocked by the Rescue Investor for now';
       return sc && !api.scopeOpen(id) ? `Needs the ${STAGE_NAMES[sc.stage]} (studio stage ${sc.stage})` : null;
     },
     // ?debug=1: open all 50 elements (scopes open only with the studio stage, Milestone 22).
