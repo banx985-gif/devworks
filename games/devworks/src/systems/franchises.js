@@ -98,6 +98,8 @@ export function createFranchises({ bus, clock, projects, marketing, F = FRANCHIS
     const ip = byId(record.result.ipId);
     if (!ip) return create(record); // its franchise is gone (should not happen): it starts its own
     if (!ip.entries.includes(record.number)) ip.entries.push(record.number);
+    // Milestone 37: a new entry in a Legendary franchise gets the Legendary Franchise cover family (cover_24).
+    if (ip.status === 'legendary' && !record.result.projectOne && !record.result.coverOverride) Object.assign(record.result, { cover: 'cover_24', coverFamily: 'cover_24', coverOverride: 'legendary' });
     return ip;
   }
 

@@ -6,7 +6,7 @@
 //   a prestige engine technology known (SEC-TECH-01's Prestige Build System), 3 Prestige people free, the Mega scope
 //   open and a lane free. Its recipe is locked to bible §42 (RPG + Science Fiction + Management + Neural Tools + Mixed
 //   Media + User Creation), Mega scope, the 3 Prestige people on the team; the finished game is marked projectOne and
-//   its cover is cover_27 (Prestige Mixed Media). Released with launch bugs ≤ 3 → SEC-X-02.
+//   its cover is cover_29 (the PROJECT ONE family; Milestone 37 — it used cover_27 before). Released with launch bugs ≤ 3 → SEC-X-02.
 // PROJECT X (hardware peak): offered in NG+3 once SEC-HW-05 and the four other hardware secrets are found, at the
 //   Global Campus, with 3 Legendary / Prestige people, HW6 and the six Prestige parts. A console design made of the six
 //   parts (hardware.designProjectX); built at the lab and launched from the Console Portfolio (it may launch after
@@ -21,7 +21,7 @@ export const PROJECT_ONE = {
   recipe: { genre: 'GEN02', theme: 'THM02', gameplay: 'PLY03', technology: 'TEC08', artDirection: 'ADR07', feature: 'FEA06' },
   scope: 'mega',
   prestigeStaff: 3,
-  cover: 'cover_27',
+  cover: 'cover_29',
   maxBugs: 3,
 };
 export const PROJECT_X = { family: 'PROJECT X', parts: Object.fromEntries(COMPONENTS.filter((c) => c.tier === 6).map((c) => [c.slot, c.id])), art: 'console_visual_08', contributors: 3 };

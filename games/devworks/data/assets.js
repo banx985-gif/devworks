@@ -36,6 +36,14 @@ export const ASSETS = {
   ...Object.fromEntries(['dev_ui_15', 'dev_ui_16', 'dev_ui_17'].map((k) => art('ui', k))), // Milestone 20: support icons
   ...Object.fromEntries(['business_ui_10', 'business_ui_11', 'business_ui_12'].map((k) => art('business', k))), // Milestone 21: licensing, publishing, acquisitions
   ...Object.fromEntries([art('brand', 'dev_brand_03')]), // the title logo (redrawn 28 Sept)
+  // Milestone 37: the last 26 art-list pictures, each now used — UI icons (decisions, achievements, menus, Help), the
+  // award burst, the plaques, the five mascots (the guide's Code Fox, Help pages, the credits), the brand pictures (Help
+  // "About", the Store, the end card).
+  ...Object.fromEntries(['dev_ui_06', 'dev_ui_08', 'dev_ui_09', 'dev_ui_10', 'dev_ui_20', 'dev_ui_21', 'dev_ui_22', 'dev_ui_23', 'dev_ui_30'].map((k) => art('ui', k))),
+  ...Object.fromEntries([art('vfx', 'dev_vfx_09'), art('business', 'business_ui_04'), art('business', 'business_ui_09')]),
+  ...Object.fromEntries(['dev_reward_05', 'dev_reward_06', 'dev_reward_07', 'dev_reward_09'].map((k) => art('rewards', k))),
+  ...Object.fromEntries(['dev_mascot_01', 'dev_mascot_02', 'dev_mascot_03', 'dev_mascot_04', 'dev_mascot_05'].map((k) => art('mascots', k))),
+  ...Object.fromEntries(['dev_brand_01', 'dev_brand_02', 'dev_brand_04', 'dev_brand_05', 'dev_brand_07'].map((k) => art('brand', k))),
   ...Object.fromEntries([art('brand', 'dev_brand_06'), art('brand', 'studio_logo_banx_gamex'), ['studio_logo_banx_gamex_dark', 'assets/images/brand/studio_logo_banx_gamex_dark.jpg']]), // Milestone 33 (Milestone 34: the splash's dark logo, a small JPEG so it shows at once): the NG+ key art, the ceremony's end card
   ...Object.fromEntries(STAGES.filter((s) => s.event).map((s) => art('events', s.event))), // Milestone 22: the stage moments
   // Milestone 23: the 36 hardware parts, the Hardware / parts icons, the prototype and its moment.

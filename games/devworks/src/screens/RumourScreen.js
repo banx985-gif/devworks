@@ -38,7 +38,7 @@ export function createRumourScreen({ layout, assets, topBar, secrets, onWhy = nu
           ...(found.length ? [{ heading: 'Found', cards: found.map(card) }] : []),
           ...(() => {
             const rec = secrets.prestigeRecords?.() ?? {};
-            const rows = [['projectOne', 'PROJECT ONE', 'cover_27'], ['projectX', 'PROJECT X', 'console_visual_08'], ['singularity', 'Studio Singularity', 'award_trophy_08']].filter(([id]) => rec[id]);
+            const rows = [['projectOne', 'PROJECT ONE', 'cover_29'], ['projectX', 'PROJECT X', 'console_visual_08'], ['singularity', 'Studio Singularity', 'award_trophy_08']].filter(([id]) => rec[id]);
             return rows.length ? [{ heading: 'Prestige records', cards: rows.map(([id, name, logo]) => ({ id: `rec-${id}`, logo, title: name, highlight: true, lines: [{ text: `First reached in NG+${rec[id].value} · Year ${rec[id].info.year}, Month ${rec[id].info.month}`, color: C.good, bold: true }, { text: `Run ${rec[id].runId ?? rec[id].info.runId}`, color: C.textMuted }], buttons: [] })) }] : [];
           })(),
         ],

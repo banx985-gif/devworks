@@ -360,9 +360,10 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
           cost: Math.round(d.cost),
-          cover: d.projectOne ? 'cover_27' : coverFor(d.recipe, cfx.cover), // Milestone 31: PROJECT ONE's cover (Prestige Mixed Media)
+          // Milestone 31: PROJECT ONE's own cover. Milestone 37: a secret recipe gets the Secret Crossover family (cover_28).
+          cover: d.projectOne ? 'cover_29' : coverFor(d.recipe, d.secretRecipe ? 'cover_28' : cfx.cover),
           projectOne: !!d.projectOne, // the art key (a parked family shows its fallback's picture); Milestone 15: a combo's nudge
-          coverFamily: coverFamilyFor(d.recipe, cfx.cover), // Milestone 6: one of the 30 families
+          coverFamily: d.projectOne ? 'cover_29' : coverFamilyFor(d.recipe, d.secretRecipe ? 'cover_28' : cfx.cover), // Milestone 6: one of the 30 families
           combos: [...d.combos], // Milestone 15: what the launch and the franchise read
           engine: d.engine ? { engineId: d.engine.engineId, versionId: d.engine.versionId, label: d.engine.label, tier: d.engine.tier, attrs: { ...d.engine.attrs } } : null, // Milestone 16
           comboFx: { casualPct: cfx.casualPct, corePct: cfx.corePct, tailPct: cfx.tailPct + (d.secretRecipe?.tailPct ?? 0), trust: cfx.trust, franchisePct: cfx.franchisePct + (d.secretRecipe?.franchisePct ?? 0), artAwardScore: cfx.artAwardScore, hardwareDemandPct: cfx.hardwareDemandPct },

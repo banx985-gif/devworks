@@ -46,7 +46,7 @@ export function createRealStoreScreen({ layout, assets, monetisation: m, busines
     const P = debugProvider?.();
     return {
       title: 'Store / VIP',
-      icon: 'dev_reward_01',
+      icon: 'dev_brand_04', // Milestone 37: the store feature graphic
       subtitle: 'DEVWORKS is fully playable without spending. Nothing here buys a secret, an award or a prestige unlock.',
       sections: [
         { heading: 'You have', cards: [{ id: 'status', title: 'Your account', lines: status, buttons: [{ id: 'restore', label: 'Restore purchases', accent: C.progress, disabled: busy, onTap: () => act(m.restore()) }] }] },

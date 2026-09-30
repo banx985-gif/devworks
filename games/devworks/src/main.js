@@ -63,6 +63,11 @@
 // Milestone 36: monetisation stubs (src/systems/monetisation.js on core AdService / CommerceService / EntitlementService):
 // no provider in a normal build; ?debug=1 installs core FakeStoreProvider (Store → debug switches); the Store / VIP
 // screen, rewarded ads, capped interstitials at natural break points, VIP perks as studio effects, Studio Token spends.
+// Milestone 37: every one of the 360 art-list pictures is loaded and used; ?debug=1 runs core AssetValidator at start
+// (data/artList.js against the manifest and what loaded), tracks every picture drawn, and adds the art gallery screen.
+// Milestone 38: sound — the 8 code-made music tracks and the §48 sound effects (core AudioManager, data/audio.js,
+// src/systems/studioAudio.js; only after the first tap) — haptics on the big moments, and accessibility wired to the VFX
+// (Reduced Flashes, Low VFX = drawn effects only, Reduced Motion = no rocket / shakes and sheets that snap).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font, setTextScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -83,6 +88,7 @@ import { MajorFeedback } from '../../../core/MajorFeedback.js';
 import { VfxSystem } from '../../../core/VfxSystem.js';
 import { FloatFeed } from '../../../core/FloatFeed.js';
 import { TextPrompt } from '../../../core/ui/TextPrompt.js';
+import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
 import { createTopBar } from '../../../core/ui/TopBar.js';
@@ -136,7 +142,11 @@ import { createHelpArchive } from '../../../core/ui/HelpArchive.js';
 import { createStudioSplash } from '../../../core/ui/StudioSplash.js';
 import { Settings } from '../../../core/Settings.js';
 import { GUIDE_STEPS, GUIDE_FACE, SCREEN_HINTS, HELP_TEXT, HELP_TOPICS } from '../data/guide.js';
-import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED } from '../data/settings.js';
+import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE } from '../data/settings.js';
+import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
+import { Haptics } from '../../../core/Haptics.js';
+import { SOUNDS, MUSIC, MUSIC_RULES } from '../data/audio.js';
+import { createStudioAudio } from './systems/studioAudio.js';
 import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
 import { createProjectBoardScreen } from './screens/ProjectBoardScreen.js';
 import { setCardSymbols } from './ui/cardListScreen.js';
@@ -145,6 +155,8 @@ import { createAccountFile } from './systems/accountFile.js';
 import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
 import { FakeStoreProvider } from '../../../core/FakeStoreProvider.js';
+import { validateAssets, assetSummary } from '../../../core/AssetValidator.js'; // Milestone 37
+import { ART_LIST, SHARED_ART, TEST_ART } from '../data/artList.js';
 import { createRealStoreScreen } from './screens/StoreScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
@@ -200,7 +212,7 @@ const COL = THEME.color;
 const settings = new Settings({ key: SETTINGS_KEY, defaults: SETTINGS_DEFAULTS });
 const BASE_MIN_H = THEME.button.minH;
 function applySettings() {
-  setTextScale(settings.get('textSize') === 'large' ? 1.15 : 1);
+  setTextScale(TEXT_SCALE[settings.get('textSize')] ?? 1); // Milestone 38: three steps
   THEME.button.minH = settings.get('largerTargets') ? Math.round(BASE_MIN_H * 1.2) : BASE_MIN_H;
   setCardSymbols(settings.get('colourBlindSymbols'));
 }
@@ -214,7 +226,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup', 'splash', 'boot', 'settings', 'store', 'help']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['saves', 'projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['artGallery', 'saves', 'projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -885,7 +897,7 @@ const bootScreen = {
       Promise.race([
         assets.loadImages(ASSETS, (done, total) => (this.progress = done / total), { concurrency: 48 }).then((r) => debug.log(`assets: ${r.loaded} loaded, ${r.missing.length} missing`)),
         new Promise((r) => setTimeout(() => (debug.log('assets: still loading after 45 s, starting anyway'), r()), 45000)),
-      ]),
+      ]).then(() => debug.enabled && logArtCheck()),
       prepareSaves().catch((err) => console.error('[DEVWORKS] saves unavailable', err)),
     ]).then(() => {
       // Straight after a reload for another slot: open it; otherwise the title screen (or ?screen=test).
@@ -971,7 +983,7 @@ const devPops = createDevPops({
   projects,
   vfx,
   studio,
-  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused && !settings.get('lowVfx'), // Milestone 34: Low effects
+  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused && !settings.get('lowVfx') && !settings.get('reducedWorkerDetail'), // Milestone 34: Low effects (Milestone 38: and Reduced worker detail)
 });
 
 // A milestone done (medium feedback, style guide §7): a short banner under the top bar that goes by itself, and a
@@ -1155,6 +1167,7 @@ bus.on('award:won', ({ award, result }) => {
       const size = 420 * (0.6 + 0.4 * s);
       ctx.save();
       ctx.globalAlpha = s;
+      assets.drawContained(ctx, 'dev_vfx_09', { x: W / 2 - size * 0.8, y: sr.y + sr.h * 0.33 - size * 0.8, w: size * 1.6, h: size * 1.6 }); // Milestone 37: the Award Burst
       assets.drawContained(ctx, award.trophy, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.33 - size / 2, w: size, h: size });
       ctx.restore();
     },
@@ -1392,7 +1405,31 @@ const monetisation = createMonetisation({
   context: () => ({ tutorial: guide.active, busy: !!projects.decision || ending.pending || sheet.active || feedback.active || dialog.active || ['ending', 'ngplus', 'setup', 'title', 'splash', 'boot'].includes(router.currentName) }),
 });
 monetisation.setHasRun(() => started);
+// Milestone 38: sound (only after the first tap), haptics, and the Visual settings on the effects.
+const audio = new AudioManager({ bus, sounds: SOUNDS, music: MUSIC, caps: { crossfadeSec: MUSIC_RULES.crossfadeSec } });
+audio.installUnlock();
+const studioAudio = createStudioAudio({ bus, audio, clock, projects, world, ending, screen: () => (started ? router.currentName : 'title'), prestigeNow: () => projects.jobs.some((j) => j.data?.projectOne) || !!hardware?.draft?.projectX, settings });
+const haptics = new Haptics({ enabled: () => settings.get('haptics') });
+function applyFx() {
+  vfx.reducedFlashes = !!settings.get('reducedFlashes');
+  celebrate.reducedFlashes = !!settings.get('reducedFlashes');
+  vfx.quality = settings.get('lowVfx') ? 'low' : 'high';
+  sheet.instant = !!settings.get('reducedMotion');
+}
+settings.onChange(() => applyFx());
 world.addEffectSource((key) => monetisation.perk(key));
+{
+  const show = feedback.show.bind(feedback);
+  feedback.show = (m) => {
+    haptics.strong(); // Milestone 38: the big moments buzz (off in Settings)
+    return show(m);
+  };
+  // Low effects: drawn effects only — no picture effects (sprites) over the studio.
+  for (const fx of [vfx, celebrate]) {
+    const sprite = fx.sprite.bind(fx);
+    fx.sprite = (...a) => (settings.get('lowVfx') ? null : sprite(...a));
+  }
+}
 // Interstitials only at natural break points (after a release, after a year end), shown once nothing else is up.
 let pendingBreak = null;
 bus.on('game:released', () => (pendingBreak = 'afterRelease'));
@@ -2056,7 +2093,7 @@ function guideWatch() {
   const h = SCREEN_HINTS[pendingHint];
   hintsSeen.push(pendingHint);
   pendingHint = null;
-  dialog.show({ title: h.title, body: h.text, buttons: [{ id: 'ok', label: 'Got it', accent: COL.progress }] });
+  dialog.show({ title: h.title, body: h.text, art: h.art ?? null, buttons: [{ id: 'ok', label: 'Got it', accent: COL.progress }] }); // Milestone 37: its picture
 }
 // Help (top bar): the topics, and every tip and hint card seen so far.
 const helpGuide = {
@@ -2125,6 +2162,63 @@ async function restoreSlot(i, textValue) {
 }
 const saveInspector = createSaveInspector({ layout, assets, topBar: subTopBar, slots: () => slots, accountFile: () => accountFile, storage: () => storage, current: () => slotIndex, textPrompt, onRestore: restoreSlot, onBack: () => router.back() });
 
+// Milestone 37: the art check at ?debug=1 start (core AssetValidator: the locked list against the manifest and what
+// loaded), and the art gallery (every listed picture, by folder: the screenshot pass draws them all).
+let artCheck = null;
+function logArtCheck() {
+  const manifest = Object.fromEntries(Object.entries(ASSETS).filter(([k]) => !SHARED_ART.includes(k) && !TEST_ART.includes(k)));
+  const files = Object.fromEntries([...assets.images.keys()].filter((k) => manifest[k]).map((k) => [k, manifest[k]]));
+  artCheck = validateAssets({ artList: ART_LIST, manifest, files });
+  debug.log(assetSummary(artCheck));
+  if (!artCheck.ok) console.warn('[DEVWORKS art]', JSON.stringify({ missing: artCheck.missing, unused: artCheck.unused, unlisted: artCheck.unlisted }));
+  return artCheck;
+}
+// A light thumbnail grid (only the rows on screen are drawn), in the art list's order, with the folder and key.
+const artGallery = (() => {
+  const COLS = 4;
+  const scroll = new ScrollPanel({ getRect: () => { const t = subTopBar.rect(); const sr = layout.safeRect; const y = t.y + t.h + 16; return { x: sr.x + 16, y, w: sr.w - 32, h: sr.y + sr.h - 16 - y }; } });
+  const cell = () => (scroll.getRect().w - 20) / COLS;
+  return {
+    scroll,
+    enter() {
+      scroll.scrollY = 0;
+    },
+    onDragStart: (p) => scroll.beginDrag(p),
+    onDrag: (p) => scroll.drag(p),
+    onDragEnd: (p) => scroll.endDrag(p),
+    onTap: (p) => subTopBar.handleTap(p),
+    render(ctx) {
+      const r = scroll.getRect();
+      ctx.fillStyle = COL.panel;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      const c = cell();
+      const rows = Math.ceil(ART_LIST.length / COLS);
+      scroll.contentHeight = rows * c + 20;
+      scroll.begin(ctx);
+      const first = Math.max(0, Math.floor(scroll.scrollY / c) - 1);
+      const last = Math.min(rows - 1, Math.ceil((scroll.scrollY + r.h) / c));
+      for (let row = first; row <= last; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const k = ART_LIST[row * COLS + col];
+          if (!k) continue;
+          const x = 10 + col * c;
+          const y = 10 + row * c;
+          ctx.fillStyle = (row + col) % 2 ? COL.panelAlt : COL.sheet;
+          ctx.fillRect(x + 4, y + 4, c - 8, c - 8);
+          assets.drawContained(ctx, k, { x: x + 10, y: y + 10, w: c - 20, h: c - 58 });
+          ctx.fillStyle = COL.text;
+          ctx.font = font(THEME.size.small);
+          ctx.textAlign = 'center';
+          ctx.fillText(k.replace(/^(studio_|dev_|platform_)/, ''), x + c / 2, y + c - 22, c - 12);
+        }
+      }
+      scroll.end(ctx);
+      subTopBar.render(ctx);
+    },
+  };
+})();
+if (new URLSearchParams(window.location.search).has('debug')) assets.startTracking();
+
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
   // Milestone 6: check the content (elements, unlocks, weights, covers, their images) and log any problem.
@@ -2152,7 +2246,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -2193,6 +2287,7 @@ router
   .register('store', storeScreen)
   .register('projects', projectBoard)
   .register('saves', saveInspector) // Milestone 35
+  .register('artGallery', artGallery) // Milestone 37 (debug)
   .register('ngplus', ngplusScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
@@ -2222,5 +2317,6 @@ try {
 } catch {
   reloadIntent = false;
 }
+applyFx(); // Milestone 38
 router.go(reloadIntent || START_SCREEN === 'test' ? 'boot' : 'splash');
 loop.start();

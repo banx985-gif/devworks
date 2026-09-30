@@ -22,14 +22,14 @@ export const GUIDE_STEPS = [
   { id: 'G10', title: 'Game finished!', text: 'Release it: PC is picked already. Reviews come in on launch day.', target: 'releasePath', trigger: { after: 'G8', event: 'project:complete', screen: ['studio'] }, advance: { event: 'game:released' }, block: true, skipIf: 'game:released' },
   { id: 'G11', title: 'The reviews', text: 'Every review is saved in the Catalogue. Now make the next one — Help has a page for every system.', target: null, trigger: { after: 'G10', event: 'game:released', screen: ['studio'] }, advance: { next: true }, block: false },
 ];
-export const GUIDE_FACE = null; // no speaker face: the coach box speaks as the studio
+export const GUIDE_FACE = { key: 'dev_mascot_02', crop: { x: 0, y: 0, w: 1, h: 1 } }; // Milestone 37: Code Fox speaks for the studio
 
 // One-time hint cards for the advanced screens (never a wall: a card with "Got it" the first time the screen opens).
 export const SCREEN_HINTS = {
   research: { title: 'Research', text: 'Research Points come in every day. A finished topic opens new elements and facilities.' },
   engines: { title: 'Own engines', text: 'An engine of your own makes your games better in its strengths. Building one takes people off games.' },
-  marketing: { title: 'Marketing', text: 'Campaigns build Hype before launch. Hype sets what fans expect — and what they buy.' },
-  platforms: { title: 'Platform Market', text: 'Platforms come and go. Pick the ones your audience plays on right now.' },
+  marketing: { art: 'dev_ui_23', title: 'Marketing', text: 'Campaigns build Hype before launch. Hype sets what fans expect — and what they buy.' },
+  platforms: { art: 'business_ui_09', title: 'Platform Market', text: 'Platforms come and go. Pick the ones your audience plays on right now.' },
   publishers: { title: 'Publishers', text: 'A publisher pays up front and takes a share. Some want a genre, a scope or your IP.' },
   contracts: { title: 'Contract Board', text: 'Short jobs for other studios: steady money between your own games.' },
   sponsors: { title: 'Sponsors', text: 'Six-month deals with perks and a few promises to keep.' },
@@ -41,7 +41,7 @@ export const SCREEN_HINTS = {
   publishingOffice: { title: 'Publishing Office', text: 'Fund other studios’ games and share what they earn.' },
   acquisitions: { title: 'Acquisitions', text: 'Now and then a studio is for sale: its IP or a person comes with it.' },
   archive: { title: 'Franchises', text: 'Every Original starts a franchise. Sequels bring fans — and fatigue.' },
-  rumours: { title: 'Rumour Archive', text: 'Whispers about secrets. Clues get clearer as you get close.' },
+  rumours: { art: 'dev_mascot_01', title: 'Rumour Archive', text: 'Whispers about secrets. Clues get clearer as you get close.' },
   ledger: { title: 'Ledger', text: 'Every Credit in and out, month by month.' },
 };
 
@@ -57,15 +57,17 @@ export const HELP_TEXT = {
 
 // One short page per major system (Help → Topics).
 export const HELP_TOPICS = [
-  { id: 'games', title: 'Making a game', icon: 'dev_ui_07', art: 'dev_event_01', paras: ['Create → New Game: six recipe slots, a scope, a budget focus and a team of leads.', 'The team works through five milestones. At Beta and Gold you choose: ship, delay, cut a feature, outsource QA or crunch.', 'A finished game waits for you in Create → Release.'] },
-  { id: 'release', title: 'Releasing and reviews', icon: 'dev_vfx_07', art: 'dev_event_02', paras: ['Pick platforms that are out now; each has its own players and fit.', 'Reviews come in on launch day. Better reviews sell more, for longer.', 'Everything you released is in Business → Catalogue.'] },
+  { id: 'about', title: 'About DEVWORKS', icon: 'dev_brand_01', art: 'dev_brand_02', paras: ['Build a game studio, one hit at a time: from a rented office to a Global Campus in twenty years.', 'A Banx Gamex game in the Canvas Management Series, with friends from BOTWORKS and RACEWORKS.'] },
+  { id: 'bugs', title: 'Bugs and QA', icon: 'dev_ui_06', art: 'dev_mascot_03', paras: ['Every game ships with some bugs; QA facilities, traits and time cut them.', 'At Beta and Gold you can delay, cut a feature, outsource QA or crunch. Patches after launch fix the rest.'] },
+  { id: 'games', title: 'Making a game', icon: 'dev_ui_08', art: 'dev_event_01', paras: ['Create → New Game: six recipe slots, a scope, a budget focus and a team of leads.', 'The team works through five milestones. At Beta and Gold you choose: ship, delay, cut a feature, outsource QA or crunch.', 'A finished game waits for you in Create → Release.'] },
+  { id: 'release', title: 'Releasing and reviews', icon: 'dev_ui_21', art: 'dev_event_02', paras: ['Pick platforms that are out now; each has its own players and fit.', 'Reviews come in on launch day. Better reviews sell more, for longer.', 'Everything you released is in Business → Catalogue.'] },
   { id: 'staff', title: 'Staff', icon: 'dev_ui_02', art: 'dev_event_03', paras: ['Staff opens the Roster. Tap anyone for their card: stats, Energy, traits, training and history.', 'Hire at the Recruitment Desk. A missing role makes games slower but never blocks them.'] },
   { id: 'research', title: 'Research', icon: 'dev_reward_03', art: 'dev_event_04', paras: ['Research Points arrive every day. Topics open new elements, facilities and scopes.'] },
   { id: 'money', title: 'Money and Fame', icon: 'dev_reward_01', art: 'dev_event_05', paras: ['Credits pay salaries and projects. Below zero, Emergency Credit keeps you going — nothing ends the studio.', 'Fame raises your rank (E to S); ranks open elements, speeds and bigger stages.'] },
-  { id: 'studio', title: 'Studio and Build Mode', icon: 'facility_f02', art: 'dev_event_09', paras: ['Business → Build Mode: buy, move and sell facilities.', 'Business → Studio: move up a stage for more floor, staff and game lanes.'] },
+  { id: 'studio', title: 'Studio and Build Mode', icon: 'facility_f02', art: 'dev_brand_05', paras: ['Business → Build Mode: buy, move and sell facilities.', 'Business → Studio: move up a stage for more floor, staff and game lanes.'] },
   { id: 'franchises', title: 'Franchises and support', icon: 'dev_ui_15', art: 'dev_event_06', paras: ['Sequels, spin-offs, remakes and remasters build on your games.', 'After launch: patches, updates, expansions and ports from the Catalogue.'] },
   { id: 'business', title: 'Deals', icon: 'business_ui_01', art: 'dev_event_07', paras: ['Publishers, sponsors and contracts all live in Business.', 'Later: engine licensing, publishing other studios and acquisitions.'] },
   { id: 'compete', title: 'Awards and rivals', icon: 'award_trophy_01', art: 'dev_event_08', paras: ['Compete shows the awards (C01–C10), the rivals and the rankings.', 'Year 20 ends in a ceremony and a grade — then postgame or New Game+.'] },
   { id: 'hardware', title: 'Hardware (optional)', icon: 'dev_ui_26', art: 'dev_event_11', paras: ['From Year 11 with the Hardware Prototype Lab: design, build and launch your own console.', 'Hardware is optional: a software-only studio can still reach grade S.'] },
-  { id: 'secrets', title: 'Secrets', icon: 'dev_ui_29', art: 'dev_event_13', paras: ['Some things are never listed. Rumours hint at them in Compete → Rumour Archive.'] },
+  { id: 'secrets', title: 'Secrets', icon: 'dev_ui_30', art: 'dev_mascot_01', paras: ['Some things are never listed. Rumours hint at them in Compete → Rumour Archive.'] },
 ];

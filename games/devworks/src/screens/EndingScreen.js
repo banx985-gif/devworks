@@ -123,6 +123,7 @@ export function createEndingScreen({ layout, assets, ending, credits = () => [],
         const lineH = 64;
         let total = 0;
         for (const b of list) total += 90 + b.names.length * lineH + 50;
+        total += Math.min(150, (sr.w - 80) / 5); // the mascots
         // Rolls up so the end card (the logo) settles in the middle at 80% of the step, then holds there.
         const k = Math.min(1, t / (P.creditsSec * 0.8));
         const logoS = Math.min(sr.w - 160, 560);
@@ -136,10 +137,15 @@ export function createEndingScreen({ layout, assets, ending, credits = () => [],
           }
           cy2 += 50;
         }
+        // Milestone 37: the five mascots (Pixel Ghost, Code Fox, Bug Blob, and the BOTWORKS / RACEWORKS cameos) above the logo.
+        const ms = Math.min(150, (sr.w - 80) / 5);
+        ENDING.mascots.forEach((k, i) => assets.drawContained(ctx, k, { x: cx - (ms * 5) / 2 + i * ms, y: cy2 - 10, w: ms, h: ms }));
+        cy2 += ms;
         const ly = cy2 + 40;
         if (assets.has?.(ENDING.logo)) assets.drawContained(ctx, ENDING.logo, { x: cx - logoS / 2, y: ly, w: logoS, h: logoS });
         else text(ctx, 'BANX GAMEX', cx, ly + logoS / 2, { size: S.title, bold: true, align: 'center' });
         text(ctx, 'Thanks for playing DEVWORKS', cx, ly + logoS + 30, { size: S.body, bold: true, align: 'center', color: C.textMuted });
+        assets.drawContained(ctx, ENDING.seriesMark, { x: cx - 90, y: ly + logoS + 90, w: 180, h: 110 }); // the series end-card mark
       }
     } else if (step === 'offer') {
       const artS = Math.min(sr.w - 120, sr.h * 0.3);

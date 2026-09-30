@@ -89,6 +89,7 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
   }
 
   return {
+    scroll, // Milestone 37: tests scroll the whole list (scrollY, contentHeight, clamp)
     enter() {
       scroll.scrollY = 0;
     },

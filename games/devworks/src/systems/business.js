@@ -61,6 +61,8 @@ import { LOCALISATION } from '../../data/global.js';
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+const PERFECT_COVER = { score: 97 }; // Milestone 37
+
 export function createBusiness({ bus, clock, world, projects }) {
   const economy = new EconomySystem({
     bus,
@@ -261,6 +263,8 @@ export function createBusiness({ bus, clock, world, projects }) {
     const gain = trust.total > 0 ? trust.total * (1 + (world.effect?.('fanTrustGainPct') ?? 0) / 100) : trust.total; // Community Room
     state.fanTrust = +clamp(state.fanTrust + gain, 0, 100).toFixed(2);
     franchises.launched(record, fr);
+    // Milestone 37: a perfect launch — reviewed 97+ with no bugs — earns the Perfect Game cover family (cover_30).
+    if (record.release.score >= PERFECT_COVER.score && (record.result.bugs ?? 0) === 0 && !record.result.projectOne) Object.assign(record.result, { cover: 'cover_30', coverFamily: 'cover_30', coverOverride: 'perfect' });
     bus.emit('game:released', { record }); // first, so the reviews are shown before any rank-up they bring
     reputation.add(Math.max(0, review.score * FAME.release.perPoint - FAME.release.minus), `Released ${g.title}`);
     return record;

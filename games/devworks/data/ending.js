@@ -112,6 +112,8 @@ export const ENDING = {
   ceremony: { recapSec: 3.5, perCategorySec: 0.7, gradeSec: 2.5, singularitySec: 4, creditsSec: 6 },
   logo: 'studio_logo_banx_gamex', // assets/images/brand (a copy of the series art/brand logo): the end card
   ngArt: 'dev_brand_06', // NG+ / Prestige key art (the NG+ offer)
+  mascots: ['dev_mascot_01', 'dev_mascot_02', 'dev_mascot_03', 'dev_mascot_04', 'dev_mascot_05'], // Milestone 37: the credits' cameos
+  seriesMark: 'dev_brand_07', // the series end-card mark
   archiveMax: 12, // legacy summaries kept by the account
 };
 

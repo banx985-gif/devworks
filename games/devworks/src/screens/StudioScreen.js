@@ -43,7 +43,7 @@ const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes b
 const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }) }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -128,6 +128,11 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   const pose = { bob: 0, tilt: 0, flip: 1 };
   const poseAgent = { state: 'idle', facing: 1 };
   let animT = 0; // work / rest clock (stops while the game is paused)
+  // Milestone 39 (bible §52): the workers nearest the middle of the view animate in full (24; fewer with Reduced worker
+  // detail / low mode); other visible ones re-pose only every few frames; those off screen are logic only.
+  const fullIds = new Set();
+  let frameN = 0;
+  const detailStats = { visible: 0, full: 0, reduced: 0, logicOnly: 0 };
   const motionOf = (w) => {
     let m = motion.get(w.id);
     if (!m) {
@@ -264,6 +269,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       debugBadge = b;
     },
 
+    // Milestone 39: how many workers were drawn in full / reduced detail, and how many were logic only (debug overlay).
+    get detailStats() {
+      return detailStats;
+    },
     // Milestone 34: a worker's box on the screen (the guide's coach mark points at the Founder), or null off screen.
     // show: first glide the camera so they stand well inside the screen (the guide's "Tap your Founder").
     workerScreenRect(id, { show = false } = {}) {
@@ -495,8 +504,20 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       const vis = { x: camera.x - 60, y: camera.y - 60, w: camera.visibleW + 120, h: camera.visibleH + 120 };
       const seen = (r) => r.x < vis.x + vis.w && r.x + r.w > vis.x && r.y < vis.y + vis.h && r.y + r.h > vis.y;
       const items = [...stations, ...props, ...onFloor()].filter((it) => it === moving?.station || seen(it.kind === 'worker' ? workerRect(it) : artRect(it))).sort((a, b) => depthOf(a) - depthOf(b));
+      frameN++;
+      const wd = workerDetail();
+      const ccx = camera.x + camera.visibleW / 2;
+      const ccy = camera.y + camera.visibleH / 2;
+      const visWorkers = items.filter((it) => it.kind === 'worker');
+      visWorkers.sort((a, b) => Math.hypot(a.agent.x - ccx, a.agent.y - ccy) - Math.hypot(b.agent.x - ccx, b.agent.y - ccy));
+      fullIds.clear();
+      for (let i = 0; i < Math.min(wd.full, visWorkers.length); i++) fullIds.add(visWorkers[i].id);
+      detailStats.visible = visWorkers.length;
+      detailStats.full = fullIds.size;
+      detailStats.reduced = visWorkers.length - fullIds.size;
+      detailStats.logicOnly = onFloor().length - visWorkers.length;
       for (const it of items) {
-        if (it.kind === 'worker') drawWorker(ctx, it);
+        if (it.kind === 'worker') drawWorker(ctx, it, fullIds.has(it.id), wd.every);
         else if (it.kind === 'prop') drawProp(ctx, it);
         else if (it !== moving?.station) {
           const r = stationRect(it);
@@ -638,12 +659,27 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   }
 
   // A worker with their pose: hop + sway walking, typing bounce working, breathing resting, and a bug's shake.
-  function drawWorker(ctx, w) {
+  function drawWorker(ctx, w, full = true, every = 3) {
     const m = motionOf(w);
-    poseAgent.state = w.agent.state;
-    poseAgent.facing = m.flip;
-    const t = w.agent.state === 'walking' ? m.stride / WALKER.stride : animT;
-    characterPose(poseAgent, t, m.seed, pose, WALKER.motion);
+    // A reduced-detail worker keeps the pose it had, re-posed every few frames (staggered so they don't all move at once).
+    const own = (w._pose ??= { bob: 0, tilt: 0, flip: 1 });
+    if (full || (frameN + (w.breakSeat ?? 0)) % every === 0) {
+      poseAgent.state = w.agent.state;
+      poseAgent.facing = m.flip;
+      const t = w.agent.state === 'walking' ? m.stride / WALKER.stride : animT;
+      characterPose(poseAgent, t, m.seed, pose, WALKER.motion);
+      own.bob = pose.bob;
+      own.tilt = pose.tilt;
+      own.flip = pose.flip;
+      own.sx = pose.sx;
+      own.sy = pose.sy;
+    } else {
+      pose.bob = own.bob;
+      pose.tilt = own.tilt;
+      pose.flip = own.flip;
+      pose.sx = own.sx;
+      pose.sy = own.sy;
+    }
     const f = feetOf(w);
     const shakeX = m.shake > 0 ? Math.sin(animT * 70) * 5 * Math.min(1, m.shake / 0.2) : 0;
     const r = workerRect(w);

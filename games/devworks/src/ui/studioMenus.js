@@ -53,6 +53,8 @@ import { DISTRIBUTION } from '../../data/distribution.js';
 
 const C = THEME.color;
 
+// Milestone 37: the decision sheet's pictures (Outsource QA, the bug icon for the QA-heavy choices).
+const DECISION_ICONS = { ship: 'dev_ui_07', delay: 'dev_ui_06', cut: 'dev_ui_08', outsource: 'business_ui_04', crunch: 'dev_ui_05' };
 export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null }) {
   const menus = new MenuRegistry();
   for (const def of STATIONS) {
@@ -89,7 +91,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         sections: [{ columns: 1, buttons: [
           { id: 'awards', label: 'Awards', sub: 'C01–C10, your trophies and last year’s results', icon: 'award_trophy_01', onTap: () => openScreen('awards') },
           { id: 'rivals', label: 'Rivals', sub: 'The other studios and their games', icon: 'rival_logo_r01', accent: C.progress, onTap: () => openScreen('rivals') },
-          { id: 'rankings', label: 'Rankings', sub: 'Studios by awards and sales', icon: 'dev_ui_04', accent: C.purple, onTap: () => openScreen('rankings') },
+          { id: 'rankings', label: 'Rankings', sub: 'Studios by awards and sales', icon: 'dev_ui_20', accent: C.purple, onTap: () => openScreen('rankings') },
           ...(rumours ? [{ id: 'rumours', label: 'Rumour Archive', sub: rumours(), icon: 'dev_ui_29', accent: C.purple, onTap: () => openScreen('rumours') }] : []), // Milestone 28
           ...(achievements ? [{ id: 'achievements', label: 'Achievements', sub: `${achievements().count()} of ${achievements().total()} earned`, icon: 'dev_ui_04', accent: C.progress, onTap: () => openScreen('achievements') }, { id: 'hallOfFame', label: 'Hall of Fame', sub: `${achievements().hall.length} entr${achievements().hall.length === 1 ? 'y' : 'ies'}`, icon: 'dev_reward_10', accent: C.purple, onTap: () => openScreen('hallOfFame') }] : []), // Milestone 32
         ] }],
@@ -160,7 +162,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   { id: 'acquisitions', label: 'Acquisitions', sub: global().acqOffer ? 'A studio is for sale!' : `${global().acquired.length} of 2 bought`, icon: 'business_ui_12', accent: C.purple, onTap: () => openScreen('acquisitions') },
                 ]
               : []),
-            { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
+            { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'dev_ui_09', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(achievements ? [{ id: 'studioHall', label: 'Hall of Fame', sub: 'Your studio’s legends and records', icon: 'dev_reward_10', accent: C.purple, onTap: () => openScreen('hallOfFame') }, { id: 'studioAchievements', label: 'Achievements', sub: `${achievements().count()} of ${achievements().total()} earned`, icon: 'dev_ui_04', accent: C.progress, onTap: () => openScreen('achievements') }] : []), // Milestone 32
             ...(distribution?.() && !distribution().storefrontWhy() ? [{ id: 'storefront', label: 'Storefront', sub: distribution().storefront.open ? `Open · ${Math.round(distribution().shareNow())}% of downloads` : 'Closed', icon: DISTRIBUTION.icon, accent: C.purple, onTap: () => open('storefront') }] : []), // Milestone 26
             { id: 'settings', label: 'Settings', sub: 'Text size, effects, accessibility', icon: 'dev_ui_05', accent: C.progress, onTap: () => openScreen('settings') }, // Milestone 34
@@ -397,7 +399,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           columns: 1,
           buttons: DECISIONS.map((d) => {
             const o = opts.find((x) => x.id === d.id);
-            return { id: `decide:${d.id}`, label: d.name, sub: o.ok ? d[dec.point] + (extra[d.id] && o.ok ? extra[d.id] : '') : o.why, disabled: !o.ok, accent: d.id === 'ship' ? C.good : d.id === 'crunch' ? C.bad : C.progress, onTap: () => decide?.(d.id) };
+            return { id: `decide:${d.id}`, icon: DECISION_ICONS[d.id] ?? null, label: d.name, sub: o.ok ? d[dec.point] + (extra[d.id] && o.ok ? extra[d.id] : '') : o.why, disabled: !o.ok, accent: d.id === 'ship' ? C.good : d.id === 'crunch' ? C.bad : C.progress, onTap: () => decide?.(d.id) };
           }),
         },
       ],
