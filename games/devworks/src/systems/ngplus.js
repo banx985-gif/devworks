@@ -181,6 +181,7 @@ export function createNgPlus({ bus, clock, world, business, research, projects, 
     const t = sys.transition({ snapshot: snapshot(), choices: { legacyStaff: choices.legacyStaff ?? [], blueprints: choices.blueprints ?? [], facilityBlueprint: choices.facilityBlueprint ?? null }, level: lv });
     const pct = NGPLUS.researchPctByLevel[Math.min(lv, NGPLUS.researchPctByLevel.length - 1)];
     return {
+      id: `${runId()}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`, // Milestone 35: pays once
       level: lv,
       always: { prestigeTokens: t.always.prestigeTokens, studioTokens: t.always.studioTokens },
       legacyStaff: t.chosen.legacyStaff,
@@ -210,7 +211,8 @@ export function createNgPlus({ bus, clock, world, business, research, projects, 
     const day = clock.totalDays;
     let bought = [...(carry.shop ?? [])];
     const cost = shopCost(bought);
-    if (cost && !secrets?.spendTokens?.(cost, `NG+${carry.level} setup: ${bought.join(', ')}`)) bought = []; // (can't happen: checked on the setup screen)
+    // Paid once per package (Milestone 35: an NG+ start replayed after a force-close never charges again).
+    if (cost && !secrets?.spendTokens?.(cost, `NG+${carry.level} setup: ${bought.join(', ')}`, carry.id ? `ngshop:${carry.id}` : null)) bought = []; // (can't happen: checked on the setup screen)
     const base = { legacy: sys.picks('legacy', carry.level), blueprints: sys.picks('blueprints', carry.level) + (carry.museum ? 1 : 0) };
     const lim = bought.length ? carry.limits ?? base : base;
     const legacy = [];

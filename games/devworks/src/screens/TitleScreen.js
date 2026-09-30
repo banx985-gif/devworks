@@ -20,7 +20,9 @@ const BTN_H = 130;
 // slots(): [{ index, summary, error }] (null summary = empty); last(): index of the last-played slot or null.
 // Milestone 31: crown() → the account crown (Studio Singularity, SEC-X-03): a permanent badge by the logo and on every
 // save slot (the Prestige Legends Crown over the Prestige Aura).
-export function createTitleScreen({ layout, assets, slots, last, onContinue, onPlay, onNewGame, onNewInSlot, onDelete, onSettings, crown = () => false }) {
+// Milestone 35: a slot no copy of which can be read shows why (damaged, or made by a newer version of DEVWORKS) with
+// Start new (its copies are kept aside first) and Restore (paste a save exported from the save inspector).
+export function createTitleScreen({ layout, assets, slots, last, onContinue, onPlay, onNewGame, onNewInSlot, onDelete, onSettings, crown = () => false, onRestore = null }) {
   const drawCrown = (ctx, x, y, size) => {
     assets.drawContained(ctx, 'dev_vfx_12', { x: x - size * 0.2, y: y - size * 0.2, w: size * 1.4, h: size * 1.4 });
     assets.drawContained(ctx, 'award_trophy_08', { x, y, w: size, h: size });
@@ -212,12 +214,25 @@ export function createTitleScreen({ layout, assets, slots, last, onContinue, onP
   }
 
   function drawDamaged(ctx, r, s, box) {
-    const del = { x: r.x + r.w - 234, y: r.y + r.h / 2 - 55, w: 210, h: 110 };
+    // The words on top, the three buttons in a row along the bottom (fits the shortest slot card).
+    const bh = 110;
+    const bw = (r.w - 48 - 32) / 3;
+    const by = r.y + r.h - bh - 16;
+    const fresh = { x: r.x + 24, y: by, w: bw, h: bh };
+    const restore = { x: r.x + 24 + bw + 16, y: by, w: bw, h: bh };
+    const del = { x: r.x + 24 + 2 * (bw + 16), y: by, w: bw, h: bh };
+    const x = r.x + r.w - 20;
+    box(fresh, () => onNewInSlot(s.index), `fresh${s.index}`);
+    if (onRestore) box(restore, () => onRestore(s.index, restore), `restore${s.index}`);
     box(del, () => onDelete(s.index), `delete${s.index}`);
     if (!ctx) return;
     card(ctx, r, 'bad');
-    text(ctx, `Slot ${s.index + 1}: this save can't be read`, r.x + 40, r.y + r.h / 2 - 30, { size: S.heading, bold: true, color: C.bad, baseline: 'middle', maxWidth: del.x - r.x - 60 });
-    text(ctx, 'Delete it to use the slot again.', r.x + 40, r.y + r.h / 2 + 30, { size: S.body, color: C.textMuted, baseline: 'middle', maxWidth: del.x - r.x - 60 });
+    const newer = /newer than this game/.test(String(s.error?.message ?? s.error ?? ''));
+    const tw = x - r.x - 60;
+    text(ctx, newer ? `Slot ${s.index + 1}: saved by a newer DEVWORKS` : `Slot ${s.index + 1}: damaged`, r.x + 40, r.y + 44, { size: S.heading, bold: true, color: C.bad, baseline: 'middle', maxWidth: tw });
+    text(ctx, newer ? 'Update the game to play it. It is kept as it is.' : 'Start new or restore. Its copies are kept.', r.x + 40, r.y + 100, { size: S.body, color: C.textMuted, baseline: 'middle', maxWidth: tw });
+    drawButton(ctx, fresh, 'Start new', { accent: C.action });
+    drawButton(ctx, restore, 'Restore', { accent: C.progress, disabled: !onRestore });
     drawButton(ctx, del, 'Delete', { accent: C.bad });
   }
 

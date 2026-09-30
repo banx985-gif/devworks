@@ -56,6 +56,10 @@
 // Milestone 34: the Banx Gamex studio splash, the first-run guide (core GuideSystem + CoachMark, data/guide.js), one-time
 // hint cards on the advanced screens, the Help archive (top bar Help), Settings / Accessibility (core Settings,
 // data/settings.js), the Store / VIP stub and the Project Board.
+// Milestone 35: save hardening — the run save in src/systems/runSave.js (shared with the tests), one account file
+// (src/systems/accountFile.js), IndexedDB with localStorage behind it (core FallbackAdapter; ?storage=local turns
+// IndexedDB off), explicit saves at the §50 boundaries, save version 3, damaged slots kept and restorable, and the save
+// inspector (?debug=1, Business → Save inspector).
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font, setTextScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -133,6 +137,9 @@ import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED } from '../data/settings.js
 import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
 import { createProjectBoardScreen } from './screens/ProjectBoardScreen.js';
 import { setCardSymbols } from './ui/cardListScreen.js';
+import { serializeRun, loadRun, newRun, migrateToV3, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35
+import { createAccountFile } from './systems/accountFile.js';
+import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -201,7 +208,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup', 'splash', 'boot', 'settings', 'store', 'help']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['saves', 'projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -276,7 +283,9 @@ bus.on('hardware:start', ({ job }) => {
   if (Object.values(job.data.parts ?? {}).some((id) => IRONPEAK.includes(id))) sponsors.signal('ironPeakPart');
 });
 const global = createGlobalBusiness({ bus, clock, world, business, projects, research, engines: () => engines, recruitment: () => recruitment, publishers: () => publishers, seed: () => business.marketing.seed });
-let accountStore = null; // the storage adapter, once the saves are ready (the combo archive's account record)
+let accountStore = null; // Milestone 35: { get (the raw adapter), set (an account record's key → its part of the account file) }
+let accountFile = null;
+let storage = null; // the storage adapter
 const combos = createCombos({ bus, research, business, saveAccount: (data) => accountStore?.set(SAVE.accountKey, data).catch((e) => console.error('[DEVWORKS] account save failed', e)) }); // Milestone 15
 clock.speedAllowed = (speed) => business.speedOpen(speed); // bible §4: 2× after the first release, 4× at Rank C / Year 4
 // Open recipe elements (Milestone 6): rank and year open more; research (Milestone 12) the rest.
@@ -428,6 +437,7 @@ const menus = createStudioMenus({
   business: () => business,
   today: () => clock.totalDays,
   debugSkipYear: new URLSearchParams(window.location.search).has('debug') ? () => skipYear() : null,
+  saveInspector: new URLSearchParams(window.location.search).has('debug') ? () => router.go('saves') : null, // Milestone 35
   distribution: () => distribution, // Milestone 26
   prestige: () => prestige, // Milestone 31
   achievements: () => achievements, // Milestone 32
@@ -671,7 +681,10 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ guide: { ...guide.serialize(), hints: [...hintsSeen] }, ending: ending.serialize(), secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+// Milestone 35: every run system in one place (src/systems/runSave.js serializes / loads / starts them).
+const runSystems = () => ({ world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending });
+let lastBoundary = null; // { label, event, day } — the last §50 boundary saved
+const saveData = () => serializeRun(runSystems(), { guide: { ...guide.serialize(), hints: [...hintsSeen] }, boundary: lastBoundary });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -684,17 +697,22 @@ const autosave = new Autosave({
 autosave.installBackground();
 
 async function prepareSaves() {
-  const adapter = await createStorageAdapter({ dbName: SAVE.dbName, prefix: SAVE.localPrefix });
-  accountStore = adapter;
+  const adapter = await createStorageAdapter({ dbName: SAVE.dbName, prefix: SAVE.localPrefix, fallback: true, preferLocal: new URLSearchParams(window.location.search).get('storage') === 'local' });
+  storage = adapter;
+  // Milestone 35: one account file (read from the four older records the first time).
+  const PART = { [SAVE.accountKey]: 'combos', [SAVE.secretsAccountKey]: 'secrets', [SAVE.achievementsKey]: 'achievements', [SAVE.legacyAccountKey]: 'legacy' };
+  accountFile = createAccountFile({ adapter, key: SAVE.accountFileKey, version: SAVE.accountVersion, rolling: SAVE.rolling, bus, legacyKeys: Object.fromEntries(Object.entries(PART).map(([k, p]) => [p, k])) });
+  accountStore = { get: (k) => adapter.get(k), set: (k, data) => (PART[k] ? accountFile.set(PART[k], data) : adapter.set(k, data)) };
   try {
-    combos.loadAccount(await adapter.get(SAVE.accountKey)); // Milestone 15: combos found in any slot
-    secrets.loadAccount(await adapter.get(SAVE.secretsAccountKey)); // Milestone 28: secrets found in any run
-    achievements.loadAccount(await adapter.get(SAVE.achievementsKey)); // Milestone 32
-    ngplus.loadAccount(await adapter.get(SAVE.legacyAccountKey)); // Milestone 33: legacy summaries, staff worked with
+    const acc = await accountFile.load();
+    combos.loadAccount(acc.combos); // Milestone 15: combos found in any slot
+    secrets.loadAccount(acc.secrets); // Milestone 28: secrets found in any run
+    achievements.loadAccount(acc.achievements); // Milestone 32
+    ngplus.loadAccount(acc.legacy); // Milestone 33: legacy summaries, staff worked with
   } catch (err) {
-    console.error('[DEVWORKS] account record unreadable', err);
+    console.error('[DEVWORKS] account file unreadable', err);
   }
-  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2 }, rolling: SAVE.rolling, bus });
+  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3 }, rolling: SAVE.rolling, bus });
   await refreshSlots();
 }
 // The slot cards: what each slot holds now (read fresh from storage).
@@ -742,30 +760,8 @@ async function playSlot(i) {
     router.go('title', { view: 'slots' });
     return;
   }
-  world.load(data.world);
-  projects.load(data.games); // a Milestone 2 save has none: nothing in the works, an empty catalogue
-  business.load(data.business); // a Milestone 3 save has none: the books start now (starting Credits)
-  profile.load(data.studio);
-  research.load(data.research); // Milestone 12 (a save from before it: nothing researched)
-  clock.load(data.clock); // the saved speed is checked against the unlocks just loaded
-  elements.load(data.elements ?? data.unlocked); // after the rank and the date: anything already earned opens
-  recruitment.load(data.staff?.recruit ?? null); // Milestone 13 (a save from before it: a fresh board, careers rebuilt)
-  training.load(data.staff?.training ?? null);
-  combos.load(data.combos ?? null); // Milestone 15 (a save from before it: nothing found in this run)
-  engines.load(data.engines ?? null); // Milestone 16 (a save from before it: no engine)
-  publishers.load(data.publishers ?? null); // Milestone 17 (a save from before it: this month's offers now)
-  contracts.load(data.contracts ?? null);
-  sponsors.load(data.sponsors ?? null); // Milestone 18
-  rivals.load(data.rivals ?? null); // Milestone 19 (a save from before it: the rivals' past releases, no award results)
-  awards.load(data.awards ?? null);
-  support.load(data.support ?? null); // Milestone 20
-  global.load(data.global ?? null); // Milestone 21
-  hardware.load(data.hardware ?? null); // Milestone 23
-  consoles.load(data.consoles ?? null); // Milestone 24
-  distribution.load(data.distribution ?? null); // Milestone 26
-  studioEvents.load(data.studioEvents ?? null); // Milestone 27
-  secrets.load(data.secrets ?? null); // Milestone 28
-  ending.load(data.ending ?? null); // Milestone 33 (a save from before it: the ending fires at the next check if Year 20 is over)
+  loadRun(runSystems(), data); // Milestone 35: src/systems/runSave.js (every system, in order; older saves load their "before" state)
+  lastBoundary = data.boundary ?? null;
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   achievements.checkAll(); // Milestone 32: a run from before achievements catches up (nothing is ever granted twice)
   ngplus.knowAll(); // Milestone 33: everyone here is someone the account has worked with
@@ -777,6 +773,8 @@ async function playSlot(i) {
   await slots.setLastUsed(i);
   debug.log(`slot ${i + 1} loaded: day ${clock.totalDays}, ${world.workers.length} staff`);
   resume();
+  // Milestone 35: the newest copy couldn't be read and the one before it was loaded — say so, plainly.
+  if (s.lastLoad?.fallback) dialog.show({ title: 'An older save was loaded', body: `The newest save of this studio couldn't be read (the phone may have closed the game while it was saving), so the one before it was loaded${lastBoundary ? ` — from ${lastBoundary.label}` : ''}. The damaged copy is kept.`, buttons: [{ id: 'ok', label: 'OK', accent: COL.progress }] });
 }
 
 // START STUDIO: a new studio in an empty slot, with the founder's starting team at their stations.
@@ -784,27 +782,9 @@ async function playSlot(i) {
 async function startStudio(i, setup, carry = null) {
   if (sessionUsed) return reloadInto({ action: 'new', slot: i, setup, carry });
   const founder = founderById(setup.founder);
-  world.newGame(founder.team.map(startStaffById));
-  business.newGame({ seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // the run's platform market seed
-  research.newGame();
-  elements.newGame();
-  recruitment.newGame(); // Milestone 13: the first board (Start Candidates) and everyone's career
-  training.newGame();
-  combos.newRun(); // Milestone 15: the account's archive stays
-  engines.newGame(); // Milestone 16
-  publishers.newGame(); // Milestone 17: the first offers
-  contracts.newGame();
-  sponsors.newGame(); // Milestone 18
-  rivals.newGame(); // Milestone 19
-  awards.newGame();
-  support.newGame(); // Milestone 20
-  global.newGame(); // Milestone 21
-  hardware.newGame(); // Milestone 23
-  consoles.newGame(); // Milestone 24
-  distribution.newGame(); // Milestone 26
-  studioEvents.newGame(); // Milestone 27
-  secrets.newGame(); // Milestone 28
-  ending.newGame(); // Milestone 33
+  newRun(runSystems(), { team: founder.team.map(startStaffById), seed: `${Date.now()}-${Math.floor(Math.random() * 1e9)}` }); // Milestone 35: src/systems/runSave.js
+  lastBoundary = null;
+  await quarantine(i); // Milestone 35: a damaged save in this slot is kept aside, not lost
   profile.create(setup);
   if (carry) ngplus.apply(carry); // Milestone 33: NG+ level, Legacy Staff, blueprints, RP, tokens paid
   loadGuide(null, !!carry); // Milestone 34: a new studio starts the guide (an NG+ one has seen it all)
@@ -871,6 +851,8 @@ const titleScreen = createTitleScreen({
   onNewInSlot: (i) => router.go('setup', { slot: i }),
   onDelete: (i) => deleteSlot(i),
   onSettings: () => router.go('settings'), // Milestone 34
+  // Milestone 35: a damaged slot — paste a save exported from the save inspector.
+  onRestore: (i, rect) => textPrompt.open({ rect, value: '', maxLength: 20000000, placeholder: 'Paste a saved studio', onDone: (v) => v && restoreSlot(i, v).then((r) => (r.ok ? titleScreen.showSlots(`Slot ${i + 1} restored.`) : titleScreen.showSlots(r.why))) }),
 });
 const setupScreen = createSetupScreen({ layout, assets, textPrompt, onBack: () => (pendingNg ? router.go('ngplus', { keep: true, view: 'slot' }) : router.go('title', { view: 'slots' })), onStart: (i, setup) => (pendingNg && pendingNg.slot === i ? startNgPlusRun(i, setup) : startStudio(i, setup)) });
 
@@ -1442,7 +1424,8 @@ async function startNgPlusRun(i, setup) {
   await refreshSlots(); // the slot cards the NG+ screen showed are current
   const carry = ngplus.buildCarry(ng.choices, { slot: slotIndex, grade: ending.result?.grade?.band ?? null });
   // Every account record written now (the new run reads them after the reload).
-  await Promise.all([accountStore?.set(SAVE.secretsAccountKey, secrets.serializeAccount()), accountStore?.set(SAVE.achievementsKey, achievements.serializeAccount()), accountStore?.set(SAVE.accountKey, combos.serializeAccount()), accountStore?.set(SAVE.legacyAccountKey, ngplus.serializeAccount())].map((x) => x?.catch?.((e) => console.error('[DEVWORKS] account save before NG+ failed', e))));
+  for (const [part, data] of [['secrets', secrets.serializeAccount()], ['achievements', achievements.serializeAccount()], ['combos', combos.serializeAccount()], ['legacy', ngplus.serializeAccount()]]) accountFile?.set(part, data);
+  await accountFile?.flush();
   slot = null; // nothing writes the parent slot again
   started = false;
   reloadInto({ action: 'new', slot: i, setup, carry });
@@ -1995,11 +1978,17 @@ router.layers.unshift({
 });
 // A run loads its guide; one from before Milestone 34 that has made games already has nothing left to learn.
 let hintsSeen = [];
+// ?debug=1 (the developer's and the automated checks' mode) starts with the guide off, unless &guide=on.
+const GUIDE_DEBUG_OFF = new URLSearchParams(window.location.search).has('debug') && new URLSearchParams(window.location.search).get('guide') !== 'on';
 function loadGuide(data, experienced = false) {
   guide.reset();
   hintsSeen = [...(data?.hints ?? [])];
   if (data) guide.load(data);
   else if (experienced) for (const s of GUIDE_STEPS) guide.state.done.push(s.id);
+  if (GUIDE_DEBUG_OFF) {
+    guide.state.off = true;
+    hintsSeen = Object.keys(SCREEN_HINTS); // and no hint cards over the checks
+  }
 }
 bus.on('guide:done', () => autosave.request('guide'));
 // "Everything is filled in": the New Game screen is ready to start (the Start step waits for it).
@@ -2058,6 +2047,38 @@ const splashScreen = createStudioSplash({
   onDone: () => router.go('boot'),
 });
 
+// ---------------------------------------------------------------------------
+// Milestone 35: critical boundary saves (bible §50), src/systems/runSave.js createBoundarySaver: the result is in the
+// save before the player has seen it (the write runs in the background, in order).
+const boundaries = createBoundarySaver({
+  bus,
+  boundaries: SAVE.boundaries,
+  enabled: () => !!slot && started,
+  now: () => clock.totalDays,
+  save: (b) => {
+    lastBoundary = b;
+    return slot?.save(saveData());
+  },
+});
+// A new studio over a damaged slot: its unreadable copies are kept aside under their own key first (quarantine).
+async function quarantine(i) {
+  if (!slotCards[i]?.error || !storage) return;
+  await quarantineSlot(storage, SAVE.slots[i], SAVE.rolling);
+  await slots.remove(i);
+}
+// Restore: a save exported as text (the save inspector, or a bug report) goes into a slot as its newest copy.
+async function restoreSlot(i, textValue) {
+  try {
+    const raw = JSON.parse(textValue);
+    await slots.slot(i).importRecord(raw.record ?? raw);
+    await refreshSlots();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, why: `That isn't a DEVWORKS save (${e.message})` };
+  }
+}
+const saveInspector = createSaveInspector({ layout, assets, topBar: subTopBar, slots: () => slots, accountFile: () => accountFile, storage: () => storage, current: () => slotIndex, textPrompt, onRestore: restoreSlot, onBack: () => router.back() });
+
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
   // Milestone 6: check the content (elements, unlocks, weights, covers, their images) and log any problem.
@@ -2085,7 +2106,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -2125,6 +2146,7 @@ router
   .register('settings', settingsScreen)
   .register('store', storeScreen)
   .register('projects', projectBoard)
+  .register('saves', saveInspector) // Milestone 35
   .register('ngplus', ngplusScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));

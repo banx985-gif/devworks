@@ -274,6 +274,7 @@ export function createConsoles({ bus, clock, world, business, projects, hardware
     if (units > 0) spendSafe(c, units * unit, `Manufacturing: ${units.toLocaleString('en-GB')} × ${c.name}`);
     c.stock += units;
     c.made += units;
+    if (units > 0) bus.emit('console:manufactured', { console: c, units }); // Milestone 35: a save boundary
     return units;
   }
   const monthsOut = (c) => month() - c.launchMonth;

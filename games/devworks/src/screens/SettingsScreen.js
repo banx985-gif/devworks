@@ -59,7 +59,7 @@ export function createSettingsScreen({ layout, assets, settings, onBack, extra =
       };
     },
   });
-  return { ...screen, bar, onBack: () => (onBack(), true) };
+  return { ...screen, bar }; // Back (the bar, or the phone's) → the router goes back a screen
 }
 
 // Store / VIP (bible §6): a stub until Milestone 36 (no real store; nothing here can be bought yet).
@@ -78,5 +78,5 @@ export function createStoreScreen({ layout, assets, onBack, build = null }) {
         sections: [{ heading: 'Coming later', cards: [], empty: 'Remove Ads, Studio Tokens and VIP will be offered here. Nothing paid ever buys a secret, an award or a prestige unlock.' }],
       })),
   });
-  return { ...screen, bar, onBack: () => (onBack(), true) };
+  return { ...screen, bar }; // Back (the bar, or the phone's) → the router goes back a screen
 }

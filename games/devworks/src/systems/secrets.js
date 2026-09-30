@@ -462,10 +462,14 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     // Milestone 33: the account record written now (before New Game+ reloads the page).
     saveAccountNow: () => persistAccount(),
     // Milestone 33: the first spend (the NG+ setup shop). Never below 0; logged in the account and saved at once.
-    spendTokens(n, reason = '') {
+    // Milestone 35: onceKey — a spend that must never happen twice (an NG+ start replayed after a force-close): if that
+    // key is already in the ledger it counts as paid and nothing is taken again.
+    spendTokens(n, reason = '', onceKey = null) {
+      if (onceKey && ledger()[onceKey] != null) return true;
       if (!(n > 0) || (acct().prestigeTokens ?? 0) < n) return false;
       acct().prestigeTokens -= n;
-      (acct().tokenSpends ||= []).push({ n, reason, day: today() });
+      if (onceKey) ledger()[onceKey] = today();
+      (acct().tokenSpends ||= []).push({ n, reason, day: today(), key: onceKey });
       persistAccount();
       return true;
     },
