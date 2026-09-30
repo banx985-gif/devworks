@@ -168,6 +168,9 @@ export const ECONOMY = {
   startTokens: 0,
   emergencyCeiling: -20000, // the emergency credit line (the Rescue Investor will watch this)
   monthlyInterestPct: 3,
+  // Milestone 39: the ledger keeps its newest lines (older ones fold into one "Earlier lines" line, same balance);
+  // the Ledger screen's months and the ending's profitable years come from the month book, which keeps every month.
+  ledgerLines: 4000,
 };
 
 // One price and one release model (self-publish, digital). The store keeps a share of every copy.

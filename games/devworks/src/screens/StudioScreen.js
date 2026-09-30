@@ -273,6 +273,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     get detailStats() {
       return detailStats;
     },
+    // Milestone 39: leaving the studio for a full screen gives the floor's offscreen picture back (redrawn on return).
+    releaseCaches() {
+      room?.release();
+    },
     // Milestone 34: a worker's box on the screen (the guide's coach mark points at the Founder), or null off screen.
     // show: first glide the camera so they stand well inside the screen (the guide's "Tap your Founder").
     workerScreenRect(id, { show = false } = {}) {

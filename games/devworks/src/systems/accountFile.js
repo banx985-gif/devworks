@@ -9,7 +9,8 @@
 //
 //   const acc = createAccountFile({ adapter, key, legacyKeys: { combos: key, … }, version })
 //   await acc.load() → { combos, secrets, achievements, legacy } (each null when never saved)
-//   acc.set(part, data)   the part's newest data; written at once (writes queue, never overlap). Returns the promise.
+//   acc.set(part, data)   the part's newest data; written at once (writes queue, never overlap; changes made while a
+//                         write waits to start share it — Milestone 39). Returns the promise.
 //   acc.flush()           resolves when every queued write is done
 //   acc.data · acc.slot (the SaveSlot, for the save inspector) · acc.migratedFrom ('file' | 'old keys' | 'new')
 import { SaveSlot } from '../../../../core/SaveStore.js';
@@ -20,10 +21,19 @@ export function createAccountFile({ adapter, key, legacyKeys = {}, version = 1, 
   let data = Object.fromEntries(ACCOUNT_PARTS.map((p) => [p, null]));
   let pending = Promise.resolve();
   let migratedFrom = null;
+  // Milestone 39: writes coalesce — while one is waiting to start, later changes ride on it (a release that touches
+  // five parts in one moment writes the file once, not five times: no long frame).
+  let queued = null;
   const write = () => {
-    const snap = JSON.parse(JSON.stringify(data));
-    pending = pending.then(() => slot.save(snap)).catch((e) => console.error('[DEVWORKS] account file save failed', e));
-    return pending;
+    if (queued) return queued;
+    queued = pending
+      .then(() => {
+        queued = null;
+        return slot.save(JSON.parse(JSON.stringify(data)));
+      })
+      .catch((e) => console.error('[DEVWORKS] account file save failed', e));
+    pending = queued;
+    return queued;
   };
   return {
     slot,

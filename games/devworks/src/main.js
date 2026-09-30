@@ -68,8 +68,11 @@
 // Milestone 38: sound — the 8 code-made music tracks and the §48 sound effects (core AudioManager, data/audio.js,
 // src/systems/studioAudio.js; only after the first tap) — haptics on the big moments, and accessibility wired to the VFX
 // (Reduced Flashes, Low VFX = drawn effects only, Reduced Motion = no rocket / shakes and sheets that snap).
+// Milestone 39: performance — a frame governor (60, a steady 30 when slow or in low mode; low mode also turns Low
+// effects and Reduced worker detail on), the 24 nearest workers in full detail, a capped sprite cache pruned as you go,
+// the floor's cache released when you leave the studio, ?insets=t,r,b,l to check safe areas, and the debug line.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
-import { THEME, font, setTextScale } from '../../../core/Theme.js';
+import { THEME, font, setTextScale, textScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
 import { Rng } from '../../../core/Rng.js';
 import { Renderer } from '../../../core/Renderer.js';
@@ -145,6 +148,7 @@ import { GUIDE_STEPS, GUIDE_FACE, SCREEN_HINTS, HELP_TEXT, HELP_TOPICS } from '.
 import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE } from '../data/settings.js';
 import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
 import { Haptics } from '../../../core/Haptics.js';
+import { FrameGovernor } from '../../../core/FrameGovernor.js'; // Milestone 39
 import { SOUNDS, MUSIC, MUSIC_RULES } from '../data/audio.js';
 import { createStudioAudio } from './systems/studioAudio.js';
 import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
@@ -231,7 +235,14 @@ const WORLD_SCREENS = ['artGallery', 'saves', 'projects', 'ngplus', 'studio', 'r
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
 const renderer = new Renderer(document.getElementById('game'), { width: W, height: BASE_H, maxHeight: MAX_H, maxDpr: 2, bus });
-const layout = new UiLayout(renderer);
+// Milestone 39: ?insets=top,right,bottom,left (CSS px) stands in for a notch and a home bar (the safe-area checks).
+const FORCE_INSETS = (() => {
+  const v = new URLSearchParams(window.location.search).get('insets');
+  if (!v) return null;
+  const [top, right, bottom, left] = v.split(',').map(Number);
+  return { top, right, bottom, left };
+})();
+const layout = new UiLayout(renderer, { forceInsets: FORCE_INSETS });
 bus.on('renderer:resize', () => layout.refresh());
 const input = new Input(renderer, bus);
 const assets = new AssetManager({ bus });
@@ -360,7 +371,9 @@ const loop = new FixedStepLoop({
     }
   },
   render: (alpha) => {
+    assets.sprites.beginFrame(); // Milestone 39: the sprite copies' per-frame budget
     const ctx = renderer.begin(COL.bg);
+    warmText(ctx); // Milestone 39
     router.render(ctx, alpha);
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
@@ -375,11 +388,76 @@ const loop = new FixedStepLoop({
     // One FPS line at the top in the studio or under a sheet, so it hides nothing; the full box on the test screens.
     debug.compact = sheet.active || !onTestScreen();
     debug.render(ctx);
+    if (debug.enabled && started) drawPerfLine(ctx); // Milestone 39
   },
 });
 // On the test screen the debug box sits between the asset test and the sheet button, whatever the height.
 const debugTop = () => layout.safeRect.h - 600;
 const debug = new DebugOverlay({ loop, renderer, layout, input, bus, top: debugTop(), maxLines: 3 });
+// Milestone 39: a second debug line — draw calls, workers in full / reduced detail / logic only, the sprite cache, the
+// JS heap and the frame mode — readable on a phone with ?debug=1.
+const SPRITE_CACHE_MAX_PX = 24e6; // real pixels (about 96 MB of RGBA at most)
+const perf = { draws: 0, lastDraws: 0, drawn: 0, t0: 0, rc0: null };
+if (new URLSearchParams(window.location.search).has('debug')) {
+  const proto = CanvasRenderingContext2D.prototype;
+  const di = proto.drawImage;
+  proto.drawImage = function (...a) {
+    perf.draws++;
+    return di.apply(this, a);
+  };
+}
+function perfSnapshot() {
+  const d = typeof studio !== 'undefined' ? studio.detailStats : { full: 0, reduced: 0, logicOnly: 0 };
+  const heap = globalThis.performance?.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null;
+  return { draws: perf.lastDraws, full: d.full, reduced: d.reduced, logicOnly: d.logicOnly, cacheMP: +(assets.sprites.totalPixels / 1e6).toFixed(1), cacheCapMP: SPRITE_CACHE_MAX_PX / 1e6, heapMB: heap, mode: governor?.state === 'half' ? '30' : '60' };
+}
+// Milestone 39: the first time the browser draws a text size it renders that size's letters, which made the first
+// sheet of a session take a long frame (50–80 ms on the phone shape). The game's sizes (every whole pixel from the
+// smallest to the largest, regular and bold, at the current UI scale) are drawn once, one size a frame, in the
+// background colour under everything — so nothing shows and the first sheet opens smoothly.
+const WARM_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,:;!?\x27"()[]+-=×·%/&#@—–…★✕✓←→';
+const warm = { list: [], i: 0, scale: null };
+document.fonts?.ready.then(() => (warm.scale = null)); // again once the game font has loaded
+function warmText(ctx) {
+  const sc = textScale();
+  if (warm.scale !== sc) {
+    warm.scale = sc;
+    warm.i = 0;
+    warm.list = [];
+    for (let px = Math.round(THEME.size.small * sc); px <= Math.round(76 * sc); px++) for (const bold of [false, true]) warm.list.push(`${bold ? 'bold ' : ''}${px}px ${THEME.family}`);
+  }
+  if (warm.i >= warm.list.length) return;
+  ctx.save();
+  ctx.font = warm.list[warm.i++];
+  ctx.fillStyle = COL.bg;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(WARM_CHARS, 0, 0);
+  ctx.restore();
+}
+function drawPerfLine(ctx) {
+  const p = perfSnapshot();
+  perf.lastDraws = perf.draws;
+  perf.draws = 0;
+  // Frames actually drawn a second (the FPS above counts the screen's refreshes; the governor draws 60 or 30 of them).
+  const now = performance.now();
+  if (!perf.t0 || now - perf.t0 >= 1000) {
+    perf.drawn = perf.rc0 == null ? 0 : Math.round(((loop.renderCount - perf.rc0) * 1000) / (now - perf.t0));
+    perf.t0 = now;
+    perf.rc0 = loop.renderCount;
+  }
+  const txt = `drawn ${perf.drawn} fps (${p.mode} mode) · draws ${p.draws} · workers full ${p.full} / red ${p.reduced} / logic ${p.logicOnly} · cache ${p.cacheMP}/${p.cacheCapMP} MP · heap ${p.heapMB ?? '?'} MB`;
+  const sr = layout.safeRect;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(sr.x + 16, sr.y + 24, sr.w - 32, 24);
+  ctx.font = '20px ui-monospace, Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#7CFFB2';
+  ctx.fillText(txt, sr.x + 24, sr.y + 26, sr.w - 48);
+  ctx.restore();
+}
 bus.on('loop:pause', () => input.reset());
 debug.log(`seeded rng check: ${rng.int(0, 9999)} (same every reload)`);
 
@@ -953,7 +1031,8 @@ const studio = createStudioScreen({
   openShop: () => openMenu('shop'), // Milestone 11
   openFacility: (id) => openMenu('facility', id),
   labPrototype: () => (hardware?.prototypes.length ? HARDWARE.prototypeArt : null), // Milestone 23: the prototype on the lab
-  workerIcons: () => !settings.get('reducedWorkerDetail'), // Milestone 34
+  workerIcons: () => !fx('reducedWorkerDetail'), // Milestone 34 (39: low mode too)
+  workerDetail: () => (fx('reducedWorkerDetail') ? { full: 8, every: 6 } : { full: 24, every: 3 }), // Milestone 39: 24 in full detail
 });
 // A new studio stage (Milestone 11): the big moment with the stage's picture; new scopes open.
 bus.on('studio:stage', ({ stage }) => {
@@ -983,7 +1062,7 @@ const devPops = createDevPops({
   projects,
   vfx,
   studio,
-  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused && !settings.get('lowVfx') && !settings.get('reducedWorkerDetail'), // Milestone 34: Low effects (Milestone 38: and Reduced worker detail)
+  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused && !fx('lowVfx') && !fx('reducedWorkerDetail'), // Milestone 34: Low effects (Milestone 38: and Reduced worker detail; 39: low mode)
 });
 
 // A milestone done (medium feedback, style guide §7): a short banner under the top bar that goes by itself, and a
@@ -1410,13 +1489,27 @@ const audio = new AudioManager({ bus, sounds: SOUNDS, music: MUSIC, caps: { cros
 audio.installUnlock();
 const studioAudio = createStudioAudio({ bus, audio, clock, projects, world, ending, screen: () => (started ? router.currentName : 'title'), prestigeNow: () => projects.jobs.some((j) => j.data?.projectOne) || !!hardware?.draft?.projectX, settings });
 const haptics = new Haptics({ enabled: () => settings.get('haptics') });
+// Milestone 39: the frame governor; low mode (forced, or auto dropped to 30) also means Low effects + Reduced worker detail.
+const governor = new FrameGovernor({ mode: settings.get('fpsMode') === 'low' ? 'low' : 'auto', bus, capFps: true }); // 60 / 30 by time, on any refresh rate
+loop.governor = governor;
+const lowMode = () => governor.state === 'half';
+function fx(k) {
+  return !!settings.get(k) || (lowMode() && (k === 'lowVfx' || k === 'reducedWorkerDetail'));
+}
 function applyFx() {
   vfx.reducedFlashes = !!settings.get('reducedFlashes');
   celebrate.reducedFlashes = !!settings.get('reducedFlashes');
-  vfx.quality = settings.get('lowVfx') ? 'low' : 'high';
+  vfx.quality = fx('lowVfx') ? 'low' : 'high'; // Milestone 39: low mode too
   sheet.instant = !!settings.get('reducedMotion');
 }
 settings.onChange(() => applyFx());
+settings.onChange((k) => k === 'fpsMode' && (governor.setMode(settings.get('fpsMode') === 'low' ? 'low' : 'auto'), applyFx()));
+bus.on('perf:fps', () => applyFx());
+assets.sprites.setMaxPixels(SPRITE_CACHE_MAX_PX);
+assets.sprites.frameBudgetMs = 3; // new sprite copies: one slow copy (or a few quick ones) a frame, the rest on the next frames
+// Leaving the studio for a full screen: its floor cache goes; old sprite copies are pruned every few seconds.
+bus.on('screen:change', ({ from, to }) => from === 'studio' && !['studio'].includes(to) && studio.releaseCaches());
+setInterval(() => assets.sprites.prune(5, 45), 5000);
 world.addEffectSource((key) => monetisation.perk(key));
 {
   const show = feedback.show.bind(feedback);
@@ -1425,9 +1518,10 @@ world.addEffectSource((key) => monetisation.perk(key));
     return show(m);
   };
   // Low effects: drawn effects only — no picture effects (sprites) over the studio.
-  for (const fx of [vfx, celebrate]) {
-    const sprite = fx.sprite.bind(fx);
-    fx.sprite = (...a) => (settings.get('lowVfx') ? null : sprite(...a));
+  const fxOn = (k) => fx(k);
+  for (const v of [vfx, celebrate]) {
+    const sprite = v.sprite.bind(v);
+    v.sprite = (...a) => (fxOn('lowVfx') ? null : sprite(...a));
   }
 }
 // Interstitials only at natural break points (after a release, after a year end), shown once nothing else is up.
@@ -2113,10 +2207,10 @@ const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBa
 // Effects the Visual settings turn down (Reduced flashes / Low effects: no confetti; Low effects: no sparks or pops).
 {
   const confetti = celebrate.confetti.bind(celebrate);
-  celebrate.confetti = (...a) => (settings.get('reducedFlashes') || settings.get('lowVfx') ? null : confetti(...a));
+  celebrate.confetti = (...a) => (settings.get('reducedFlashes') || fx('lowVfx') ? null : confetti(...a));
   for (const k of ['sparks', 'pulse']) {
     const fn = vfx[k].bind(vfx);
-    vfx[k] = (...a) => (settings.get('lowVfx') ? null : fn(...a));
+    vfx[k] = (...a) => (fx('lowVfx') ? null : fn(...a));
   }
 }
 // The Banx Gamex splash (the dark logo) before loading, skippable by tap.
@@ -2240,13 +2334,24 @@ if (debug.enabled) {
     },
   });
   // Milestone 22: a full Global Campus (every facility that fits, 32 staff) for the readability checks.
+  // Milestone 39: n staff for the timing run (past the stage's cap: a debug stress test, not a game rule).
+  const debugStaff = (n) => {
+    for (const d of ALL_STAFF) {
+      if (world.staffSystem.staff.length >= n) break;
+      if (world.staffSystem.get(d.id)) continue; // every one of the 50 (prestige too: a stress test)
+      if (recruitment.debugJoin(d.id)) continue; // up to the stage cap: as a hire would
+      const st = world.freeStationFor(d.role) ?? world.workers[world.workers.length % world.workers.length].station; // past it: share a desk
+      world.hire(d, st.id);
+    }
+    return world.staffSystem.staff.length;
+  };
   const debugFullStudio = () => {
     world.setStage(5);
     for (const fac of FACILITIES) if (!fac.unlock?.secret) world.addStation(fac.id);
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

@@ -20,7 +20,8 @@ export const SETTINGS = [
   { id: 'reducedFlashes', label: 'Reduced flashes', group: 'Visual', options: onOff, line: 'No confetti or bright bursts.' },
   { id: 'reducedMotion', label: 'Reduced motion', group: 'Visual', options: onOff, line: 'No launch rocket, no shakes; sheets appear without sliding.' },
   { id: 'lowVfx', label: 'Low effects', group: 'Visual', options: onOff, line: 'Simple drawn effects only (no picture effects), fewer particles.' },
-  { id: 'reducedWorkerDetail', label: 'Reduced worker detail', group: 'Visual', options: onOff, line: 'No icons or work pops over the workers.' },
+  { id: 'reducedWorkerDetail', label: 'Reduced worker detail', group: 'Visual', options: onOff, line: 'No icons or work pops over the workers; fewer of them animate.' },
+  { id: 'fpsMode', label: 'Frame rate', group: 'Visual', options: [{ id: 'auto', label: 'Auto (60, 30 if slow)' }, { id: 'low', label: '30 FPS (low mode)' }], line: 'Low mode saves battery; it also turns Low effects and Reduced worker detail on.' },
   { id: 'confirmDestructive', label: 'Confirm before selling or letting go', group: 'Interaction', options: onOff },
   { id: 'haptics', label: 'Vibration on big moments', group: 'Interaction', options: onOff, line: 'Phones only.' },
   { id: 'largerTargets', label: 'Larger buttons in sheets', group: 'Interaction', options: onOff },
@@ -30,7 +31,7 @@ export const SETTINGS = [
   { id: 'colourBlindSymbols', label: 'Colour-blind-safe symbols', group: 'Information', options: onOff, line: '✓ ✗ ! next to good, bad and risky lines.' },
   { id: 'statsMode', label: 'Stats', group: 'Information', options: [{ id: 'simple', label: 'Simple' }, { id: 'advanced', label: 'Advanced' }] },
 ];
-export const SETTINGS_DEFAULTS = { haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, colourBlindSymbols: false, statsMode: 'simple' };
+export const SETTINGS_DEFAULTS = { fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, colourBlindSymbols: false, statsMode: 'simple' };
 export const TEXT_SPEED = { fast: 0.7, normal: 1, slow: 1.6 }; // banner time multiplier
 export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.3 }; // Milestone 38: three UI-scale steps
 export const SETTINGS_KEY = 'devworks:settings';

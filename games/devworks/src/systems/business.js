@@ -70,7 +70,26 @@ export function createBusiness({ bus, clock, world, projects }) {
     // No closure: nothing ends the studio (bible §3). The Rescue Investor comes in a later milestone.
     debt: { warnBelow: 0, limit: ECONOMY.emergencyCeiling, monthlyInterestPct: ECONOMY.monthlyInterestPct, closureMonths: Infinity, blockedWhileNegative: [] },
     now: () => clock.totalDays,
+    maxLines: ECONOMY.ledgerLines, // Milestone 39: a 20-year save stays small (it was ~1 MB a year)
   });
+  // Milestone 39: the month book — every game month's Credits in / out by category and its closing balance, kept as
+  // lines are written, so the ledger itself can fold its old lines. months() reads it.
+  let book = new Map();
+  const bookLine = (l) => {
+    if (l.currency !== 'credits') return;
+    const m = Math.floor(l.day / clock.daysPerMonth);
+    let e = book.get(m);
+    if (!e) book.set(m, (e = { index: m, byCategory: {}, income: 0, costs: 0, endBalance: 0 }));
+    e.byCategory[l.category] = (e.byCategory[l.category] ?? 0) + l.amount;
+    if (l.amount > 0) e.income += l.amount;
+    else e.costs += l.amount;
+    e.endBalance = l.balance;
+  };
+  bus.on('economy:change', bookLine);
+  const rebuildBook = () => {
+    book = new Map();
+    for (const l of economy.ledger) bookLine(l);
+  };
   const reputation = new ReputationSystem({ bus, ranks: FAME.ranks });
   const market = new MarketSystem({
     rng: new Rng('devworks-market'),
@@ -114,6 +133,7 @@ export function createBusiness({ bus, clock, world, projects }) {
     marketing.newGame(seed);
     franchises.newGame();
     economy.reset();
+    book = new Map();
     economy.add('credits', ECONOMY.startCredits, 'Starting funds', 'start');
     if (ECONOMY.startTokens) economy.add('tokens', ECONOMY.startTokens, 'Starting tokens', 'start');
     reputation.load(null);
@@ -393,22 +413,11 @@ export function createBusiness({ bus, clock, world, projects }) {
     statusOf: (record) => (record.cert ? 'Certifying' : record.ea && !record.release ? 'Early Access' : !record.release ? 'Not released' : statusOn(Math.max(0, record.sales.days - 1), SALES_BALANCE, firstCurve(record))),
 
     // Ledger by game month (month 1 = days 0–27): { month, year, lines, byCategory, income, costs, net, endBalance }.
-    months(daysPerMonth = clock.daysPerMonth) {
-      const out = new Map();
-      for (const l of economy.ledger) {
-        if (l.currency !== 'credits') continue;
-        const m = Math.floor(l.day / daysPerMonth);
-        const e = out.get(m) ?? { index: m, byCategory: {}, income: 0, costs: 0, endBalance: 0 };
-        e.byCategory[l.category] = (e.byCategory[l.category] ?? 0) + l.amount;
-        if (l.amount > 0) e.income += l.amount;
-        else e.costs += l.amount;
-        e.endBalance = l.balance;
-        out.set(m, e);
-      }
-      return [...out.values()].sort((a, b) => b.index - a.index).map((e) => ({ ...e, net: e.income + e.costs, year: Math.floor(e.index / clock.monthsPerYear) + 1, month: (e.index % clock.monthsPerYear) + 1 }));
+    months() {
+      return [...book.values()].sort((a, b) => b.index - a.index).map((e) => ({ ...e, byCategory: { ...e.byCategory }, net: e.income + e.costs, year: Math.floor(e.index / clock.monthsPerYear) + 1, month: (e.index % clock.monthsPerYear) + 1 }));
     },
 
-    serialize: () => ({ economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), marketing: marketing.serialize(), franchises: franchises.serialize(), state: { ...state } }),
+    serialize: () => ({ monthBook: [...book.values()], economy: economy.serialize(), reputation: reputation.serialize(), market: market.serialize(), platforms: platforms.serialize(), marketing: marketing.serialize(), franchises: franchises.serialize(), state: { ...state } }),
     load(data) {
       if (!data) {
         newGame(); // a save from before Milestone 4: start the books now
@@ -416,6 +425,10 @@ export function createBusiness({ bus, clock, world, projects }) {
         return;
       }
       economy.load(data.economy);
+      // Milestone 39: the month book (a save from before it: rebuilt from its full ledger), then the ledger folds.
+      if (Array.isArray(data.monthBook)) book = new Map(data.monthBook.map((e) => [e.index, JSON.parse(JSON.stringify(e))]));
+      else rebuildBook();
+      if (economy.ledger.length > economy.maxLines) economy._fold();
       reputation.load(data.reputation);
       if (!market.load(data.market)) market.start();
       // A market saved before Milestone 8 knows only P01: the new platforms start mid-range.
