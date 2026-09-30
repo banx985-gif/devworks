@@ -60,6 +60,9 @@
 // (src/systems/accountFile.js), IndexedDB with localStorage behind it (core FallbackAdapter; ?storage=local turns
 // IndexedDB off), explicit saves at the §50 boundaries, save version 3, damaged slots kept and restorable, and the save
 // inspector (?debug=1, Business → Save inspector).
+// Milestone 36: monetisation stubs (src/systems/monetisation.js on core AdService / CommerceService / EntitlementService):
+// no provider in a normal build; ?debug=1 installs core FakeStoreProvider (Store → debug switches); the Store / VIP
+// screen, rewarded ads, capped interstitials at natural break points, VIP perks as studio effects, Studio Token spends.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
 import { THEME, font, setTextScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
@@ -140,6 +143,9 @@ import { setCardSymbols } from './ui/cardListScreen.js';
 import { serializeRun, loadRun, newRun, migrateToV3, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35
 import { createAccountFile } from './systems/accountFile.js';
 import { createSaveInspector } from './screens/SaveInspectorScreen.js';
+import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
+import { FakeStoreProvider } from '../../../core/FakeStoreProvider.js';
+import { createRealStoreScreen } from './screens/StoreScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -338,6 +344,7 @@ const loop = new FixedStepLoop({
       coach.update(dt); // Milestone 34: the guide, the hint cards
       guide.update();
       guideWatch();
+      breakWatch(); // Milestone 36
     }
   },
   render: (alpha) => {
@@ -682,7 +689,7 @@ let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: nul
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
 // Milestone 35: every run system in one place (src/systems/runSave.js serializes / loads / starts them).
-const runSystems = () => ({ world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending });
+const runSystems = () => ({ world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending, monetisation });
 let lastBoundary = null; // { label, event, day } — the last §50 boundary saved
 const saveData = () => serializeRun(runSystems(), { guide: { ...guide.serialize(), hints: [...hintsSeen] }, boundary: lastBoundary });
 const autosave = new Autosave({
@@ -709,10 +716,17 @@ async function prepareSaves() {
     secrets.loadAccount(acc.secrets); // Milestone 28: secrets found in any run
     achievements.loadAccount(acc.achievements); // Milestone 32
     ngplus.loadAccount(acc.legacy); // Milestone 33: legacy summaries, staff worked with
+    monetisation.loadAccount(acc.monetisation); // Milestone 36: entitlements, purchases, ad timing
   } catch (err) {
     console.error('[DEVWORKS] account file unreadable', err);
   }
   slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3 }, rolling: SAVE.rolling, bus });
+  // Milestone 36: ?debug=1 → the pretend store (its next ad / purchase is set on the Store screen); none otherwise.
+  if (new URLSearchParams(window.location.search).has('debug')) {
+    const persist = { load: () => JSON.parse(localStorage.getItem('devworks:fakeStore') ?? 'null'), save: (st) => localStorage.setItem('devworks:fakeStore', JSON.stringify(st)) };
+    monetisation.setProvider(new FakeStoreProvider({ products: fakeProducts(), persist, present: (kind, id, outcome) => new Promise((res) => dialog.show({ title: kind === 'rewarded' ? 'Rewarded ad (pretend)' : 'Ad (pretend)', body: 'A real ad would play here.', dismissible: false, buttons: [{ id: 'close', label: 'Close', accent: COL.progress, onTap: () => res(outcome) }] })) }));
+  }
+  monetisation.startup().catch((e) => console.error('[DEVWORKS] store startup failed', e));
   await refreshSlots();
 }
 // The slot cards: what each slot holds now (read fresh from storage).
@@ -766,6 +780,7 @@ async function playSlot(i) {
   achievements.checkAll(); // Milestone 32: a run from before achievements catches up (nothing is ever granted twice)
   ngplus.knowAll(); // Milestone 33: everyone here is someone the account has worked with
   loadGuide(data.guide ?? null, projects.catalogue.count > 0 || projects.jobs.length > 0); // Milestone 34
+  monetisation.payHeld(true); // Milestone 36: Studio Tokens bought with no studio open
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -788,6 +803,7 @@ async function startStudio(i, setup, carry = null) {
   profile.create(setup);
   if (carry) ngplus.apply(carry); // Milestone 33: NG+ level, Legacy Staff, blueprints, RP, tokens paid
   loadGuide(null, !!carry); // Milestone 34: a new studio starts the guide (an NG+ one has seen it all)
+  monetisation.payHeld(true); // Milestone 36
   ngplus.knowAll();
   slot = slots.slot(i);
   slotIndex = i;
@@ -1359,6 +1375,36 @@ const prestige = createPrestige({ clock, world, projects, secrets, awards: () =>
 // Milestone 33: the Year-20 ending (always, whatever the grade) and New Game+.
 const ending = createEnding({ bus, clock, world, projects, business, research, engines: () => engines, global: () => global, awards: () => awards, combos: () => combos, secrets: () => secrets, consoles: () => consoles, profile: () => profile, debug: log });
 const ngplus = createNgPlus({ bus, clock, world, business, research, projects, profile, secrets, combos, achievements, recruitment, shop, engines: () => engines, sponsors: () => sponsors, publishers: () => publishers, contracts: () => contracts, consoles: () => consoles, global: () => global, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.legacyAccountKey, data).catch((e) => console.error('[DEVWORKS] legacy account save failed', e)) });
+// Milestone 36: monetisation (the studio reads VIP perks as effects; paid state never reaches a rule).
+const monetisation = createMonetisation({
+  bus,
+  clock,
+  business,
+  research,
+  recruitment,
+  training,
+  sponsors,
+  publishers,
+  contracts,
+  profile,
+  commit: () => (slot && started ? slot.save(saveData()) : accountFile?.flush()),
+  saveAccount: (d) => accountFile?.set('monetisation', d),
+  context: () => ({ tutorial: guide.active, busy: !!projects.decision || ending.pending || sheet.active || feedback.active || dialog.active || ['ending', 'ngplus', 'setup', 'title', 'splash', 'boot'].includes(router.currentName) }),
+});
+monetisation.setHasRun(() => started);
+world.addEffectSource((key) => monetisation.perk(key));
+// Interstitials only at natural break points (after a release, after a year end), shown once nothing else is up.
+let pendingBreak = null;
+bus.on('game:released', () => (pendingBreak = 'afterRelease'));
+bus.on('clock:year', () => (pendingBreak ??= 'yearEnd'));
+function breakWatch() {
+  if (!pendingBreak || monetisation.ads.showing) return;
+  // Wait until the studio is on screen with nothing over it (never a decision, an ending, a ceremony or a sheet).
+  if (projects.decision || ending.pending || sheet.active || feedback.active || dialog.active || guide.active || router.currentName !== 'studio') return;
+  const bp = pendingBreak;
+  pendingBreak = null;
+  monetisation.interstitial(bp); // core AdService applies the caps (it may say no: capped, ad-free, no provider)
+}
 bus.on('campaign:ending', () => {
   const r = ending.result;
   if (!r) return;
@@ -1913,7 +1959,7 @@ const licensingScreen = createLicensingScreen({ layout, assets, topBar: subTopBa
 const publishingOfficeScreen = createPublishingOfficeScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onChoose: (id, choice) => { const r = global.fund(id, choice); if (!r.ok) showTip(r.why); } });
 const acquisitionsScreen = createAcquisitionsScreen({ layout, assets, topBar: subTopBar, global, dateLabel: (d) => clock.shortLabel(d), onBuy: () => { const r = global.acquire(); if (!r.ok) showTip(r.why); }, onDecline: () => global.declineAcquisition(), nameOf: (a) => (a.ipId ? `${business.franchises.byId(a.ipId)?.name} joined your franchises` : a.staffId ? `${staffDefById(a.staffId)?.name} came to the recruitment board` : null) });
 const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: subTopBar }); // Milestone 15
-const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
+const researchScreen = createResearchScreen({ queueNext: { can: () => monetisation.vip, queued: () => monetisation.queuedResearch, queue: (id) => { const r = monetisation.queueResearch(id); showTip(r.ok ? 'Queued: it starts when this topic is done (VIP)' : r.why); } }, layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
 
 // ---------------------------------------------------------------------------
@@ -2025,7 +2071,7 @@ const helpGuide = {
 };
 const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: 'dev_ui_05' });
 const settingsScreen = createSettingsScreen({ layout, assets, settings, onBack: () => router.back() });
-const storeScreen = createStoreScreen({ layout, assets, onBack: () => router.back() });
+const storeScreen = createRealStoreScreen({ layout, assets, monetisation, business, hasRun: () => started, debugProvider: () => (monetisation.provider instanceof FakeStoreProvider ? monetisation.provider : null), onBack: () => router.back() }); // Milestone 36
 const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBar, projects, business, lanes, onOpen: (id) => router.go('project', { id }), onRelease: (n) => openMenu('release', n), onNew: () => router.go('newProject') });
 // Effects the Visual settings turn down (Reduced flashes / Low effects: no confetti; Low effects: no sparks or pops).
 {
@@ -2106,7 +2152,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

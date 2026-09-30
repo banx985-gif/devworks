@@ -54,7 +54,7 @@ export function createContracts({ bus, clock, world, business, engines = () => n
     hooks: {
       generate,
       check: (c) => (c.progress >= c.work ? { ok: true, failures: [] } : { ok: false, failures: ['not done yet'] }),
-      onSuccess: (c) => business.economy.add('credits', c.pay, `Contract: ${contractKindById(c.kind).name} for ${c.client}`, 'contracts'),
+      onSuccess: (c) => business.economy.add('credits', Math.round(c.pay * (1 + (c.adBonusPct ?? 0) / 100)), `Contract: ${contractKindById(c.kind).name} for ${c.client}${c.adBonusPct ? ` (+${c.adBonusPct}% ad bonus)` : ''}`, 'contracts'), // Milestone 36
     },
   });
 

@@ -12,7 +12,7 @@
 //   newRun(sys, { team, seed }) every system's newGame (a new studio; its profile is created by the caller)
 // sys: { world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines,
 // publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents,
-// secrets, ending } — any may be missing (a test that doesn't need it).
+// secrets, ending, monetisation } — any may be missing (a test that doesn't need it).
 export const RUN_PARTS = {
   studio: 'studio',
   world: 'studio',
@@ -40,9 +40,10 @@ export const RUN_PARTS = {
   secrets: 'secrets',
   studioEvents: 'event queue',
   ending: 'studio',
+  monetisation: 'economy / platform market / franchises', // Milestone 36: rewarded-ad uses this run, the VIP research queue
 };
 // What the account file holds (bible §50 "Account save"), never a run save.
-export const ACCOUNT_PARTS = ['combos', 'secrets', 'achievements', 'legacy'];
+export const ACCOUNT_PARTS = ['combos', 'secrets', 'achievements', 'legacy', 'monetisation']; // Milestone 36: entitlements, purchases, ad timing
 
 const ser = (x) => (x ? x.serialize() : undefined);
 
@@ -50,6 +51,7 @@ export function serializeRun(s, extra = {}) {
   const out = {
     ...extra,
     ending: ser(s.ending),
+    monetisation: s.monetisation?.serializeRun(),
     secrets: ser(s.secrets),
     studioEvents: ser(s.studioEvents),
     distribution: ser(s.distribution),
@@ -103,6 +105,7 @@ export function loadRun(s, data) {
   s.studioEvents?.load(data.studioEvents ?? null); // Milestone 27
   s.secrets?.load(data.secrets ?? null); // Milestone 28
   s.ending?.load(data.ending ?? null); // Milestone 33 (a save from before it: the ending fires at the next check if Year 20 is over)
+  s.monetisation?.loadRun(data.monetisation ?? null); // Milestone 36
 }
 
 export function newRun(s, { team, seed }) {
@@ -127,6 +130,7 @@ export function newRun(s, { team, seed }) {
   s.studioEvents?.newGame(); // Milestone 27
   s.secrets?.newGame(); // Milestone 28
   s.ending?.newGame(); // Milestone 33
+  s.monetisation?.newGame(); // Milestone 36
 }
 
 // Critical boundary saves (bible §50). On each boundary event the save is written once the event (and everything

@@ -18,7 +18,7 @@ const ROW_H = 230;
 const STATE = { done: ['Done', C.good], active: ['Researching', C.progress], available: ['Open', C.action], locked: ['Locked', C.textMuted] };
 
 // Milestone 15: "Discoveries" (top right) opens the Discovery Archive.
-export function createResearchScreen({ layout, assets, research, topBar, debugFinish = null, openDiscoveries = null }) {
+export function createResearchScreen({ layout, assets, research, topBar, debugFinish = null, openDiscoveries = null, queueNext = null }) {
   let branch = BRANCHES[0].id;
   let hits = { tabs: [], rows: [], stop: null, debug: null };
   const panelRect = () => {
@@ -108,8 +108,10 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
       text(ctx, why ?? opensLine(n.id), r.x + 24, r.y + 126, { size: S.small, color: why ? C.bad : C.textMuted, maxWidth: st === 'available' ? tw - 230 : tw });
       if (st === 'available') {
         const can = !research.why(n.id);
-        drawButton(ctx, bx, can ? 'Start' : `${n.rp} RP`, { disabled: !can || !!research.active });
-        hits.rows.push({ id: n.id, button: bx, ok: can && !research.active });
+        const q = research.active && queueNext?.can(); // Milestone 36: VIP — queue the next topic
+        const queued = queueNext?.queued() === n.id;
+        drawButton(ctx, bx, queued ? '✓ Queued' : q && can ? 'Queue next' : can ? 'Start' : `${n.rp} RP`, { disabled: !can || (!!research.active && !q), selected: queued });
+        hits.rows.push({ id: n.id, button: bx, ok: can && (!research.active || q) });
       }
       y += ROW_H + 16;
     }
@@ -160,7 +162,7 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
       if (hits.discoveries && hitRect(q, hits.discoveries)) return openDiscoveries();
       if (hits.debug && hitRect(q, hits.debug)) return debugFinish(branch);
       const h = hits.rows.find((x) => x.ok && hitRect(q, x.button));
-      if (h) research.start(h.id);
+      if (h) research.active ? queueNext?.queue(h.id) : research.start(h.id);
     },
     render(ctx) {
       const r = panelRect();
