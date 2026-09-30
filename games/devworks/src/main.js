@@ -53,8 +53,11 @@
 // recovery); spending never passes the Emergency Credit line.
 // Milestone 33: the Year-20 ending (src/systems/ending.js: the grade, the ceremony screen, postgame) and New Game+
 // (src/systems/ngplus.js: Legacy Staff, blueprints, research conversion, the token shop; NG+ starts in another slot).
+// Milestone 34: the Banx Gamex studio splash, the first-run guide (core GuideSystem + CoachMark, data/guide.js), one-time
+// hint cards on the advanced screens, the Help archive (top bar Help), Settings / Accessibility (core Settings,
+// data/settings.js), the Store / VIP stub and the Project Board.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
-import { THEME, font } from '../../../core/Theme.js';
+import { THEME, font, setTextScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
 import { Rng } from '../../../core/Rng.js';
 import { Renderer } from '../../../core/Renderer.js';
@@ -120,6 +123,16 @@ import { createEnding } from './systems/ending.js'; // Milestone 33
 import { createNgPlus } from './systems/ngplus.js';
 import { createEndingScreen } from './screens/EndingScreen.js';
 import { createNgPlusScreen } from './screens/NgPlusScreen.js';
+import { GuideSystem } from '../../../core/GuideSystem.js'; // Milestone 34
+import { CoachMark } from '../../../core/ui/CoachMark.js';
+import { createHelpArchive } from '../../../core/ui/HelpArchive.js';
+import { createStudioSplash } from '../../../core/ui/StudioSplash.js';
+import { Settings } from '../../../core/Settings.js';
+import { GUIDE_STEPS, GUIDE_FACE, SCREEN_HINTS, HELP_TEXT, HELP_TOPICS } from '../data/guide.js';
+import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED } from '../data/settings.js';
+import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
+import { createProjectBoardScreen } from './screens/ProjectBoardScreen.js';
+import { setCardSymbols } from './ui/cardListScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
@@ -170,13 +183,25 @@ import { createStudioMenus } from './ui/studioMenus.js';
 import { registerPlaceholders } from './ui/placeholders.js';
 const COL = THEME.color;
 
+// Milestone 34: Settings / Accessibility (device settings, bible §51). What each one does: data/settings.js.
+const settings = new Settings({ key: SETTINGS_KEY, defaults: SETTINGS_DEFAULTS });
+const BASE_MIN_H = THEME.button.minH;
+function applySettings() {
+  setTextScale(settings.get('textSize') === 'large' ? 1.15 : 1);
+  THEME.button.minH = settings.get('largerTargets') ? Math.round(BASE_MIN_H * 1.2) : BASE_MIN_H;
+  setCardSymbols(settings.get('colourBlindSymbols'));
+}
+applySettings();
+settings.onChange(() => applySettings());
+const textTime = () => TEXT_SPEED[settings.get('textSpeed')] ?? 1;
+
 const W = 1080;
 const BASE_H = 1920; // 9:16; taller phones grow the height (see Renderer)
 const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bars top and bottom
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
-const MENU_SCREENS = ['title', 'setup']; // before a studio is open: no clock, no top bar
+const MENU_SCREENS = ['title', 'setup', 'splash', 'boot', 'settings', 'store', 'help']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -298,14 +323,20 @@ const loop = new FixedStepLoop({
     celebrate.height = renderer.height;
     celebrate.update(dt);
     if (started) devPops.update(dt, !clock.paused);
-    if (tip && (tip.t += dt) > TIP_SEC) tip = null;
-    if (beat && !feedback.active && (beat.age += dt) > DEV_POPS.phaseBannerSec) beat = null;
+    if (tip && (tip.t += dt) > TIP_SEC * textTime()) tip = null;
+    if (beat && !feedback.active && (beat.age += dt) > DEV_POPS.phaseBannerSec * textTime()) beat = null; // Milestone 34: Banner time
+    if (started) {
+      coach.update(dt); // Milestone 34: the guide, the hint cards
+      guide.update();
+      guideWatch();
+    }
   },
   render: (alpha) => {
     const ctx = renderer.begin(COL.bg);
     router.render(ctx, alpha);
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
+    if (started && guide.active) coach.render(ctx, guideFill(guide.current), guideTarget(guide.current.target), { block: guide.current.block, next: !!guide.current.advance.next }); // Milestone 34
     dialog.render(ctx);
     if (tip) drawTip(ctx);
     if (beat && !feedback.active && router.currentName === 'studio' && !studio.buildMode) drawBeat(ctx);
@@ -401,6 +432,7 @@ const menus = createStudioMenus({
   prestige: () => prestige, // Milestone 31
   achievements: () => achievements, // Milestone 32
   knownBefore: (id) => !!ngplus.known[id], // Milestone 33: discovered staff identities
+  extraScreens: true, // Milestone 34: Project Board, Settings, Store / VIP
   yearEnding: () => yearEnding(),
   rumours: () => { const r = secrets.rumours(); return r.length ? `${r.filter((x) => x.stage >= 4).length} found · ${r.filter((x) => x.stage < 4).length} rumours` : 'Whispers about secrets'; }, // Milestone 28
   fullLaunch: (number) => {
@@ -427,9 +459,14 @@ const menus = createStudioMenus({
     else showTip(r.why);
   },
   sellFacility: (id) => {
-    const r = shop.sell(id);
+    const go = () => {
+      const r = shop.sell(id);
+      if (!r.ok) showTip(r.why);
+    };
     sheet.close();
-    if (!r.ok) showTip(r.why);
+    // Milestone 34: "Confirm before selling" (on by default).
+    if (settings.get('confirmDestructive')) dialog.confirm({ title: `Sell the ${facilityById(id)?.name ?? 'facility'}?`, body: `You get ${shop.refundOf(id).toLocaleString('en-GB')} Credits back.`, yes: 'Sell', danger: true, onYes: go });
+    else go();
   },
   upgradeStudio: () => {
     const r = shop.upgrade();
@@ -577,7 +614,7 @@ const topBarOptions = {
   onStats: () => openMenu('business'),
   onLockedSpeed: (speed) => showTip(business.speedLockReason(speed)),
   onInbox: () => openMenu('inbox'),
-  onHelp: () => openMenu('help'),
+  onHelp: () => router.go('help', { back: router.currentName }), // Milestone 34: the Help archive
   inboxCount: () => (debugBadges ? 1 : studioEvents.unread()), // Milestone 27: unread messages
 };
 const topBar = createTopBar({ ...topBarOptions, home: true });
@@ -634,7 +671,7 @@ let sessionUsed = false; // a slot has been opened since the page loaded: openin
 let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: null }));
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
-const saveData = () => ({ ending: ending.serialize(), secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
+const saveData = () => ({ guide: { ...guide.serialize(), hints: [...hintsSeen] }, ending: ending.serialize(), secrets: secrets.serialize(), studioEvents: studioEvents.serialize(), distribution: distribution.serialize(), consoles: consoles.serialize(), hardware: hardware.serialize(), global: global.serialize(), support: support.serialize(), rivals: rivals.serialize(), awards: awards.serialize(), sponsors: sponsors.serialize(), publishers: publishers.serialize(), contracts: contracts.serialize(), engines: engines.serialize(), combos: combos.serialize(), staff: { recruit: recruitment.serialize(), training: training.serialize() }, research: research.serialize(), clock: clock.serialize(), world: world.serialize(), games: projects.serialize(), business: business.serialize(), elements: elements.serialize(), unlocked: elements.open(), studio: profile.serialize() });
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -732,6 +769,7 @@ async function playSlot(i) {
   combos.loadAccount(null); // (merges: anything this run found is known to the account too)
   achievements.checkAll(); // Milestone 32: a run from before achievements catches up (nothing is ever granted twice)
   ngplus.knowAll(); // Milestone 33: everyone here is someone the account has worked with
+  loadGuide(data.guide ?? null, projects.catalogue.count > 0 || projects.jobs.length > 0); // Milestone 34
   checkStations(); // a studio already at Rank D gets its Marketing Wall (Milestone 9)
   slot = s;
   slotIndex = i;
@@ -769,6 +807,7 @@ async function startStudio(i, setup, carry = null) {
   ending.newGame(); // Milestone 33
   profile.create(setup);
   if (carry) ngplus.apply(carry); // Milestone 33: NG+ level, Legacy Staff, blueprints, RP, tokens paid
+  loadGuide(null, !!carry); // Milestone 34: a new studio starts the guide (an NG+ one has seen it all)
   ngplus.knowAll();
   slot = slots.slot(i);
   slotIndex = i;
@@ -831,7 +870,7 @@ const titleScreen = createTitleScreen({
   onNewGame: () => newGameFromMenu(),
   onNewInSlot: (i) => router.go('setup', { slot: i }),
   onDelete: (i) => deleteSlot(i),
-  onSettings: () => sheet.open({ title: 'Settings', subtitle: 'Sound, text size and other options will live here.', accent: COL.progress }),
+  onSettings: () => router.go('settings'), // Milestone 34
 });
 const setupScreen = createSetupScreen({ layout, assets, textPrompt, onBack: () => (pendingNg ? router.go('ngplus', { keep: true, view: 'slot' }) : router.go('title', { view: 'slots' })), onStart: (i, setup) => (pendingNg && pendingNg.slot === i ? startNgPlusRun(i, setup) : startStudio(i, setup)) });
 
@@ -904,6 +943,7 @@ const studio = createStudioScreen({
   openShop: () => openMenu('shop'), // Milestone 11
   openFacility: (id) => openMenu('facility', id),
   labPrototype: () => (hardware?.prototypes.length ? HARDWARE.prototypeArt : null), // Milestone 23: the prototype on the lab
+  workerIcons: () => !settings.get('reducedWorkerDetail'), // Milestone 34
 });
 // A new studio stage (Milestone 11): the big moment with the stage's picture; new scopes open.
 bus.on('studio:stage', ({ stage }) => {
@@ -933,7 +973,7 @@ const devPops = createDevPops({
   projects,
   vfx,
   studio,
-  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused,
+  isVisible: () => router.currentName === 'studio' && !feedback.active && !studio.buildMode && !loop.paused && !settings.get('lowVfx'), // Milestone 34: Low effects
 });
 
 // A milestone done (medium feedback, style guide §7): a short banner under the top bar that goes by itself, and a
@@ -1003,7 +1043,7 @@ const newProject = createNewProjectScreen({
   ipWhy: (setup) => publishers.ipWhy(setup),
   audioCost: (id) => Math.round((PROJECT_BALANCE.audio[id]?.cost ?? 0) * (1 + world.effect(`audioCostPct.${id}`) / 100)), // Milestone 18
   engineEffects: (versionId, tech) => engines.forGame(versionId, tech)?.fx ?? null,
-  comboHints: (recipe) => combos.hints(recipe), // Milestone 15
+  comboHints: (recipe) => (settings.get('extraComboHints') ? combos.hints(recipe) : combos.hints(recipe).slice(0, 1)), // Milestone 15 (Milestone 34: Extra combo hints lists them all)
   combosIn: (recipe) => combosFor(recipe).filter((id) => combos.known(id)).map((id) => comboById(id).name),
   dateLabel: (d) => clock.shortLabel(d),
   today: () => clock.totalDays,
@@ -1556,6 +1596,7 @@ bus.on('game:released', ({ record }) => {
 
 // The launch rocket (dev_vfx_08) rises from the bottom through the card, with a puffy trail.
 function drawRocket(ctx, k) {
+  if (settings.get('reducedMotion')) return; // Milestone 34
   const H = renderer.height;
   const e = k * k * (3 - 2 * k); // ease in-out
   const w = 200;
@@ -1825,6 +1866,8 @@ const staffDetail = createStaffDetailScreen({
   actions: (id) => staffActions(id),
   dateLabel: (d) => clock.shortLabel(d),
   nameOf: (id) => staffDefById(id)?.name ?? world.staffSystem.get(id)?.name ?? id,
+  advanced: () => settings.get('statsMode') === 'advanced', // Milestone 34
+  legacy: (id) => profile.isLegacy(id), // Milestone 33
   founderInfo: () => {
     const f = profile.founder();
     return f ? { ...f, flag: profile.data.founder.flag, history: profile.data.founder, years: profile.yearsEmployed() } : null;
@@ -1890,6 +1933,131 @@ const discoveryScreen = createDiscoveryScreen({ layout, assets, combos, topBar: 
 const researchScreen = createResearchScreen({ layout, assets, research, topBar: subTopBar, openDiscoveries: () => router.go('discoveries'), debugFinish: new URLSearchParams(window.location.search).has('debug') ? (b) => { for (const r of RESEARCH_LIST().filter((x) => x.branch === b)) research.complete(r.id); } : null });
 const archiveScreen = createFranchiseArchiveScreen({ layout, assets, business, projects, topBar: subTopBar, textPrompt });
 
+// ---------------------------------------------------------------------------
+// Milestone 34: the first-run guide (coach marks from the empty studio to the first released, reviewed game), the
+// one-time hint cards of the advanced screens, Help, Settings, the Store stub, the Project Board and the splash.
+const GUIDE_OFF_SCREENS = ['title', 'setup', 'splash', 'boot', 'ending', 'ngplus', 'help', 'settings', 'store', 'test', 'route'];
+const sheetButtons = () => (sheet.menu?.sections ?? []).flatMap((s) => s.buttons ?? []);
+function guideTarget(name) {
+  if (!name) return null;
+  const onStudio = router.currentName === 'studio' && !studio.buildMode;
+  if (name === 'founder') return onStudio && !sheet.active ? studio.workerScreenRect(profile.data?.founder?.id, { show: true }) : null;
+  if (name === 'back') return router.currentName === 'staff' ? subTopBar.backRect() : null;
+  if (name === 'create') return onStudio && !sheet.active ? bottomBar.buttonRect('create') : null;
+  if (name === 'releasePath') {
+    if (!onStudio) return null;
+    if (!sheet.active) return bottomBar.buttonRect('create');
+    if (sheet.t < 0.3) return null;
+    const id = sheetButtons().find((b) => b.id === 'release')?.id ?? sheetButtons().find((b) => /^released+$/.test(b.id))?.id;
+    if (!id) return null;
+    sheet.scrollTo?.(id);
+    return sheet.buttonRect(id);
+  }
+  if (name === 'speed') return onStudio && !sheet.active ? topBar.buttons().find((b) => b.id === 'speed1')?.rect ?? null : null;
+  if (name.startsWith('sheet:')) {
+    if (!sheet.active || sheet.t < 0.3) return null;
+    const want = name.endsWith('*') ? sheetButtons().find((b) => /^release\d+$/.test(b.id))?.id : name.slice(6);
+    if (!want || !sheetButtons().some((b) => b.id === want)) return null;
+    sheet.scrollTo?.(want);
+    return sheet.buttonRect(want);
+  }
+  if (router.currentName !== 'newProject' || sheet.active) return null;
+  if (name === 'recipe') return newProject.rectOf('genre');
+  if (name === 'title') return newProject.rectOf('title');
+  if (name === 'start') return newProject.startRect();
+  return null;
+}
+function guideFill(step) {
+  const f = profile.data?.founder;
+  const name = (f && staffDefById(f.id)?.name) || 'your Founder';
+  const sub = (t) => t.split('{founderFirst}').join(name.split(' ')[0]).split('{founder}').join(name);
+  return { ...step, title: sub(step.title), text: sub(step.text) };
+}
+const guide = new GuideSystem({
+  steps: GUIDE_STEPS,
+  bus,
+  targetRect: guideTarget,
+  screen: () => router.currentName,
+  canShow: () => started && !feedback.active && !dialog.active && !textPrompt.active && !GUIDE_OFF_SCREENS.includes(router.currentName),
+  pause: () => {
+    if (clock.paused) return false;
+    clock.pause();
+    return true;
+  },
+  resume: () => clock.resume(),
+});
+const coach = new CoachMark({ layout, assets, face: GUIDE_FACE });
+router.layers.unshift({
+  get active() {
+    return started && guide.active;
+  },
+  handleInput: (hook, p) => guide.handleInput(hook, p, hook === 'onTap' ? coach.hit(p) : null),
+});
+// A run loads its guide; one from before Milestone 34 that has made games already has nothing left to learn.
+let hintsSeen = [];
+function loadGuide(data, experienced = false) {
+  guide.reset();
+  hintsSeen = [...(data?.hints ?? [])];
+  if (data) guide.load(data);
+  else if (experienced) for (const s of GUIDE_STEPS) guide.state.done.push(s.id);
+}
+bus.on('guide:done', () => autosave.request('guide'));
+// "Everything is filled in": the New Game screen is ready to start (the Start step waits for it).
+let readySent = false;
+bus.on('screen:change', () => (readySent = false));
+// One-time hint cards (never a wall): the first time an advanced screen opens, a card with "Got it".
+let pendingHint = null;
+bus.on('screen:change', ({ to }) => {
+  if (started && SCREEN_HINTS[to] && !hintsSeen.includes(to)) pendingHint = to;
+});
+function guideWatch() {
+  if (!readySent && router.currentName === 'newProject' && newProject.ready) {
+    readySent = true;
+    bus.emit('guide:projectReady', {});
+  }
+  if (!pendingHint) return;
+  if (router.currentName !== pendingHint) return void (pendingHint = null);
+  if (guide.active || feedback.active || dialog.active || sheet.active) return;
+  const h = SCREEN_HINTS[pendingHint];
+  hintsSeen.push(pendingHint);
+  pendingHint = null;
+  dialog.show({ title: h.title, body: h.text, buttons: [{ id: 'ok', label: 'Got it', accent: COL.progress }] });
+}
+// Help (top bar): the topics, and every tip and hint card seen so far.
+const helpGuide = {
+  get seenSteps() {
+    return [...guide.seenSteps.map(guideFill), ...hintsSeen.map((id) => ({ id: `hint-${id}`, ...SCREEN_HINTS[id] }))];
+  },
+  get state() {
+    return guide.state;
+  },
+  turnOn: () => guide.turnOn(),
+  turnOff: () => guide.turnOff(),
+};
+const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: 'dev_ui_05' });
+const settingsScreen = createSettingsScreen({ layout, assets, settings, onBack: () => router.back() });
+const storeScreen = createStoreScreen({ layout, assets, onBack: () => router.back() });
+const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBar, projects, business, lanes, onOpen: (id) => router.go('project', { id }), onRelease: (n) => openMenu('release', n), onNew: () => router.go('newProject') });
+// Effects the Visual settings turn down (Reduced flashes / Low effects: no confetti; Low effects: no sparks or pops).
+{
+  const confetti = celebrate.confetti.bind(celebrate);
+  celebrate.confetti = (...a) => (settings.get('reducedFlashes') || settings.get('lowVfx') ? null : confetti(...a));
+  for (const k of ['sparks', 'pulse']) {
+    const fn = vfx[k].bind(vfx);
+    vfx[k] = (...a) => (settings.get('lowVfx') ? null : fn(...a));
+  }
+}
+// The Banx Gamex splash (the dark logo) before loading, skippable by tap.
+const splashScreen = createStudioSplash({
+  renderer,
+  assets,
+  key: 'studio_logo_banx_gamex_dark',
+  waitForArt: 10, // a slow first load still gets the logo
+  prepare: () => assets.loadImage('studio_logo_banx_gamex_dark', ASSETS.studio_logo_banx_gamex_dark),
+  drawNext: (ctx) => bootScreen.render(ctx),
+  onDone: () => router.go('boot'),
+});
+
 // ?debug=1: the badge toggle (bottom-left, above the bottom bar) and a test hook for automated checks.
 if (debug.enabled) {
   // Milestone 6: check the content (elements, unlocks, weights, covers, their images) and log any problem.
@@ -1917,7 +2085,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -1952,6 +2120,11 @@ router
   .register('achievements', achievementsScreen) // Milestone 32
   .register('hallOfFame', hallOfFameScreen)
   .register('ending', endingScreen) // Milestone 33
+  .register('splash', splashScreen) // Milestone 34
+  .register('help', helpScreen)
+  .register('settings', settingsScreen)
+  .register('store', storeScreen)
+  .register('projects', projectBoard)
   .register('ngplus', ngplusScreen)
   .register('test', createTestScreen({ renderer, layout, assets, openSheet: () => sheet.open(testSheet), onTapLogged: (p) => window.__dw?.taps.push({ x: p.x, y: p.y }) }))
   .register('route', createRouteTestScreen({ renderer, layout, onBack: () => back() }));
@@ -1974,5 +2147,12 @@ function testSheet() {
   };
 }
 
-router.go('boot');
+// Milestone 34: the Banx Gamex splash on a cold start; straight to loading after a reload into a slot.
+let reloadIntent = false;
+try {
+  reloadIntent = !!sessionStorage.getItem(INTENT_KEY);
+} catch {
+  reloadIntent = false;
+}
+router.go(reloadIntent || START_SCREEN === 'test' ? 'boot' : 'splash');
 loop.start();

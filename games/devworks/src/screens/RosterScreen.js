@@ -40,7 +40,7 @@ export function createRosterScreen({ renderer, layout, assets, world, topBar, op
   const W = renderer.width;
   const headRect = () => {
     const t = topBar.rect();
-    return { x: layout.safeRect.x + 32, y: t.y + t.h + 20, w: layout.safeRect.w - 64, h: 90 };
+    return { x: layout.safeRect.x + 32, y: t.y + t.h + 20, w: layout.safeRect.w - 64, h: 110 };
   };
   const listRect = () => {
     const h = headRect();

@@ -119,6 +119,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   // Milestone 31: the two peaks, shown only once their secret chain has begun.
                   ...(prestige?.().projectOneShown() ? [{ id: 'projectOne', label: 'PROJECT ONE', sub: prestige().projectOneWhy() ?? 'The ultimate game: ready to start', icon: 'cover_27', accent: C.purple, onTap: () => open('projectOne') }] : []),
                   ...(prestige?.().projectXShown() ? [{ id: 'projectX', label: 'PROJECT X', sub: prestige().projectXWhy() ?? 'The ultimate console: ready to design', icon: 'console_visual_08', accent: C.purple, onTap: () => open('projectX') }] : []),
+                  { id: 'board', label: 'Project Board', sub: 'Every game in the works or waiting', icon: 'dev_ui_07', accent: C.progress, onTap: () => openScreen('projects') }, // Milestone 34
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
                 ],
@@ -162,6 +163,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             { id: 'platforms', label: 'Platform Market', sub: `${b.platforms.active(today()).length} platforms out now`, icon: 'platform_device_03', accent: C.progress, onTap: () => openScreen('platforms') },
             ...(achievements ? [{ id: 'studioHall', label: 'Hall of Fame', sub: 'Your studio’s legends and records', icon: 'dev_reward_10', accent: C.purple, onTap: () => openScreen('hallOfFame') }, { id: 'studioAchievements', label: 'Achievements', sub: `${achievements().count()} of ${achievements().total()} earned`, icon: 'dev_ui_04', accent: C.progress, onTap: () => openScreen('achievements') }] : []), // Milestone 32
             ...(distribution?.() && !distribution().storefrontWhy() ? [{ id: 'storefront', label: 'Storefront', sub: distribution().storefront.open ? `Open · ${Math.round(distribution().shareNow())}% of downloads` : 'Closed', icon: DISTRIBUTION.icon, accent: C.purple, onTap: () => open('storefront') }] : []), // Milestone 26
+            { id: 'settings', label: 'Settings', sub: 'Text size, effects, accessibility', icon: 'dev_ui_05', accent: C.progress, onTap: () => openScreen('settings') }, // Milestone 34
+            { id: 'store', label: 'Store / VIP', sub: 'Opens in a later update', icon: 'dev_reward_01', accent: C.purple, onTap: () => openScreen('store') },
             ...(debugSkipYear ? [{ id: 'skipYear', label: 'Debug: skip a year', sub: 'Runs the next 336 days', icon: biz.icon, accent: C.progress, onTap: () => debugSkipYear() }] : []),
           ],
         },

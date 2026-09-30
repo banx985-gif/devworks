@@ -39,7 +39,7 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
     hits = { tabs: [], rows: [], stop: null, debug: null, discoveries: null };
     text(ctx, 'Research', PAD, y, { size: S.title, bold: true });
     if (openDiscoveries) {
-      hits.discoveries = { x: w - PAD - 360, y: y - 6, w: 360, h: 100 };
+      hits.discoveries = { x: w - PAD - 360, y: y - 11, w: 360, h: 110 };
       drawButton(ctx, hits.discoveries, 'Discoveries', { accent: C.purple });
     }
     y += 84;
@@ -75,10 +75,10 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
     y += card.h + 30;
     // Branch tabs.
     const tabs = BRANCHES.map((b) => ({ id: b.id, label: b.id }));
-    hits.tabs = tabRects({ x: PAD, y, w: cw }, tabs.length, 100, 10);
+    hits.tabs = tabRects({ x: PAD, y, w: cw }, tabs.length, 110, 10);
     hits.tabList = tabs;
     drawTabs(ctx, hits.tabs, tabs, branch);
-    y += 124;
+    y += 134;
     const b = BRANCHES.find((x) => x.id === branch);
     text(ctx, `${b.name}: ${b.line}`, PAD, y, { size: S.body, bold: true, maxWidth: cw });
     y += 60;

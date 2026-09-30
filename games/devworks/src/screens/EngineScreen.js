@@ -85,7 +85,7 @@ export function createEngineScreen({ layout, assets, engines, topBar, textPrompt
     // The engine and its versions.
     for (const e of list) {
       text(ctx, e.name, PAD, y, { size: S.heading, bold: true, maxWidth: cw - 260 });
-      hits.rename = { id: e.id, r: { x: PAD + cw - 220, y: y - 16, w: 220, h: 90 }, nameR: { x: PAD, y: y - 10, w: cw - 260, h: 80 } };
+      hits.rename = { id: e.id, r: { x: PAD + cw - 220, y: y - 26, w: 220, h: 110 }, nameR: { x: PAD, y: y - 10, w: cw - 260, h: 80 } };
       drawButton(ctx, hits.rename.r, 'Rename', { accent: C.progress });
       y += 90;
       for (const v of [...e.versions].reverse()) {

@@ -325,7 +325,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       const people = world.staffSystem.staff.filter((s) => s.role === role);
       if (!people.length) {
         const h = roleHints.find((x) => x.role === role);
-        const r = { x: PAD, y, w: cw, h: h ? 200 : 130 };
+        const r = { x: PAD, y, w: cw, h: h ? 240 : 130 }; // Milestone 34: room for a full-size (110) button
         if (ctx) {
           ctx.fillStyle = C.panelDim;
           ctx.strokeStyle = h ? C.warn : C.line;
@@ -338,7 +338,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
           text(ctx, h?.extraDays ? `No ${ROLES[role].name} yet: about ${h.extraDays} more day${h.extraDays === 1 ? '' : 's'} without one` : `No ${ROLES[role].name} yet (it still works, just slower)`, r.x + 24, r.y + 62, { size: S.body, color: h ? C.bad : C.textFaint, maxWidth: r.w - 48 });
         }
         if (h?.candidate && onFindRole) {
-          const b = { x: r.x + 24, y: r.y + 112, w: r.w - 48, h: 72 };
+          const b = { x: r.x + 24, y: r.y + 110, w: r.w - 48, h: 110 };
           if (ctx) drawButton(ctx, b, `Meet ${h.candidate.name} at the Recruitment Desk`, { accent: C.progress, font: font(S.small, true) });
           box(b, () => onFindRole(role), `find:${role}`);
         }

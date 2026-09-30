@@ -36,7 +36,7 @@ export const ASSETS = {
   ...Object.fromEntries(['dev_ui_15', 'dev_ui_16', 'dev_ui_17'].map((k) => art('ui', k))), // Milestone 20: support icons
   ...Object.fromEntries(['business_ui_10', 'business_ui_11', 'business_ui_12'].map((k) => art('business', k))), // Milestone 21: licensing, publishing, acquisitions
   ...Object.fromEntries([art('brand', 'dev_brand_03')]), // the title logo (redrawn 28 Sept)
-  ...Object.fromEntries([art('brand', 'dev_brand_06'), art('brand', 'studio_logo_banx_gamex')]), // Milestone 33: the NG+ key art, the ceremony's end card
+  ...Object.fromEntries([art('brand', 'dev_brand_06'), art('brand', 'studio_logo_banx_gamex'), ['studio_logo_banx_gamex_dark', 'assets/images/brand/studio_logo_banx_gamex_dark.jpg']]), // Milestone 33 (Milestone 34: the splash's dark logo, a small JPEG so it shows at once): the NG+ key art, the ceremony's end card
   ...Object.fromEntries(STAGES.filter((s) => s.event).map((s) => art('events', s.event))), // Milestone 22: the stage moments
   // Milestone 23: the 36 hardware parts, the Hardware / parts icons, the prototype and its moment.
   ...Object.fromEntries(COMPONENTS.map((c) => art('hardware', c.art))),

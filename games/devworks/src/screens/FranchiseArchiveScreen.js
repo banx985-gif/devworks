@@ -33,7 +33,7 @@ export function createFranchiseArchiveScreen({ layout, assets, business, project
       .map((ip) => ({ ip, st: fr.stats(ip) }))
       .sort((a, b) => b.st.points - a.st.points || a.ip.id.localeCompare(b.ip.id, 'en', { numeric: true }));
   const cardRect = (i, w) => ({ x: PAD - 8, y: HEAD_H + i * (CARD_H + 20), w: w - PAD * 2 + 16, h: CARD_H });
-  const renameRect = (card) => ({ x: card.x + card.w - 220, y: card.y + 20, w: 200, h: 96 });
+  const renameRect = (card) => ({ x: card.x + card.w - 220, y: card.y + 14, w: 200, h: 110 });
   const nameRect = (card) => ({ x: card.x + 20, y: card.y + 20, w: card.w - 260, h: 70 });
 
   function meter(ctx, x, y, w, label, value, colour, icon) {

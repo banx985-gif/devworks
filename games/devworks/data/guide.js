@@ -1,8 +1,8 @@
 // First-run guide (Milestone 34, style guide "first-time guide with coach marks", spec §9). Plain data for
 // core/GuideSystem.js: coach marks that take a new studio from the empty floor to its first released, reviewed game.
 // Words are short; {founder} is the run's own Founding Developer (never a fixed name, spec §9).
-// target names are resolved by main.js (guideTarget): founder, back, create, sheet:<button id>, sheet:release*,
-// recipe, title, team, start, speed, null = a centred box.
+// target names are resolved by main.js (guideTarget): founder, back, create, sheet:<button id>, releasePath (the
+// Release button, else the game in Create, else Create), recipe, title, start, speed, null = a centred box.
 // trigger: after = that step done; event = has happened at least once; screen = only there.
 // advance: tap = the glowing spot is tapped (the tap still reaches the game); next = "Got it"; event = it happens.
 // Every step can be skipped, and "Guide off" stops it (Help turns it back on). Done steps never come back.
@@ -17,10 +17,10 @@ export const GUIDE_STEPS = [
   { id: 'G7', title: 'Ready!', text: 'Everything is filled in. Tap Start.', target: 'start', trigger: { after: 'G6', event: 'guide:projectReady', screen: ['newProject'] }, advance: { event: 'project:start' }, block: true, skipIf: 'project:start' },
   { id: 'G8', title: 'Five milestones', text: 'Your team works through five milestones at the desks. Tap 1× to let time run.', target: 'speed', trigger: { after: 'G7', event: 'project:start', screen: ['studio'] }, advance: { next: true }, block: false },
   { id: 'G9', title: 'A decision', text: 'Ship now, or spend time to polish. Shipping is fine for a first game.', target: null, trigger: { after: 'G8', event: 'project:decision' }, advance: { next: true }, block: false, skipIf: 'project:complete' },
-  { id: 'G10', title: 'Game finished!', text: 'Tap Create, then Release it.', target: 'create', trigger: { after: 'G8', event: 'project:complete', screen: ['studio'] }, advance: { tap: true }, block: true, skipIf: 'game:released' },
-  { id: 'G11', title: 'Release', text: 'Tap your game.', target: 'sheet:release*', trigger: { after: 'G10', screen: ['studio'] }, advance: { tap: true }, block: true, restartAt: 'G10', skipIf: 'game:released' },
-  { id: 'G12', title: 'Out it goes', text: 'Tap Release. Reviews come in on launch day.', target: 'sheet:release', trigger: { after: 'G11', screen: ['studio'] }, advance: { tap: true }, block: true, restartAt: 'G10', skipIf: 'game:released' },
-  { id: 'G13', title: 'The reviews', text: 'Every review is saved in the Catalogue. Now make the next one — Help has a page for every system.', target: null, trigger: { after: 'G12', event: 'game:released', screen: ['studio'] }, advance: { next: true }, block: false },
+  // The release: one step whose spot follows the way there — the Release sheet's button when it is open (it opens by
+  // itself after "Game finished!"), the game in the Create sheet, else Create — until the game is out.
+  { id: 'G10', title: 'Game finished!', text: 'Release it: PC is picked already. Reviews come in on launch day.', target: 'releasePath', trigger: { after: 'G8', event: 'project:complete', screen: ['studio'] }, advance: { event: 'game:released' }, block: true, skipIf: 'game:released' },
+  { id: 'G11', title: 'The reviews', text: 'Every review is saved in the Catalogue. Now make the next one — Help has a page for every system.', target: null, trigger: { after: 'G10', event: 'game:released', screen: ['studio'] }, advance: { next: true }, block: false },
 ];
 export const GUIDE_FACE = null; // no speaker face: the coach box speaks as the studio
 

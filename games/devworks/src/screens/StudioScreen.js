@@ -265,10 +265,16 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     },
 
     // Milestone 34: a worker's box on the screen (the guide's coach mark points at the Founder), or null off screen.
-    workerScreenRect(id) {
+    // show: first glide the camera so they stand well inside the screen (the guide's "Tap your Founder").
+    workerScreenRect(id, { show = false } = {}) {
       const w = world.workerById(id);
       if (!w || w.away) return null;
       const r = workerRect(w);
+      if (show) {
+        const sr = layout.safeRect;
+        const c = camera.worldToScreen(r.x + r.w / 2, r.y + r.h / 2);
+        if (c.x < sr.x + sr.w * 0.25 || c.x > sr.x + sr.w * 0.75 || c.y < sr.y + sr.h * 0.3 || c.y > sr.y + sr.h * 0.6) camera.centerOn(r.x + r.w / 2, r.y + r.h / 2);
+      }
       const a = camera.worldToScreen(r.x, r.y);
       const b = camera.worldToScreen(r.x + r.w, r.y + r.h);
       const box = { x: Math.min(a.x, b.x) - 10, y: Math.min(a.y, b.y) - 10, w: Math.abs(b.x - a.x) + 20, h: Math.abs(b.y - a.y) + 20 };

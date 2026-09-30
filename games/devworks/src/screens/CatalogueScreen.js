@@ -13,14 +13,14 @@ import { drawCover } from '../ui/gameCard.js';
 const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
-const ROW_H = 410; // Milestone 20: room for the post-launch line and the Support button
+const ROW_H = 440; // Milestone 20: room for the post-launch line and the Support button (Milestone 34: a full-size button)
 const HEAD_H = 190;
 
 // Milestone 15: "Discoveries" under Franchises opens the Discovery Archive.
 // Milestone 20: released games show their player score (after patches; the review never changes), what support did
 // (Fan Trust, a longer tail, add-ons, ports) and a Support button.
 export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, assets, business, projects, topBar, openRelease, openArchive = null, openDiscoveries = null, openSupport = null }) {
-  const supportRect = (row) => ({ x: row.x + 20, y: row.y + 322, w: 200, h: 72 });
+  const supportRect = (row) => ({ x: row.x + 20, y: row.y + 314, w: 200, h: 110 });
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -32,8 +32,8 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
   // Content rect of a game's row, and of its Release button (unreleased only).
   const rowRect = (i, w) => ({ x: PAD - 8, y: HEAD_H + i * (ROW_H + 20), w: w - PAD * 2 + 16, h: ROW_H });
   const releaseRect = (row) => ({ x: row.x + row.w - 260, y: row.y + row.h - 130, w: 240, h: 110 });
-  const archiveRect = (w) => ({ x: w - PAD - 290, y: PAD - 6, w: 290, h: 100 });
-  const discoveriesRect = (w) => ({ x: w - PAD - 290 - 16 - 290, y: PAD - 6, w: 290, h: 100 });
+  const archiveRect = (w) => ({ x: w - PAD - 290, y: PAD - 11, w: 290, h: 110 });
+  const discoveriesRect = (w) => ({ x: w - PAD - 290 - 16 - 290, y: PAD - 11, w: 290, h: 110 });
 
   function drawContent(ctx, w) {
     const cw = w - PAD * 2;
