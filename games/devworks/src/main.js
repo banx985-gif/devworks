@@ -107,8 +107,9 @@ import { createConsoles } from './systems/consoles.js';
 import { createDistribution } from './systems/distribution.js'; // Milestone 26
 import { createStudioEvents } from './systems/studioEvents.js'; // Milestone 27
 import { createSecrets } from './systems/secrets.js'; // Milestone 28
-import { SYNTHETIC_SECRETS } from '../data/secrets.js';
+import { SYNTHETIC_SECRETS, SECRETS } from '../data/secrets.js';
 import { createRumourScreen } from './screens/RumourScreen.js';
+import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
 import { createConsoleScreen } from './screens/ConsoleScreen.js';
@@ -187,15 +188,15 @@ const profile = createStudioProfile({ bus, clock }); // studio name, director, c
 // Each day: the studio settles Energy and breaks, projects work (and pay), then released games sell — so the
 // three are created in that order.
 let engines = null; // Milestone 16 (made below, after research)
-const projects = createGameProjects({ engineFor: (versionId, tech) => engines?.forGame(versionId, tech) ?? null, bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
+const projects = createGameProjects({ engineFor: (versionId, tech) => engines?.forGame(versionId, tech) ?? null, recipeBonus: (recipe) => secrets.recipeBonus(recipe), bus, world, clock, charge: (amount, reason) => business.charge(amount, reason), founder: () => profile.founder(), studioVariancePct: () => world.effect('scheduleVariancePct') }); // Milestone 11: the facilities' effect
 const business = createBusiness({ bus, clock, world, projects });
 const research = createResearch({ bus, clock, world }); // Milestone 12
-const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched() }); // Milestone 11
+const shop = createFacilityShop({ bus, world, business, clock, projects, researched: () => research.researched(), secretOpen: (id) => secrets.opened('unlocks', id) }); // Milestone 11 (Milestone 29: F34 / F35)
 // Busy elsewhere (Milestones 16–17): the engine, a contract.
 let contracts = null;
 const engineBusy = (id) => (engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : hardware?.jobOf(id) ? 'Building a console prototype' : null);
 let hardware = null; // Milestone 23 (made below)
-const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy: engineBusy }); // Milestone 13
+const recruitment = createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy: engineBusy, secretArrived: (id) => secrets.opened('arrivals', id) }); // Milestone 13 (Milestone 29: secret arrivals)
 const training = createTraining({ bus, clock, world, business, projects, research, recruitment, extraBusy: engineBusy });
 engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio', extraBusy: (id) => (contracts?.jobOf(id) ? 'On a contract' : null) });
 const sponsors = createSponsors({ bus, clock, world, business, needs: (n) => (n === 'hardwareLab' ? !!world.stationById('F28') : n === 'botworksEvents') }); // Milestone 18 (Milestone 27: IronPeak and BOTWORKS)
@@ -210,15 +211,17 @@ const publishers = createPublishers({ bus, clock, world, business, projects, ele
 contracts = createContracts({ bus, clock, world, business, engines: () => engines, isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : null) });
 const lanes = () => stageById(world.stage).lanes;
 // Milestone 21: global business (after the business, research, engines, recruitment and publishers).
-hardware = createHardware({ bus, clock, world, business, research, studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
+hardware = createHardware({ bus, clock, world, business, research, prestigePart: (id) => secrets.opened('parts', id), studioName: () => profile.name || 'Studio', isBusy: (id) => (projects.jobs.some((j) => j.slots.includes(id)) ? 'Making a game' : world.workerById(id)?.away ? 'Away on a course' : engines?.jobOf(id) ? 'Building the engine' : contracts?.jobOf(id) ? 'On a contract' : support?.jobOf(id) ? 'On post-launch support' : null) });
 const consoles = createConsoles({ bus, clock, world, business, projects, hardware, engines: () => engines, studioName: () => profile.name || 'Studio', seed: () => business.marketing.seed }); // Milestone 24
 const distribution = createDistribution({ bus, clock, world, business, projects, consoles: () => consoles }); // Milestone 26 (registers itself with the business)
 // Milestone 27: events, milestone moments, the Inbox and toasts (one blocking pop-up at a time).
 const studioEvents = createStudioEvents({ bus, clock, world, business, projects, research, sponsors: () => sponsors, consoles: () => consoles, hardware: () => hardware, seed: () => business.marketing.seed });
 // Milestone 28: the secret engine. Only synthetic test rules, and only with ?debug=1 (the real 50 are Milestone 29);
 // the account half (secrets found in any run, prestige tokens) has its own save record.
+// Milestone 29: the real 50 (bible §41); ?synthetic=1 swaps in the Milestone 28 test rules. ?debug=1 adds the inspector.
 const DEBUG_SECRETS = new URLSearchParams(window.location.search).has('debug');
-const secrets = createSecrets({ bus, clock, world, business, projects, rules: DEBUG_SECRETS ? SYNTHETIC_SECRETS : [], profile: () => profile, awards: () => awards, combos: () => combos, consoles: () => consoles, studioEvents: () => studioEvents, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.secretsAccountKey, data).catch((e) => console.error('[DEVWORKS] secrets account save failed', e)) });
+const SYNTHETIC = new URLSearchParams(window.location.search).has('synthetic');
+const secrets = createSecrets({ bus, clock, world, business, projects, rules: SYNTHETIC ? SYNTHETIC_SECRETS : SECRETS, research: () => research, franchises: () => business.franchises, global: () => global, engines: () => engines, sponsors: () => sponsors, profile: () => profile, awards: () => awards, combos: () => combos, consoles: () => consoles, studioEvents: () => studioEvents, runId: () => business.marketing.seed, saveAccount: (data) => accountStore?.set(SAVE.secretsAccountKey, data).catch((e) => console.error('[DEVWORKS] secrets account save failed', e)) });
 // Milestone 27: IronPeak's obligation — an IronPeak part in a hardware project started during its deal.
 bus.on('hardware:start', ({ job }) => {
   if (Object.values(job.data.parts ?? {}).some((id) => IRONPEAK.includes(id))) sponsors.signal('ironPeakPart');
@@ -1282,7 +1285,31 @@ menus.register('secretWhy', (id) => {
   if (!w) return null;
   return { title: `Why not? ${w.name}`, subtitle: `${w.ok ? 'All conditions hold' : `${w.failing.length} failing`} · clue stage ${w.stage} · checked on ${w.triggers.join(', ')}${w.eased ? ' · eased' : ''}`, art: 'dev_ui_29', accent: COL.progress, sections: [{ lines: w.lines.map((l) => ({ text: `${l.ok ? '✓' : '✗'} ${l.text}`, color: l.ok ? COL.good : COL.bad })) }] };
 });
-bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: 'See Compete → Rumour Archive.' }));
+bus.on('secret:unlocked', ({ rule }) => showBeat({ title: `Secret found: ${rule.name}`, body: `${rule.rewardText ?? 'See Compete → Rumour Archive.'}` }));
+// Milestone 29: a Legendary / Prestige arrival — the big moment (dev_event_13 and their portrait) and a special card for 56 days.
+bus.on('secret:arrival', ({ staffId }) => {
+  const def = staffDefById(staffId);
+  if (!def) return;
+  recruitment.specialArrival(staffId, `${def.tier === 'secret' ? 'Prestige' : 'Legendary'} arrival: a secret brought them here`);
+  feedback.show({
+    title: `${def.name} wants to join!`,
+    subtitle: `A ${def.tier === 'secret' ? 'Prestige' : 'Legendary'} ${def.role === 'PRG' ? 'Programmer' : def.role === 'DSN' ? 'Designer' : def.role === 'ART' ? 'Artist' : def.role === 'WRT' ? 'Writer' : 'Producer'} is on the Recruitment board for 56 days.`,
+    accent: COL.gold,
+    onShow: () => celebrate.confetti('screen', W / 2, renderer.height * 0.72, { count: 40, speed: 900, spreadX: 120 }),
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const k = Math.min(1, t / 0.35);
+      const size = 520 * (0.6 + 0.4 * k);
+      ctx.save();
+      ctx.globalAlpha = k;
+      assets.drawContained(ctx, 'dev_event_13', { x: W / 2 - size / 2, y: sr.y + sr.h * 0.26 - size / 2, w: size, h: size });
+      const p = 200 * (0.6 + 0.4 * k);
+      drawPortrait(ctx, assets, def.art, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.26 + size / 2 - p * 0.3, w: p, h: p }, COL.gold);
+      ctx.restore();
+    },
+    onAck: afterFeedback,
+  });
+});
 bus.on('secret:clue', ({ rule, stage }) => studioEvents.note({ title: 'A new rumour', body: rule.clueStages?.[stage - 1]?.text ?? '', icon: 'dev_ui_29' }));
 // Milestone 26: Early Access banners.
 bus.on('ea:started', ({ record }) => {

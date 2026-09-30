@@ -18,8 +18,9 @@
 // games credited, genres and themes, franchises, awards (hook for Milestone 19), trainings, mentoring links; crunch
 // exposure is read from the projects (staffHistory). The founder's Founding Developer flag is shown from the profile.
 //
-// Milestone 14: all 50 staff. Legendary / Secret staff are gated by their SEC-STAFF secret (Milestones 28–29): never
-// in a pool, never a special arrival, never hired — not even by the debug spawn, which only previews their card.
+// Milestone 14: all 50 staff. Legendary / Secret staff are gated by their SEC-STAFF secret: never in a pool and never
+// spawned by debug. Milestone 29: once their secret is found (secretArrived(id)), they come as a special arrival (56 days)
+// and can be hired from that card.
 //
 // Events: core's 'recruit:*', plus 'staff:hired' (world) and 'staff:letGo' { id, name }.
 import { RecruitmentSystem } from '../../../../core/RecruitmentSystem.js';
@@ -40,6 +41,7 @@ export const tierRank = (tier) => TIER_ORDER.indexOf(tier);
 // Why this person can't be found yet (null = eligible). ctx: { rankIndex, roleGames(role), hasFacility(id), major }.
 export function eligibilityWhy(def, ctx) {
   const e = def.eligibility ?? {};
+  if ((e.secret || PRESTIGE_TIERS.includes(def.tier)) && ctx.secretArrived?.(def.id)) return null; // Milestone 29
   if (e.secret || PRESTIGE_TIERS.includes(def.tier)) return 'Arrives only through a secret (later)'; // Milestone 14: gated
   if (e.start) return null;
   const why = [];
@@ -51,7 +53,7 @@ export function eligibilityWhy(def, ctx) {
   return why.length ? `Needs ${why.join(' + ')}` : null;
 }
 
-export function createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy = () => null }) {
+export function createRecruitment({ bus, clock, world, business, projects, profile, shop, extraBusy = () => null, secretArrived = () => false }) {
   const today = () => clock.totalDays;
   const released = () => projects.catalogue.list().filter((r) => r.release);
   const state = { channel: 'local', lastFreeDay: 0, paid: { month: -1, count: 0 } };
@@ -61,6 +63,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     rankIndex: business.reputation.highestRankIndex,
     roleGames: (role) => released().filter((r) => (r.team ?? []).some((m) => m.role === role)).length,
     hasFacility: (id) => !!world.stationById(id),
+    secretArrived,
     major: released().some((r) => (r.sales?.copies ?? 0) + (r.catalogue?.copies ?? 0) >= RECRUIT.millionSeller) || (business.state.majorAwards ?? 0) > 0,
   });
   const employed = (id) => !!world.staffSystem.get(id);
@@ -71,7 +74,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
   // Who could be drawn for a card of this tier on this channel right now.
   function pool(ch, tier, taken = new Set(board.cards.map((c) => c.personId))) {
     const c = ctx();
-    return ROSTER.filter((d) => d.tier === tier && ch.roles.includes(d.role) && !employed(d.id) && !taken.has(d.id) && eligible(d, c));
+    return ROSTER.filter((d) => d.tier === tier && !PRESTIGE_TIERS.includes(d.tier) && ch.roles.includes(d.role) && !employed(d.id) && !taken.has(d.id) && eligible(d, c));
   }
 
   const board = new RecruitmentSystem({
@@ -173,7 +176,7 @@ export function createRecruitment({ bus, clock, world, business, projects, profi
     if (full()) return { ok: false, why: `The studio is full (${world.staffSystem.staff.length} of ${cap()}): move up a stage for more room` };
     const w = why(def);
     if (w) return { ok: false, why: w };
-    if (PRESTIGE_TIERS.includes(def.tier)) return { ok: false, why: 'Arrives only through a secret (later)' };
+    if (PRESTIGE_TIERS.includes(def.tier) && !secretArrived(def.id)) return { ok: false, why: 'Arrives only through a secret' };
     const seat = seatFor(def.role);
     if (seat.why) return { ok: false, why: seat.why, seat };
     return { ok: true, why: null, seat, def };

@@ -57,7 +57,7 @@ export function validate(parts, ratings = ratingsFor(parts)) {
   return { passed: required.every((r) => r.ok), required, capabilities };
 }
 
-export function createHardware({ bus, clock, world, business, research, studioName = () => 'Studio', extraBusy = () => null, isBusy = () => null }) {
+export function createHardware({ bus, clock, world, business, research, studioName = () => 'Studio', extraBusy = () => null, isBusy = () => null, prestigePart = () => false }) {
   const staff = world.staffSystem;
   const today = () => clock.totalDays;
   const done = () => research?.researched() ?? new Set();
@@ -95,7 +95,8 @@ export function createHardware({ bus, clock, world, business, research, studioNa
   function partWhy(id) {
     const c = componentById(id);
     if (!c) return 'Unknown part';
-    if (c.tier >= 6) return 'Prestige part: locked (a secret)';
+    if (c.tier >= 6 && !prestigePart(id)) return 'Prestige part: locked (a secret)'; // Milestone 29: opened by a hardware secret
+    if (c.tier >= 6) return done().has('HW6') ? null : 'Needs HW research tier 6';
     if (!done().has(`HW${c.tier}`)) return `Needs HW research tier ${c.tier}`;
     return null;
   }

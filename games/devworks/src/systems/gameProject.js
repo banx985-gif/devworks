@@ -165,7 +165,9 @@ export function founderStatMult(founder, staffId, statKey) {
 }
 
 // studioVariancePct() → the studio's own schedule effect (the Producer Desk while it stands).
-export function createGameProjects({ engineFor = () => null, bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
+// Milestone 29: recipeBonus(recipe) → a known secret recipe's bonus ({ output, tailPct, franchisePct, recipes }) or null,
+// fixed when the game starts like a combo.
+export function createGameProjects({ engineFor = () => null, recipeBonus = () => null, bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
   const fx = (key) => world.effect?.(key) ?? 0; // Milestone 11: the facilities' effects
   // A worker's stats with the founder perk applied (outputs), and the perk's own numbers.
@@ -328,6 +330,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         add(staff.groupEffectMap(team, 'outputBonus')); // Milestone 7: Good Feel, Strong Shapes, Sharp Dialogue
         const cfx = comboEffects(d.combos); // Milestone 15
         add(cfx.output);
+        add(d.secretRecipe?.output); // Milestone 29: a secret recipe
         add(d.engine?.fx.output); // Milestone 16: the own engine
         for (const id of job.slots) {
           const s = staff.get(id);
@@ -361,7 +364,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
           coverFamily: coverFamilyFor(d.recipe, cfx.cover), // Milestone 6: one of the 30 families
           combos: [...d.combos], // Milestone 15: what the launch and the franchise read
           engine: d.engine ? { engineId: d.engine.engineId, versionId: d.engine.versionId, label: d.engine.label, tier: d.engine.tier, attrs: { ...d.engine.attrs } } : null, // Milestone 16
-          comboFx: { casualPct: cfx.casualPct, corePct: cfx.corePct, tailPct: cfx.tailPct, trust: cfx.trust, franchisePct: cfx.franchisePct, artAwardScore: cfx.artAwardScore, hardwareDemandPct: cfx.hardwareDemandPct },
+          comboFx: { casualPct: cfx.casualPct, corePct: cfx.corePct, tailPct: cfx.tailPct + (d.secretRecipe?.tailPct ?? 0), trust: cfx.trust, franchisePct: cfx.franchisePct + (d.secretRecipe?.franchisePct ?? 0), artAwardScore: cfx.artAwardScore, hardwareDemandPct: cfx.hardwareDemandPct },
           reviewSeed: d.rng, // locked at Gold Master: reviews come from this, so a reload never changes them
           // Milestone 7: the schedule and the choices made.
           startedDay: d.startedDay,
@@ -528,6 +531,7 @@ export function createGameProjects({ engineFor = () => null, bus, world, clock =
         type,
         costMult: +(T.costMult * (1 + cfx.costPct / 100) * locCost).toFixed(4), // Milestone 15: a combo's production cost; Milestone 21: localisation
         combos,
+        secretRecipe: recipeBonus(setup.recipe) ?? null, // Milestone 29
         engine: setup.engine ? engineFor(setup.engine, setup.recipe.technology) : null, // Milestone 16: a snapshot
         deal: setup.deal ?? null, // Milestone 17: the publisher deal this game is made under (src/systems/publishers.js)
         ipId: setup.ipId ?? null,

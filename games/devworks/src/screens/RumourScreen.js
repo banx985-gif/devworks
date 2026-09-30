@@ -1,6 +1,7 @@
-// The Rumour Archive (Milestone 28), from Compete → Rumour Archive: every secret the studio has heard of — a rumour
-// (clue stage 1), a hint (2), nearly explicit (3) — and the ones found, with their exact recipe (4). With ?debug=1
-// each card also has "Why not?", the why-false inspector (every condition, its live value and what fails).
+// The Rumour Archive (Milestone 28; Milestone 29: all 50 secrets), from Compete → Rumour Archive: every secret the
+// studio has heard of — a rumour (clue stage 1), a hint (2), nearly explicit (3) — shown as "???" with its stage, and
+// the ones found, with their group, recipe and reward (4). With ?debug=1 each card also has "Why not?", the why-false
+// inspector (every condition, its live value and what fails).
 import { THEME } from '../../../../core/Theme.js';
 import { createCardListScreen } from '../ui/cardListScreen.js';
 
@@ -17,9 +18,12 @@ export function createRumourScreen({ layout, assets, topBar, secrets, onWhy = nu
       const card = (r) => ({
         id: r.id,
         logo: r.stage >= 4 ? 'dev_reward_03' : 'dev_ui_29',
-        title: `${r.name} · ${STAGES[r.stage]}${r.found ? '' : r.stage >= 4 ? ' (in an earlier run)' : ''}`,
+        title: r.stage >= 4 ? `${r.name}${r.found ? '' : ' (found in an earlier run)'}` : `??? · ${STAGES[r.stage]}`,
         highlight: r.stage >= 4,
-        lines: r.stage >= 4 ? r.recipe.map((t) => ({ text: `• ${t}`, color: C.actionDark })) : [{ text: `“${r.text}”`, color: r.stage >= 3 ? C.actionDark : C.textMuted }, { text: `${'●'.repeat(r.stage)}${'○'.repeat(4 - r.stage)}`, color: C.purple }],
+        lines:
+          r.stage >= 4
+            ? [{ text: r.group, color: C.purple, bold: true }, ...r.recipe.map((t) => ({ text: `• ${t}`, color: C.actionDark })), ...(r.reward ? [{ text: `Reward: ${r.reward}`, color: C.good }] : [])]
+            : [{ text: r.group, color: C.purple }, { text: `“${r.text}”`, color: r.stage >= 3 ? C.actionDark : C.textMuted }, { text: `${'●'.repeat(r.stage)}${'○'.repeat(4 - r.stage)}`, color: C.purple }],
         buttons: onWhy ? [{ id: 'why', label: 'Why not? (debug)', accent: C.progress, onTap: () => onWhy(r.id) }] : [],
       });
       const found = list.filter((r) => r.stage >= 4);

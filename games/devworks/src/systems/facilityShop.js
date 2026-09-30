@@ -15,7 +15,7 @@ import { FAME } from '../../data/balance.js';
 import { researchById } from '../../data/research.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
 
-export function createFacilityShop({ bus, world, business, clock, projects, researched = () => new Set() }) {
+export function createFacilityShop({ bus, world, business, clock, projects, researched = () => new Set(), secretOpen = () => false }) {
   const rankIndex = () => business.reputation.highestRankIndex;
   const released = () => projects.catalogue.list().filter((r) => r.release);
   const awards = () => business.state.awards ?? 0;
@@ -39,7 +39,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     const def = facilityById(id);
     if (!def) return null;
     const owned = !!world.stationById(id);
-    const hidden = !!def.unlock?.secret;
+    const hidden = !!def.unlock?.secret && !secretOpen(def.id); // Milestone 29: F34 / F35 open with their secret
     const why = owned ? 'Already in the studio' : hidden ? 'Secret' : lockReason(def) ?? (business.credits < def.cost ? `Needs ${def.cost.toLocaleString('en-GB')} Credits` : null);
     return { def, owned, hidden, ok: !why, why };
   }
