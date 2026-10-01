@@ -57,6 +57,8 @@ const C = THEME.color;
 const DECISION_ICONS = { ship: 'dev_ui_07', delay: 'dev_ui_06', cut: 'dev_ui_08', outsource: 'business_ui_04', crunch: 'dev_ui_05' };
 export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null }) {
   const menus = new MenuRegistry();
+  // Milestone 40b: the cost chip on a choice (BottomSheet `cost`).
+  const cr = (n) => (n > 0 ? `${Math.round(n).toLocaleString('en-GB')} Cr` : 'Free');
   for (const def of STATIONS) {
     menus.register(def.id, () => {
       const w = world();
@@ -240,7 +242,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
             const x = plan.platforms?.find((q) => q.id === pl.id) ?? b.releasePlan(number, [pl.id], day).platforms[0];
             const fit = x.fit > 1.05 ? ' · good fit' : x.fit < 0.95 ? ' · weak fit' : '';
             const cert = pl.open ? ' · no certification' : ` · certification ${PLATFORM_BALANCE.friendliness[pl.friendliness].certDays} days`;
-            return { id: pl.id, label: on ? `✓ ${pl.name}` : pl.name, sub: `${x.status}${x.niche > 1 ? ' (niche bonus)' : ''} · ${fmt(x.base)} players${fit}${cert}`, icon: pl.art, accent: on ? C.good : C.progress, onTap: () => toggle(pl.id) };
+            const one = b.releasePlan(number, [pl.id], day);
+            return { id: pl.id, label: on ? `✓ ${pl.name}` : pl.name, sub: `${x.status}${x.niche > 1 ? ' (niche bonus)' : ''} · ${fmt(x.base)} players${fit}${cert}`, cost: one.ok ? cr(one.cost) : null, icon: pl.art, accent: on ? C.good : C.progress, onTap: () => toggle(pl.id) };
           }),
         },
         { lines },
@@ -251,12 +254,13 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                 columns: 2,
                 buttons: Object.entries(DISTRIBUTION.modes).map(([id, m]) => {
                   const why = id === 'earlyAccess' ? dist.eaWhy(rec, chosen) : null;
-                  return { id: `mode-${id}`, label: mode === id ? `✓ ${m.short}` : m.short, sub: why ?? `sales × ${dist.effectsNow(id).salesMult.toFixed(2)} this year`, icon: DISTRIBUTION.icon, accent: mode === id ? C.good : C.progress, disabled: !!why, onTap: () => modes.set(number, id) };
+                  const press = id === mode ? plan.pressing ?? 0 : b.releasePlan(number, chosen, day, id).pressing ?? 0;
+                  return { id: `mode-${id}`, label: mode === id ? `✓ ${m.short}` : m.short, sub: why ?? `${m.line.split(':')[0]} · sales × ${dist.effectsNow(id).salesMult.toFixed(2)}`, cost: why ? null : cr(press), icon: DISTRIBUTION.icon, accent: mode === id ? C.good : C.progress, disabled: !!why, onTap: () => modes.set(number, id) };
                 }),
               },
             ]
           : []),
-        { columns: 1, buttons: [{ id: 'release', label: mode === 'earlyAccess' && dist ? 'Start Early Access' : plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', disabled: !plan.ok, onTap: () => doRelease(number, chosen, dist ? mode : 'balanced') }] },
+        { columns: 1, buttons: [{ id: 'release', label: mode === 'earlyAccess' && dist ? 'Start Early Access' : plan.certDays ? 'Send to certification' : 'Release', sub: plan.certDays ? 'Reviews and sales start at launch' : 'Reviews come in, then sales start', cost: plan.ok ? cr(plan.cost + (plan.pressing ?? 0)) : null, disabled: !plan.ok, onTap: () => doRelease(number, chosen, dist ? mode : 'balanced') }] },
       ],
     };
   });
@@ -278,7 +282,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       title: `Early Access: "${rec.result.title}"`,
       subtitle: `On ${ea.plan.platforms.map((x) => x.name).join(', ')}`,
       art: rec.result.cover,
-      sections: [{ lines }, { columns: 1, buttons: [{ id: 'fullLaunch', label: 'Full launch', sub: 'Reviews come in, then full sales', disabled: !dist, onTap: () => fullLaunch?.(rec.number) }] }],
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'fullLaunch', label: 'Full launch', sub: 'Reviews come in, then full sales', cost: 'Free', disabled: !dist, onTap: () => fullLaunch?.(rec.number) }] }],
     };
   }
   // Milestone 26: the studio's own storefront (Business → Storefront).
@@ -301,7 +305,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       title: 'Your Storefront',
       subtitle: 'Sell your games (and your console\'s third-party games) directly.',
       art: DISTRIBUTION.icon,
-      sections: [{ lines }, { columns: 1, buttons: [{ id: 'toggle', label: st.open ? 'Close the storefront' : 'Open the storefront', sub: why ?? (st.open ? 'No more running costs' : `${S.opCost.toLocaleString('en-GB')} Credits a month`), disabled: !!why, accent: st.open ? C.bad : C.good, onTap: () => setStorefront?.(!st.open) }] }],
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'toggle', label: st.open ? 'Close the storefront' : 'Open the storefront', sub: why ?? (st.open ? 'No more running costs' : 'Keeps the store cut on some of your downloads'), cost: st.open ? 'Free' : `${S.opCost.toLocaleString('en-GB')} Cr / month`, disabled: !!why, accent: st.open ? C.bad : C.good, onTap: () => setStorefront?.(!st.open) }] }],
     };
   });
 
@@ -322,7 +326,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       title: `${a.name}: ${game.title}`,
       subtitle: a.line,
       art: a.art,
-      sections: [{ lines }, { columns: 1, buttons: [{ id: 'run', label: `Run ${a.name}`, sub: `${a.cost.toLocaleString('en-GB')} Credits`, disabled: !o.ok, onTap: () => runMarketing?.(game.key, a.id) }] }],
+      sections: [{ lines }, { columns: 1, buttons: [{ id: 'run', label: `Run ${a.name}`, sub: `+${Math.round(o.gain)} Hype over ${a.days} days: more sales at launch`, cost: cr(a.cost), disabled: !o.ok, onTap: () => runMarketing?.(game.key, a.id) }] }],
     };
   });
 
@@ -339,7 +343,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         {
           columns: 1,
-          buttons: list.map((x) => ({ id: x.def.id, label: `${x.def.name} · ${(x.price ?? x.def.cost).toLocaleString('en-GB')}${x.discount ? ' (blueprint)' : ''}`, sub: x.ok ? x.def.line + (x.def.later ? ` (with ${x.def.later})` : '') : x.why, icon: x.def.art, locked: !x.ok && !/Credits$/.test(x.why ?? ''), disabled: !x.ok, onTap: () => buyFacility?.(x.def.id) })),
+          buttons: list.map((x) => ({ id: x.def.id, label: `${x.def.name}${x.discount ? ' (blueprint)' : ''}`, cost: cr(x.price ?? x.def.cost), sub: x.ok ? x.def.line + (x.def.later ? ` (with ${x.def.later})` : '') : x.why, icon: x.def.art, locked: !x.ok && !/Credits$/.test(x.why ?? ''), disabled: !x.ok, onTap: () => buyFacility?.(x.def.id) })),
         },
       ],
     };
@@ -355,7 +359,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       title: def.name,
       subtitle: `${def.role} · ${def.line}${def.later ? ` (with ${def.later})` : ''}`,
       art: def.art,
-      sections: [{ columns: 1, buttons: [{ id: 'sell', label: `Sell for ${s.refundOf(id).toLocaleString('en-GB')} Credits`, sub: why ?? `Half of its ${def.cost.toLocaleString('en-GB')} back`, disabled: !!why, accent: C.bad, onTap: () => sellFacility?.(id) }] }],
+      sections: [{ columns: 1, buttons: [{ id: 'sell', label: 'Sell it', sub: why ?? `Half of its ${def.cost.toLocaleString('en-GB')} back; the space is free again`, cost: `+${s.refundOf(id).toLocaleString('en-GB')} Cr`, disabled: !!why, accent: C.bad, onTap: () => sellFacility?.(id) }] }],
     };
   });
   // The studio stage (Business → Studio).
@@ -373,7 +377,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const sections = [{ lines }];
     if (n) {
       sections.push({ title: `Next: ${n.stage.name}`, lines: [...n.reqs.map((r) => ({ text: `${r.ok ? '✓' : '✗'} ${r.label}`, color: r.ok ? C.good : C.bad })), { text: `Staff cap ${n.stage.staffCap} · game lanes ${n.stage.lanes} · floor ${n.stage.cols} × ${n.stage.rows}`, color: C.textMuted }] });
-      sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `${n.stage.cost.toLocaleString('en-GB')} Credits. Everything stays where it is.` : n.why, disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }] });
+      sections.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Move to the ${n.stage.name}`, sub: n.ok ? `More room, more staff, ${n.stage.lanes} game lanes. Everything stays where it is.` : n.why, cost: cr(n.stage.cost), disabled: !n.ok, icon: n.stage.shell, onTap: () => upgradeStudio?.() }] });
     } else sections.push({ lines: [{ text: 'The Global Campus is the biggest studio. Secret R&D spaces come later.', color: C.textMuted }] });
     return { title: `Studio: ${st.name}`, subtitle: `Stage ${st.id} of 5`, art: st.shell ?? 'facility_f01', sections };
   });
@@ -387,7 +391,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const v = p.view(job);
     const late = v.deadlineDay == null ? '' : v.status === 'onTrack' ? 'On schedule' : `Due ${dateOf(v.deadlineDay)}: ${v.status === 'late' ? 'already late' : 'running behind'}`;
     const D = PROJECT_BALANCE.decisions;
-    const extra = { outsource: ` Costs ${(PROJECT_BALANCE.scopes[v.scope].baseCostPerDay * D.outsource.costDays).toLocaleString('en-GB')} Credits.` };
+    const extra = {};
+    const decisionCost = { outsource: cr(PROJECT_BALANCE.scopes[v.scope].baseCostPerDay * D.outsource.costDays), ship: 'Free', delay: `+${D.delay.workPct}% work`, cut: 'Free', crunch: D.crunch?.days ? `${D.crunch.days} tiring days` : 'Tiring' };
     const opts = p.options(job);
     return {
       title: `${DECISION_POINTS[dec.point]}: ${v.title}`,
@@ -399,7 +404,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           columns: 1,
           buttons: DECISIONS.map((d) => {
             const o = opts.find((x) => x.id === d.id);
-            return { id: `decide:${d.id}`, icon: DECISION_ICONS[d.id] ?? null, label: d.name, sub: o.ok ? d[dec.point] + (extra[d.id] && o.ok ? extra[d.id] : '') : o.why, disabled: !o.ok, accent: d.id === 'ship' ? C.good : d.id === 'crunch' ? C.bad : C.progress, onTap: () => decide?.(d.id) };
+            return { id: `decide:${d.id}`, icon: DECISION_ICONS[d.id] ?? null, label: d.name, sub: o.ok ? d[dec.point] + (extra[d.id] && o.ok ? extra[d.id] : '') : o.why, cost: o.ok ? decisionCost[d.id] ?? null : null, disabled: !o.ok, accent: d.id === 'ship' ? C.good : d.id === 'crunch' ? C.bad : C.progress, onTap: () => decide?.(d.id) };
           }),
         },
       ],
@@ -432,7 +437,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           columns: 2,
           buttons: r.channels.map((c) => {
             const why = r.channelWhy(c.id);
-            return { id: `channel:${c.id}`, label: c.id === ch.id ? `✓ ${c.name}` : c.name, sub: why ?? c.line, locked: !!why, accent: c.id === ch.id ? C.good : C.progress, onTap: () => r.setChannel(c.id) };
+            return { id: `channel:${c.id}`, label: c.id === ch.id ? `✓ ${c.name}` : c.name, sub: why ?? c.line, cost: why ? null : `${c.refreshCost.toLocaleString('en-GB')} Cr refresh`, locked: !!why, accent: c.id === ch.id ? C.good : C.progress, onTap: () => r.setChannel(c.id) };
           }),
         },
         cards.length
@@ -441,14 +446,14 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
               columns: 1,
               buttons: cards.map((c) => {
                 const d = r.cardDef(c);
-                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)} · ${d.salary.toLocaleString('en-GB')} a month${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : knownBefore(d.id) ? ' · worked with you in an earlier run' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
+                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, cost: `${d.salary.toLocaleString('en-GB')} Cr / month`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)}${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : knownBefore(d.id) ? ' · worked with you in an earlier run' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
               }),
             }
           : { lines: [{ text: 'Nobody new on this board. Refresh, or try another channel when it opens.', color: C.textMuted }] },
         {
           columns: 1,
           buttons: [
-            { id: 'refresh', label: `Refresh now: ${ch.name}`, sub: b.credits >= cost ? `${cost.toLocaleString('en-GB')} Credits (the price doubles for each refresh this month)` : `Needs ${cost.toLocaleString('en-GB')} Credits`, disabled: b.credits < cost, onTap: () => r.refresh() },
+            { id: 'refresh', label: `Refresh now: ${ch.name}`, sub: b.credits >= cost ? 'Three new candidates now (the price doubles for each refresh this month)' : `Needs ${cost.toLocaleString('en-GB')} Credits`, cost: cr(cost), disabled: b.credits < cost, onTap: () => r.refresh() },
             ...(debugHire ? [{ id: 'debugElite', label: 'Debug: an Elite joins', sub: 'Adds an Elite (for mentoring checks)', accent: C.purple, onTap: () => debugHire() }] : []),
             ...(debugSpawn ? [{ id: 'staffBook', label: 'Debug: Staff book', sub: 'All 50: preview any card, spawn Standard / Rare / Elite', accent: C.purple, onTap: () => open('staffBook') }] : []),
           ],
@@ -481,8 +486,8 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         {
           columns: 2,
           buttons: [
-            { id: 'hire', label: `Hire ${d.name.split(' ')[0]}`, sub: chk.ok ? (seat.build ? `${seat.cost.toLocaleString('en-GB')} Credits now, then the salary` : 'Salary paid each month') : chk.why, disabled: !chk.ok, accent: C.good, onTap: () => hireCard?.(cardId) },
-            { id: 'back', label: 'Back', sub: 'To the board', accent: C.progress, onTap: () => open('recruit') },
+            { id: 'hire', label: `Hire ${d.name.split(' ')[0]}`, sub: chk.ok ? (seat.build ? `They join today; a ${seat.name} is built for them` : 'They join today and start working') : chk.why, cost: chk.ok ? (seat.build ? cr(seat.cost) : `${d.salary.toLocaleString('en-GB')} Cr / month`) : null, disabled: !chk.ok, accent: C.good, onTap: () => hireCard?.(cardId) },
+            { id: 'back', label: 'Back', sub: 'To the board', cost: 'Free', accent: C.progress, onTap: () => open('recruit') },
           ],
         },
       ],
@@ -503,7 +508,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         {
           columns: 1,
-          buttons: opts.map((o) => ({ id: `course:${o.course.id}`, label: `${o.course.name} · ${o.course.cost.toLocaleString('en-GB')}`, sub: o.ok ? `${gainText(o.preview)} · ${o.course.days} days away` : o.why, locked: !o.ok && /^Needs Research|^Needs a franchise/.test(o.why ?? ''), disabled: !o.ok, icon: o.course.art, onTap: () => startCourse?.(o.course.id, staffId) })),
+          buttons: opts.map((o) => ({ id: `course:${o.course.id}`, label: o.course.name, cost: cr(o.course.cost), sub: o.ok ? `${gainText(o.preview)} · ${o.course.days} days away` : o.why, locked: !o.ok && /^Needs Research|^Needs a franchise/.test(o.why ?? ''), disabled: !o.ok, icon: o.course.art, onTap: () => startCourse?.(o.course.id, staffId) })),
         },
       ],
     };
@@ -523,7 +528,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         art: s.art,
         sections: [
           { lines: [{ text: `${p.sharedDays} shared day${p.sharedDays === 1 ? '' : 's'} · +${MENTORING.xpPerDay} XP each`, color: C.actionDark }, { text: trait ? `Learned: ${trait}` : `A specialty tag after ${MENTORING.tagDays} shared days${next ? ` (${TRAITS[next]?.name})` : ' (they already have a specialty, or nothing new to learn)'}`, color: trait ? C.good : C.textMuted }] },
-          { columns: 1, buttons: [{ id: 'stopMentor', label: 'Stop mentoring', sub: 'They keep what they learned', accent: C.bad, onTap: () => t.stopMentoring(mentorId) }] },
+          { columns: 1, buttons: [{ id: 'stopMentor', label: 'Stop mentoring', sub: 'They keep what they learned', cost: 'Free', accent: C.bad, onTap: () => t.stopMentoring(mentorId) }] },
         ],
       };
     }
@@ -532,7 +537,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       subtitle: `${TIERS[s.tier].name} staff can mentor one person of a lower tier.`,
       art: s.art,
       accent: C.progress,
-      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}` : o.why, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
+      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}: learns faster on shared games` : o.why, cost: o.ok ? 'Free' : null, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
     };
   });
 
@@ -605,7 +610,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         { lines: [{ text: `${p.costPerDay} Credits a day · mostly CODE (Programmers) · tier now: ${en.tierNow()}`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
         { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
-        { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
+        { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it: ${p.line}`, cost: why ? null : `${p.costPerDay} Cr / day`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
       ],
     };
   });
@@ -626,7 +631,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           columns: 1,
           buttons: componentsOf(slot).map((c) => {
             const why = hw.partWhy(c.id);
-            return { id: `part:${c.id}`, label: `${now === c.id ? '✓ ' : ''}${c.name} · ${c.cost} a unit`, sub: why ?? c.line, icon: c.art, locked: !!why, disabled: !!why, accent: now === c.id ? C.good : C.progress, onTap: () => pickPart?.(slot, c.id) };
+            return { id: `part:${c.id}`, label: `${now === c.id ? '✓ ' : ''}${c.name}`, cost: why ? null : `${c.cost} Cr a unit`, sub: why ?? c.line, icon: c.art, locked: !!why, disabled: !!why, accent: now === c.id ? C.good : C.progress, onTap: () => pickPart?.(slot, c.id) };
           }),
         },
       ],
@@ -653,7 +658,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         { lines: [{ text: `${pv.costPerDay} Credits a day · ${pv.work} work`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
         { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `hwteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code} · PROD ${s.stats.prod ?? 0}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
-        { columns: 1, buttons: [{ id: 'hwGo', label: 'Start the prototype', sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { hwTeam.ids = null; startHardware?.(team); } }] },
+        { columns: 1, buttons: [{ id: 'hwGo', label: 'Start the prototype', sub: why ?? `${team.length} on it: build and test the design`, cost: why ? null : `${pv.costPerDay} Cr / day`, disabled: !!why, accent: C.good, onTap: () => { hwTeam.ids = null; startHardware?.(team); } }] },
       ],
     };
   });
@@ -684,7 +689,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         ...(paceLine ? [{ lines: [paceLine] }] : []),
         { title: 'Team', columns: 2, buttons: opts.map((o) => ({ id: `cteam:${o.staff.id}`, label: team.includes(o.staff.id) ? `✓ ${o.staff.name}` : o.staff.name, sub: o.why ?? `${stat.label} ${o.staff.stats[c.stat]}`, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !!o.why, accent: team.includes(o.staff.id) ? C.good : C.progress, onTap: () => contractTeams.set(id, team.includes(o.staff.id) ? team.filter((x) => x !== o.staff.id) : [...team, o.staff.id]) })) },
-        { columns: 1, buttons: [{ id: 'contractGo', label: 'Accept the contract', sub: why ?? `${team.length} on it`, disabled: !!why, accent: C.good, onTap: () => { contractTeams.delete(id); acceptContract?.(id, team); } }] },
+        { columns: 1, buttons: [{ id: 'contractGo', label: 'Accept the contract', sub: why ?? `${team.length} on it: pays when the work is done`, cost: why ? null : `+${c.pay.toLocaleString('en-GB')} Cr`, disabled: !!why, accent: C.good, onTap: () => { contractTeams.delete(id); acceptContract?.(id, team); } }] },
       ],
     };
   });
@@ -704,13 +709,13 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: [
         { lines: [{ text: 'Support takes a game lane and staff time while it runs.', color: C.textMuted }] },
         { columns: 1, buttons: opts.flatMap((o) => {
-          const cost = o.option.instant ? 'Free' : `${o.option.costPerDay} Credits a day · ${o.option.work} work`;
-          if (o.option.port && o.ok) return o.targets.map((pid) => ({ id: `support:port:${pid}`, label: `Port to ${PLATFORMS.find((p) => p.id === pid)?.name ?? pid}`, sub: `${o.option.line} ${cost}`, icon: PLATFORMS.find((p) => p.id === pid)?.art ?? o.option.icon, onTap: () => open('supportTeam', { number, option: 'port', platform: pid }) }));
-          return [{ id: `support:${o.option.id}`, label: o.option.name, sub: o.ok ? `${o.option.line} ${cost}` : o.why, icon: o.option.icon, disabled: !o.ok, accent: o.option.id === 'moveOn' ? C.bad : C.purple, onTap: () => (o.option.instant ? startSupport?.(o.option.id, number, []) : open('supportTeam', { number, option: o.option.id })) }];
+          const cost = o.option.instant ? 'Free' : `${o.option.costPerDay} Cr / day`;
+          if (o.option.port && o.ok) return o.targets.map((pid) => ({ id: `support:port:${pid}`, label: `Port to ${PLATFORMS.find((p) => p.id === pid)?.name ?? pid}`, sub: `${o.option.line} (${o.option.work} work)`, cost, icon: PLATFORMS.find((p) => p.id === pid)?.art ?? o.option.icon, onTap: () => open('supportTeam', { number, option: 'port', platform: pid }) }));
+          return [{ id: `support:${o.option.id}`, label: o.option.name, sub: o.ok ? `${o.option.line}${o.option.instant ? '' : ` (${o.option.work} work)`}` : o.why, cost: o.ok ? cost : null, icon: o.option.icon, disabled: !o.ok, accent: o.option.id === 'moveOn' ? C.bad : C.purple, onTap: () => (o.option.instant ? startSupport?.(o.option.id, number, []) : open('supportTeam', { number, option: o.option.id })) }];
         }) },
         { columns: 2, buttons: [
-          { id: 'support:remaster', label: 'Remaster', sub: 'A new project (New Game)', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remaster') },
-          { id: 'support:remake', label: 'Remake', sub: 'A new project (New Game)', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remake') },
+          { id: 'support:remaster', label: 'Remaster', sub: 'Polish it up as a new, cheaper project', cost: 'New Game', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remaster') },
+          { id: 'support:remake', label: 'Remake', sub: 'Rebuild it as a new project', cost: 'New Game', icon: 'dev_ui_14', accent: C.progress, onTap: () => newGameAs?.('remake') },
         ] },
       ],
     };
@@ -736,7 +741,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       accent: C.purple,
       sections: [
         { title: 'Team', columns: 2, buttons: staffList.map((s) => ({ id: `steam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: busy(s.id) ?? `${stat.label} ${s.stats[o.stat]}`, icon: s.art, iconCrop: portraitOf(s.art), disabled: !!busy(s.id), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => supportTeams.set(key, team.includes(s.id) ? team.filter((x) => x !== s.id) : [...team, s.id]) })) },
-        { columns: 1, buttons: [{ id: 'supportGo', label: `Start: ${o.name}`, sub: team.length ? `${team.length} on it` : 'Pick at least one person', disabled: !team.length, accent: C.good, onTap: () => { supportTeams.delete(key); startSupport?.(o.id, t.number, team, t.platform ?? null); } }] },
+        { columns: 1, buttons: [{ id: 'supportGo', label: `Start: ${o.name}`, sub: team.length ? `${team.length} on it: ${o.line}` : 'Pick at least one person', cost: team.length ? (o.instant ? 'Free' : `${o.costPerDay} Cr / day`) : null, disabled: !team.length, accent: C.good, onTap: () => { supportTeams.delete(key); startSupport?.(o.id, t.number, team, t.platform ?? null); } }] },
       ],
     };
   });

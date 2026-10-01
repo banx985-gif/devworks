@@ -338,6 +338,14 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (w) motionOf(w).shake = sec;
     },
     // Is a world point on screen now (pops off screen are skipped)?
+    // Milestone 40b: a worker's head on the screen (speech bubbles, points flying to the live build panel), or null.
+    headOnScreen(id) {
+      const w = world.workerById(id);
+      if (!w || !onFloor().includes(w)) return null;
+      const r = workerRect(w);
+      const p = camera.worldToScreen(r.x + r.w / 2, r.y + 12);
+      return p.x > 0 && p.x < W && p.y > camera.viewY && p.y < camera.viewY + camera.viewH ? p : null;
+    },
     onScreen(p) {
       const s = camera.worldToScreen(p.x, p.y);
       return s.x > -60 && s.x < W + 60 && s.y > camera.viewY - 60 && s.y < camera.viewY + camera.viewH + 60;

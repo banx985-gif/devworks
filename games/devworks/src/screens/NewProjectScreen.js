@@ -30,6 +30,8 @@ import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '.
 import { ROLES, STATS } from '../../data/staff.js';
 import { portraitOf } from '../../data/portraits.js'; // Milestone 14: the same head crop everywhere
 import { PROJECT_TYPES, projectTypeById } from '../../data/franchises.js';
+import { PROJECT_BALANCE, FRANCHISE_BALANCE } from '../../data/balance.js'; // Milestone 40b: what each choice costs
+import { LOCALISATION } from '../../data/global.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -37,7 +39,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '' }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -131,15 +133,22 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       y += 66;
     };
     const chip = (r, label, on, onTap, opts = {}) => {
-      if (ctx) drawButton(ctx, r, on ? `✓ ${label}` : label, { selected: on, accent: opts.accent ?? C.progress, font: font(S.body, true), locked: opts.locked });
+      if (ctx && opts.cost != null) {
+        // Milestone 40b: the choice and what it costs, on two lines.
+        drawButton(ctx, r, '', { selected: on, accent: opts.accent ?? C.progress, locked: opts.locked });
+        const fg = on ? C.textOnSelected ?? '#FFF8EC' : opts.locked ? C.textFaint : C.textOnAction;
+        text(ctx, on ? `✓ ${label}` : label, r.x + r.w / 2, r.y + r.h * 0.34, { size: S.body, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+        text(ctx, opts.cost, r.x + r.w / 2, r.y + r.h * 0.7, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+      } else if (ctx) drawButton(ctx, r, on ? `✓ ${label}` : label, { selected: on, accent: opts.accent ?? C.progress, font: font(S.body, true), locked: opts.locked });
       if (!opts.locked) box(r, onTap, opts.id);
     };
+    const pctCost = (pct) => (!pct ? 'Normal cost' : `${pct > 0 ? '+' : '−'}${Math.abs(pct)}% cost`);
 
     // Project type (Milestone 10).
     const third0 = (cw - 40) / 3;
     const grid0 = (i) => ({ x: PAD + (i % 3) * (third0 + 20), y: y + Math.floor(i / 3) * 130, w: third0, h: 110 });
     heading('Project type', ptype().name);
-    PROJECT_TYPES.forEach((t, i) => chip(grid0(i), t.name, setup.type === t.id, () => setType(t.id), { id: `type:${t.id}`, locked: !!typeWhy(t) }));
+    PROJECT_TYPES.forEach((t, i) => chip(grid0(i), t.name, setup.type === t.id, () => setType(t.id), { id: `type:${t.id}`, locked: !!typeWhy(t), cost: pctCost(Math.round(((FRANCHISE_BALANCE.types[t.id]?.costMult ?? 1) - 1) * 100)) }));
     y += Math.ceil(PROJECT_TYPES.length / 3) * 130 + 10;
     const whyLine = PROJECT_TYPES.filter((t) => typeWhy(t)).map((t) => `${t.name}: ${typeWhy(t).toLowerCase()}`).join(' · ');
     if (ctx) text(ctx, ptype().line, PAD, y, { size: S.small, color: C.text, maxWidth: cw });
@@ -245,13 +254,13 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     if (setup.deal && !ds.some((d) => d.id === setup.deal)) setup.deal = null;
     if (ds.length) {
       heading('Publisher', setup.deal ? ds.find((d) => d.id === setup.deal)?.label : 'Self-publish');
-      const opts = [{ id: null, label: 'Self-publish' }, ...ds.map((d) => ({ id: d.id, label: d.short, scope: d.scope }))];
+      const opts = [{ id: null, label: 'Self-publish', cost: 'Keep it all' }, ...ds.map((d) => ({ id: d.id, label: d.short, scope: d.scope, cost: 'Advance paid' }))];
       const half = (cw - 20) / 2;
       opts.forEach((o, i) =>
         chip({ x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.deal === o.id, () => {
           setup.deal = o.id;
           if (o.scope && scopeOpen(o.scope)) setup.scope = o.scope;
-        }, { id: `deal:${o.id ?? 'self'}` }),
+        }, { id: `deal:${o.id ?? 'self'}`, cost: o.cost }),
       );
       y += Math.ceil(opts.length / 2) * 130 + 10;
       const d = ds.find((x) => x.id === setup.deal);
@@ -279,7 +288,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const third = (cw - 40) / 3;
     const grid = (i) => ({ x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
     heading('Scope');
-    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
+    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, cost: `${costPerDay(sc.id, setup.budget, setup.type, setup.localise).toLocaleString('en-GB')} Cr / day`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
     y += Math.ceil(SCOPES.length / 3) * 130 + 10;
     const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
     const lines = [{ t: scope().line, c: C.text }];
@@ -297,7 +306,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     heading('Audio package', AUDIO_PACKAGES.find((a) => a.id === setup.audio).line);
     // Milestone 18: four packages, two to a row, with their price.
     const halfA = (cw - 20) / 2;
-    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, audioCost(a.id) ? `${a.name} · ${audioCost(a.id).toLocaleString('en-GB')}` : a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}` }));
+    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}`, cost: audioCost(a.id) ? `${audioCost(a.id).toLocaleString('en-GB')} Cr` : 'Free' }));
     y += (Math.ceil(AUDIO_PACKAGES.length / 2) - 1) * 130;
     y += 150; // chips are button height (110)
     // Milestone 21: localisation. A Global deal pays it (always on); otherwise Off / On once it is open.
@@ -306,13 +315,13 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     if (globalDeal) setup.localise = 'publisher';
     else if (setup.localise === 'publisher' || (setup.localise === 'on' && locWhy)) setup.localise = 'off';
     heading('Localisation', globalDeal ? `Paid by ${globalDeal}` : setup.localise === 'on' ? 'On' : 'Off');
-    [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }].forEach((o, i) => chip({ x: PAD + i * (halfA + 20), y, w: halfA, h: 110 }, o.label, setup.localise === o.id || (o.id === 'on' && setup.localise === 'publisher'), () => (setup.localise = o.id), { id: `loc:${o.id}`, locked: !!globalDeal || (o.id === 'on' && !!locWhy) }));
+    [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }].forEach((o, i) => chip({ x: PAD + i * (halfA + 20), y, w: halfA, h: 110 }, o.label, setup.localise === o.id || (o.id === 'on' && setup.localise === 'publisher'), () => (setup.localise = o.id), { id: `loc:${o.id}`, locked: !!globalDeal || (o.id === 'on' && !!locWhy), cost: o.id === 'on' ? `+${LOCALISATION.costPct}% cost` : 'Free' }));
     y += 130;
     const locText = globalDeal ? `${globalDeal} localises it for free: ${localisationLine('publisher')}` : locWhy ?? localisationLine(setup.localise);
     if (ctx) text(ctx, locText, PAD, y, { size: S.small, color: globalDeal ? C.good : locWhy ? C.textMuted : C.actionDark, maxWidth: cw });
     y += 72;
     heading('Budget focus');
-    BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}` }));
+    BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}`, cost: pctCost(PROJECT_BALANCE.budgetFocus[b.id]?.costPct ?? 0) }));
     y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
     if (ctx) text(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
     y += 72;
@@ -391,6 +400,11 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     },
     startRect,
     enter() {
+      // Milestone 40b: back from the idea cards keeps everything picked so far.
+      if (cameFrom() === 'ideas' && setup) {
+        textPrompt.close();
+        return;
+      }
       setup = { type: 'original', ipId: null, source: null, title: '', recipe: {}, scope: SCOPES[0].id, audio: AUDIO_PACKAGES[0].id, budget: BUDGET_FOCUS[0].id, team: [], localise: 'off' };
       // Milestone 13: the free people, one per role first (the Milestone 3–12 default), up to the scope's usual team.
       const free = world.staffSystem.staff.filter((s) => !unavailable(s.id));

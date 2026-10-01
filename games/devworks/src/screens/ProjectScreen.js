@@ -12,6 +12,7 @@ import { text } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
 import { ROLES } from '../../data/staff.js';
 import { drawRecipeIcons, drawOutputs } from '../ui/gameCard.js';
+import { PROJECT_BALANCE } from '../../data/balance.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -99,7 +100,12 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
       const r = { x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 };
       const now = v.focus === b.id;
       const next = v.pendingFocus === b.id;
-      drawButton(ctx, r, now ? `✓ ${b.name}` : next ? `→ ${b.name}` : b.name, { selected: now || next, accent: next ? C.action : C.progress, font: font(S.body, true) });
+      // Milestone 40b: the name and what it does to the daily cost.
+      drawButton(ctx, r, '', { selected: now || next, accent: next ? C.action : C.progress });
+      const pct = PROJECT_BALANCE.budgetFocus[b.id]?.costPct ?? 0;
+      const fg = now || next ? '#FFF8EC' : C.textOnAction;
+      text(ctx, now ? `✓ ${b.name}` : next ? `→ ${b.name}` : b.name, r.x + r.w / 2, r.y + r.h * 0.34, { size: S.body, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+      text(ctx, !pct ? 'Normal cost' : `${pct > 0 ? '+' : '−'}${Math.abs(pct)}% cost`, r.x + r.w / 2, r.y + r.h * 0.7, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
       rects[`focus:${b.id}`] = { r, onTap: () => projects.setFocus(b.id, job()) };
     });
     y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;

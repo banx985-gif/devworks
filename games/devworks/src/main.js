@@ -189,6 +189,9 @@ import { createBusiness } from './systems/business.js';
 import { createStudioScreen } from './screens/StudioScreen.js';
 import { createRosterScreen } from './screens/RosterScreen.js';
 import { createStaffDetailScreen } from './screens/StaffDetailScreen.js';
+import { createIdeaCardsScreen } from './screens/IdeaCardsScreen.js'; // Milestone 40b
+import { createLiveBuildPanel } from './ui/liveBuildPanel.js'; // Milestone 40b
+import { BANTER } from '../data/banter.js'; // Milestone 40b: the pride line
 import { createNewProjectScreen } from './screens/NewProjectScreen.js';
 import { createProjectScreen } from './screens/ProjectScreen.js';
 import { createLedgerScreen } from './screens/LedgerScreen.js';
@@ -230,7 +233,7 @@ const MAX_H = 2640; // up to 9:22 fills edge to edge; taller still gets thin bar
 const START_SCREEN = new URLSearchParams(window.location.search).get('screen') === 'test' ? 'test' : 'title';
 const MENU_SCREENS = ['title', 'setup', 'splash', 'boot', 'settings', 'store', 'help']; // before a studio is open: no clock, no top bar
 const TEST_SCREENS = ['test', 'route']; // the Milestone 0 screens: pause button, full debug box
-const WORLD_SCREENS = ['artGallery', 'saves', 'projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
+const WORLD_SCREENS = ['ideas', 'artGallery', 'saves', 'projects', 'ngplus', 'studio', 'roster', 'staff', 'newProject', 'project', 'ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame']; // where the top bar's Pause / speeds apply
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
@@ -361,6 +364,7 @@ const loop = new FixedStepLoop({
     celebrate.height = renderer.height;
     celebrate.update(dt);
     if (started) devPops.update(dt, !clock.paused);
+    if (started) liveBuild.update(dt); // Milestone 40b
     if (tip && (tip.t += dt) > TIP_SEC * textTime()) tip = null;
     if (beat && !feedback.active && (beat.age += dt) > DEV_POPS.phaseBannerSec * textTime()) beat = null; // Milestone 34: Banner time
     if (started) {
@@ -375,6 +379,7 @@ const loop = new FixedStepLoop({
     const ctx = renderer.begin(COL.bg);
     warmText(ctx); // Milestone 39
     router.render(ctx, alpha);
+    if (liveBuildOn()) liveBuild.render(ctx); // Milestone 40b: over the studio, under the sheets and big moments
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
     if (started && guide.active) coach.render(ctx, guideFill(guide.current), guideTarget(guide.current.target), { block: guide.current.block, next: !!guide.current.advance.next }); // Milestone 34
@@ -1055,6 +1060,49 @@ bus.on('studio:stage', ({ stage }) => {
     onAck: afterFeedback,
   });
 });
+// Milestone 40b: the live build panel over the studio while a game is made (counting outputs, bugs, stars, the
+// milestone bar, banners, flying points and the team's speech bubbles). Tap it for the Project screen.
+const liveBuild = createLiveBuildPanel({
+  bus,
+  layout,
+  assets,
+  projects,
+  bottomBar,
+  studio,
+  fanExpectation: () => business.state.fanExpectation,
+  reducedMotion: () => !!settings.get('reducedMotion'),
+  onOpen: (id) => router.go('project', { id }),
+});
+const liveBuildOn = () => started && router.currentName === 'studio' && !studio.buildMode && liveBuild.visible;
+router.layers.push({
+  get active() {
+    return liveBuildOn() && !sheet.active && !feedback.active;
+  },
+  // A tap on the panel is the panel's; a drag that starts on it does not move the camera.
+  handleInput: (hook, p) => (hook === 'onTap' ? liveBuild.onTap(p) : ['onDown', 'onDragStart'].includes(hook) && liveBuild.contains(p)),
+});
+// Milestone 40b: the pride quote — a lead whose game beats their best review so far says so (once per release).
+bus.on('game:released', ({ record }) => {
+  const score = record?.release?.score;
+  const team = (record?.team ?? []).map((m) => world.staffSystem.get(m.id)).filter(Boolean);
+  if (score == null || !team.length) return;
+  const lead = [...team].sort((a, b) => (b.level ?? 1) - (a.level ?? 1) || team.indexOf(a) - team.indexOf(b))[0];
+  const before = projects.catalogue.list().filter((r) => r !== record && r.release && (r.team ?? []).some((m) => m.id === lead.id)).map((r) => r.release.score);
+  if (!before.length || score <= Math.max(...before)) return;
+  const line = BANTER.pride[record.number % BANTER.pride.length].replace('{title}', record.result.title);
+  debug.log(`pride: ${lead.name} ${score} > ${Math.max(...before)}`);
+  feedback.show({
+    title: lead.name,
+    subtitle: line,
+    accent: COL.purple,
+    drawFn: (ctx, t) => {
+      const sr = layout.safeRect;
+      const p = 360 * (0.7 + 0.3 * Math.min(1, t / 0.3));
+      drawPortrait(ctx, assets, lead.def?.art ?? staffDefById(lead.id)?.art, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.3 - p / 2, w: p, h: p }, COL.purple);
+    },
+    onAck: afterFeedback,
+  });
+});
 // Development made visible: the art pops while a game is made (only while the studio is on screen, nothing on top).
 const devPops = createDevPops({
   bus,
@@ -1102,13 +1150,29 @@ function drawBeat(ctx) {
     drawIcon: (c, e, r) => assets.drawContained(c, 'dev_ui_07', r),
   });
 }
+// Milestone 40b: the idea cards (a recipe slot as a grid of picture cards with an info strip).
+const ideaCards = createIdeaCardsScreen({
+  layout,
+  assets,
+  topBar: subTopBar,
+  recipe: () => newProject.setup?.recipe ?? {},
+  isUnlocked: (id) => elements.isOpen(id),
+  lockReason: (id) => elements.reason(id),
+  lastUsed: (family) => projects.catalogue.latest()?.result?.recipe?.[family] ?? null,
+  shipped: (genre, id) => projects.catalogue.list().some((r) => r.release && r.result.recipe?.genre === genre && Object.values(r.result.recipe).includes(id)),
+  onChoose: (family, id) => {
+    newProject.choose(family, id);
+    router.go('newProject');
+  },
+});
 const newProject = createNewProjectScreen({
   layout,
   assets,
   world,
   topBar: subTopBar,
   textPrompt,
-  openPicker: (family) => openMenu(`pick:${family}`),
+  openPicker: (family) => router.go('ideas', { family }), // Milestone 40b: the idea cards
+  cameFrom: () => router.previous,
   scopeOpen: (id) => elements.scopeOpen(id),
   scopeReason: (id) => elements.scopeReason(id),
   estimate: (team, scope, type, localised) => projects.estimate(team, scope, type, localised),
@@ -1406,6 +1470,7 @@ menus.register('event', (uid) => {
               id: `choice${i}`,
               label: c.label,
               sub: c.line,
+              cost: c.cost, // Milestone 40b
               accent: COL.progress,
               onTap: () => {
                 studioEvents.answer(uid, i);
@@ -2359,7 +2424,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -2370,6 +2435,7 @@ router
   .register('roster', roster)
   .register('staff', staffDetail)
   .register('newProject', newProject)
+  .register('ideas', ideaCards) // Milestone 40b
   .register('project', projectScreen)
   .register('ledger', ledger)
   .register('catalogue', catalogueScreen)

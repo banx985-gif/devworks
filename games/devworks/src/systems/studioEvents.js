@@ -195,7 +195,12 @@ export function createStudioEvents({ bus, clock, world, business, projects, rese
     if (!inst) return null;
     const def = byId[inst.id];
     const p = inst.params;
-    return { uid, id: inst.id, cls: classOf(def.cls).name, title: words(def.title, p), text: words(def.text, p), icon: classOf(def.cls).icon, open: inst.status === 'open', choice: inst.choice, auto: !!inst.auto, choices: (def.choices ?? []).map((c) => ({ id: c.id, label: words(c.label, p), line: words(c.line, p) })) };
+    return { uid, id: inst.id, cls: classOf(def.cls).name, title: words(def.title, p), text: words(def.text, p), icon: classOf(def.cls).icon, open: inst.status === 'open', choice: inst.choice, auto: !!inst.auto, choices: (def.choices ?? []).map((c) => ({ id: c.id, label: words(c.label, p), line: words(c.line, p), cost: costOf(c) })) };
+  }
+  // Milestone 40b: what a choice costs, for its button (Credits effects; none = Free).
+  function costOf(c) {
+    const n = (c.effects ?? []).filter((e) => e.type === 'credits' && typeof e.value === 'number').reduce((t, e) => t + e.value, 0);
+    return n < 0 ? `${(-n).toLocaleString('en-GB')} Cr` : n > 0 ? `+${n.toLocaleString('en-GB')} Cr` : 'Free';
   }
   function answer(uid, index) {
     const inst = events.choose(uid, index, { day: today() });
