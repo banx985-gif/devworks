@@ -144,7 +144,8 @@ import { CoachMark } from '../../../core/ui/CoachMark.js';
 import { createHelpArchive } from '../../../core/ui/HelpArchive.js';
 import { createStudioSplash } from '../../../core/ui/StudioSplash.js';
 import { Settings } from '../../../core/Settings.js';
-import { GUIDE_STEPS, GUIDE_FACE, SCREEN_HINTS, HELP_TEXT, HELP_TOPICS } from '../data/guide.js';
+import { GUIDE_STEPS, GUIDE_M40D_STEPS, GUIDE_FACE, WALKTHROUGHS, WALK_RULES, walkSteps, HINT_TO_WALK, HELP_TEXT, HELP_TOPICS } from '../data/guide.js';
+import { createWalkthroughs, walkUnlocks } from './systems/walkthroughs.js'; // Milestone 40d
 import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE } from '../data/settings.js';
 import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
 import { Haptics } from '../../../core/Haptics.js';
@@ -378,6 +379,7 @@ const loop = new FixedStepLoop({
       coach.update(dt); // Milestone 34: the guide, the hint cards
       guide.update();
       guideWatch();
+      walkWatch(); // Milestone 40d
       breakWatch(); // Milestone 36
     }
   },
@@ -743,6 +745,7 @@ const topBarOptions = {
   onInbox: () => openMenu('inbox'),
   onHelp: () => router.go('help', { back: router.currentName }), // Milestone 34: the Help archive
   inboxCount: () => (debugBadges ? 1 : studioEvents.unread()), // Milestone 27: unread messages
+  helpCount: () => (started && !guide.state.off ? walks.waiting : 0), // Milestone 40d: walkthroughs left for Later
 };
 const topBar = createTopBar({ ...topBarOptions, home: true });
 const subTopBar = createTopBar({ ...topBarOptions, home: false, back: { label: '‹ Back', onTap: () => router.back() } });
@@ -801,7 +804,7 @@ const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight a
 // Milestone 35: every run system in one place (src/systems/runSave.js serializes / loads / starts them).
 const runSystems = () => ({ requests, rewards, world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending, monetisation });
 let lastBoundary = null; // { label, event, day } — the last §50 boundary saved
-const saveData = () => serializeRun(runSystems(), { guide: { ...guide.serialize(), hints: [...hintsSeen] }, boundary: lastBoundary });
+const saveData = () => serializeRun(runSystems(), { guide: { ...guide.serialize(), hints: [...hintsSeen], walks: walks.serialize() }, boundary: lastBoundary }); // Milestone 40d: the walkthroughs
 const autosave = new Autosave({
   bus,
   triggers: SAVE.triggers,
@@ -912,7 +915,7 @@ async function startStudio(i, setup, carry = null) {
   await quarantine(i); // Milestone 35: a damaged save in this slot is kept aside, not lost
   profile.create(setup);
   if (carry) ngplus.apply(carry); // Milestone 33: NG+ level, Legacy Staff, blueprints, RP, tokens paid
-  loadGuide(null, !!carry); // Milestone 34: a new studio starts the guide (an NG+ one has seen it all)
+  loadGuide(null, !!carry, !!carry); // Milestone 34: a new studio starts the guide (an NG+ one has seen it all — Milestone 40d: the walkthroughs too)
   monetisation.payHeld(true); // Milestone 36
   ngplus.knowAll();
   slot = slots.slot(i);
@@ -1485,7 +1488,7 @@ const eventFlow = {
       E.dismiss();
       resumeAfterEvent();
     }
-    const busy = feedback.active || sheet.active || dialog.active || textPrompt.active || router.currentName !== 'studio' || studio.buildMode;
+    const busy = feedback.active || sheet.active || dialog.active || textPrompt.active || router.currentName !== 'studio' || studio.buildMode || (!!walks.active && !!guide.current?.group); // Milestone 40d: not during a walkthrough
     freeSec = busy ? 0 : freeSec + dt;
     if (!E.showing) {
       const e = E.pump({ busy: busy || freeSec < EVENT_RULES.graceSec });
@@ -2224,8 +2227,60 @@ function guideTarget(name) {
   if (!name) return null;
   const onStudio = router.currentName === 'studio' && !studio.buildMode;
   if (name === 'founder') return onStudio && !sheet.active ? studio.workerScreenRect(profile.data?.founder?.id, { show: true }) : null;
-  if (name === 'back') return router.currentName === 'staff' ? subTopBar.backRect() : null;
+  if (name === 'back') return router.currentName === 'staff' || (GUIDE_BACK_SCREENS.includes(router.currentName) && !sheet.active) ? subTopBar.backRect() : null;
   if (name === 'create') return onStudio && !sheet.active ? bottomBar.buttonRect('create') : null;
+  // Milestone 40d: the walkthroughs' and the longer first game's spots.
+  if (name.startsWith('bar:')) return onStudio && !sheet.active ? bottomBar.buttonRect(name.slice(4)) : null;
+  if (name === 'top:inbox') return onStudio && !sheet.active ? topBar.inboxRect() : null;
+  if (name === 'liveBuild') return onStudio && !sheet.active && liveBuild.active ? liveBuild.rect() : null;
+  if (name === 'buildDone') return router.currentName === 'studio' && studio.buildMode ? studio.doneRect() : null;
+  if (name === 'decisionPath') {
+    if (!onStudio || !projects.decision) return null;
+    if (!sheet.active) return bottomBar.buttonRect('create');
+    if (sheet.t < 0.3) return null;
+    const id = sheetButtons().find((b) => b.id === 'decide:ship')?.id ?? sheetButtons().find((b) => b.id === 'decision')?.id;
+    if (!id) return null;
+    sheet.scrollTo?.(id);
+    return sheet.buttonRect(id);
+  }
+  if (name === 'ideas:card' || name === 'ideas:choose') {
+    if (router.currentName !== 'ideas' || sheet.active) return null;
+    if (name === 'ideas:choose') return ideaCards.chooseRect();
+    const c = ideaCards.cards().find((x) => x.open && !x.clash);
+    if (!c) return null;
+    const r = ideaCards.cardRect(c.id);
+    if (!r || r.y < layout.safeRect.y || r.y + r.h > layout.safeRect.y + layout.safeRect.h * 0.6) ideaCards.scrollTo(c.id);
+    return ideaCards.cardRect(c.id);
+  }
+  if (name === 'roster:hire') return router.currentName === 'roster' && !sheet.active ? roster.hireRect() : null;
+  if (name === 'roster:staff') {
+    if (router.currentName !== 'roster' || sheet.active) return null;
+    const w = world.workers.find((x) => x.id !== profile.data?.founder?.id) ?? world.workers[0];
+    return w ? roster.cardRect(w.id) : null;
+  }
+  if (name === 'staff:train') {
+    if (router.currentName !== 'staff' || sheet.active) return null;
+    const r = staffDetail.buttonRect('train');
+    if (r && r.y + r.h > layout.safeRect.y + layout.safeRect.h - 40) staffDetail.scrollToEnd(); // (the card's actions are at its foot)
+    return r;
+  }
+  if (name === 'research:start') {
+    if (router.currentName !== 'research' || sheet.active) return null;
+    const id = RESEARCH_LIST().map((r) => r.id).find((x) => researchScreen.startButton(x));
+    if (!id) return null;
+    const r = researchScreen.startButton(id);
+    if (r.y < layout.safeRect.y + 300 || r.y + r.h > layout.safeRect.y + layout.safeRect.h - 200) researchScreen.scrollTo(id);
+    return researchScreen.startButton(id);
+  }
+  if (name === 'catalogue:archive') return router.currentName === 'catalogue' && !sheet.active ? catalogueScreen.archiveButton() : null;
+  if (name === 'catalogue:support') {
+    if (router.currentName !== 'catalogue' || sheet.active) return null;
+    const rec = projects.catalogue.list().filter((r) => r.release).at(-1);
+    if (!rec) return null;
+    const r = catalogueScreen.supportButton(rec.number);
+    if (!r || r.y < layout.safeRect.y + 200 || r.y + r.h > layout.safeRect.y + layout.safeRect.h - 100) catalogueScreen.scrollToGame(rec.number);
+    return catalogueScreen.supportButton(rec.number);
+  }
   if (name === 'releasePath') {
     if (!onStudio) return null;
     if (!sheet.active) return bottomBar.buttonRect('create');
@@ -2238,7 +2293,8 @@ function guideTarget(name) {
   if (name === 'speed') return onStudio && !sheet.active ? topBar.buttons().find((b) => b.id === 'speed1')?.rect ?? null : null;
   if (name.startsWith('sheet:')) {
     if (!sheet.active || sheet.t < 0.3) return null;
-    const want = name.endsWith('*') ? sheetButtons().find((b) => /^release\d+$/.test(b.id))?.id : name.slice(6);
+    const pre = name.slice(6, -1); // a trailing * = the first button whose id starts so (release* = a game to release)
+    const want = name.endsWith('*') ? sheetButtons().find((b) => (pre === 'release' ? /^release\d+$/.test(b.id) : b.id.startsWith(pre)))?.id : name.slice(6);
     if (!want || !sheetButtons().some((b) => b.id === want)) return null;
     sheet.scrollTo?.(want);
     return sheet.buttonRect(want);
@@ -2255,12 +2311,15 @@ function guideFill(step) {
   const sub = (t) => t.split('{founderFirst}').join(name.split(' ')[0]).split('{founder}').join(name);
   return { ...step, title: sub(step.title), text: sub(step.text) };
 }
+const GUIDE_BACK_SCREENS = ['ledger', 'catalogue', 'platforms', 'marketing', 'archive', 'research', 'discoveries', 'engines', 'publishers', 'contracts', 'sponsors', 'awards', 'rivals', 'rankings', 'licensing', 'publishingOffice', 'acquisitions', 'hardware', 'consoles', 'rumours', 'achievements', 'hallOfFame', 'roster', 'project', 'projects']; // Milestone 40d: screens with the ‹ Back the guide can point at
 const guide = new GuideSystem({
-  steps: GUIDE_STEPS,
+  steps: [...walkSteps(), ...GUIDE_STEPS], // Milestone 40d: the walkthroughs (all done until one is started)
   bus,
   targetRect: guideTarget,
   screen: () => router.currentName,
-  canShow: () => started && !feedback.active && !dialog.active && !textPrompt.active && !GUIDE_OFF_SCREENS.includes(router.currentName),
+  // Milestone 40d: a walkthrough never shows over a decision, a ceremony or an event pop-up (it waits).
+  canShow: () => started && !feedback.active && !dialog.active && !textPrompt.active && !GUIDE_OFF_SCREENS.includes(router.currentName) && !(guide.current?.group && (projects.decision || ending.pending || studioEvents.showing)),
+  applies: (st) => (st.when === 'researchIdle' ? !research.active : st.when === 'buildMode' ? studio.buildMode : true),
   pause: () => {
     if (clock.paused) return false;
     clock.pause();
@@ -2279,42 +2338,95 @@ router.layers.unshift({
 let hintsSeen = [];
 // ?debug=1 (the developer's and the automated checks' mode) starts with the guide off, unless &guide=on.
 const GUIDE_DEBUG_OFF = new URLSearchParams(window.location.search).has('debug') && new URLSearchParams(window.location.search).get('guide') !== 'on';
-function loadGuide(data, experienced = false) {
+// Milestone 40d: the walkthroughs load with it (an older run: what is open already waits on Help; NG+: all watched).
+const walks = createWalkthroughs({ bus, guide, unlocks: walkUnlocks({ world, projects, business, shop, publishers, contracts, requests, sponsors, clock, global, hardware, consoles, distribution, studioEvents, secrets, achievements }) });
+function loadGuide(data, experienced = false, ngPlus = false) {
   guide.reset();
   hintsSeen = [...(data?.hints ?? [])];
   if (data) guide.load(data);
   else if (experienced) for (const s of GUIDE_STEPS) guide.state.done.push(s.id);
-  if (GUIDE_DEBUG_OFF) {
-    guide.state.off = true;
-    hintsSeen = Object.keys(SCREEN_HINTS); // and no hint cards over the checks
+  if (data && guide.state.done.includes('G11')) for (const id of GUIDE_M40D_STEPS) if (!guide.state.done.includes(id)) guide.state.done.push(id); // finished the M34 guide
+  if (data?.walks) walks.load(data.walks);
+  else {
+    walks.newGame();
+    if (ngPlus) walks.allDone();
+    else if (data || experienced) walks.adopt(hintsSeen.map((h) => HINT_TO_WALK[h]).filter(Boolean));
   }
+  if (GUIDE_DEBUG_OFF) guide.state.off = true;
 }
 bus.on('guide:done', () => autosave.request('guide'));
 // "Everything is filled in": the New Game screen is ready to start (the Start step waits for it).
 let readySent = false;
 bus.on('screen:change', () => (readySent = false));
-// One-time hint cards (never a wall): the first time an advanced screen opens, a card with "Got it".
-let pendingHint = null;
-bus.on('screen:change', ({ to }) => {
-  if (started && SCREEN_HINTS[to] && !hintsSeen.includes(to)) pendingHint = to;
-});
+// Milestone 40d: the longer first game's moments (each once per run: the guide keeps the events it has seen).
+const guideOnce = (name, cond) => !guide.state.events.includes(name) && cond() && bus.emit(name, {});
+const releasedCount = () => projects.catalogue.list().filter((r) => r.release).length;
+let salesDays = 0;
+bus.on('clock:day', () => guide.current?.id === 'G12' && releasedCount() && ++salesDays >= 7 && bus.emit('guide:salesWeek', {}));
 function guideWatch() {
   if (!readySent && router.currentName === 'newProject' && newProject.ready) {
     readySent = true;
     bus.emit('guide:projectReady', {});
   }
-  if (!pendingHint) return;
-  if (router.currentName !== pendingHint) return void (pendingHint = null);
-  if (guide.active || feedback.active || dialog.active || sheet.active) return;
-  const h = SCREEN_HINTS[pendingHint];
-  hintsSeen.push(pendingHint);
-  pendingHint = null;
-  dialog.show({ title: h.title, body: h.text, art: h.art ?? null, buttons: [{ id: 'ok', label: 'Got it', accent: COL.progress }] }); // Milestone 37: its picture
+  // The two form tips go on as soon as the form is so (also when it already was as the tip appeared).
+  const shown = (id) => guide.current?.id === id && guide.shownId === id && router.currentName === 'newProject';
+  if (shown('G5c') && Object.values(newProject.setup.recipe).filter(Boolean).length >= 6) bus.emit('guide:recipeFull', {});
+  if (shown('G6') && newProject.ready) bus.emit('guide:projectReady', {});
+  guideOnce('guide:game2', () => projects.catalogue.count + projects.jobs.length >= 2);
+  guideOnce('guide:done2', () => projects.catalogue.count >= 2);
+  guideOnce('guide:released2', () => releasedCount() >= 2);
+  guideOnce('guide:requestStarted', () => projects.jobs.some((j) => j.data?.request));
+  guideOnce('guide:requestReady', () => guide.state.done.includes('G19') && requests.board.length > 0 && projects.jobs.length < lanes() && !projects.decision);
+}
+// Milestone 40d: the unlock walkthroughs. A newly opened feature asks "New: … Show me / Later" once the first-game guide
+// is finished and nothing else is on screen (after the M27 pop-ups: it waits longer than they do). A walkthrough whose
+// spot has gone (a decision closed its sheet…) goes back to its start; a step that no longer makes sense is passed.
+let walkCheckAt = 0;
+let walkStuckAt = 0;
+let walkFreeAt = 0;
+let walkLastAt = -1e9; // the last card answered / walkthrough ended (cards are spaced: WALK_RULES.gapSec)
+bus.on('walk:done', () => (walkLastAt = performance.now()));
+const mainGuideDone = () => GUIDE_STEPS.every((st) => guide.state.done.includes(st.id));
+function walkWatch() {
+  const now = performance.now();
+  if (now - walkCheckAt > 1000) {
+    walkCheckAt = now;
+    walks.check();
+  }
+  const free = router.currentName === 'studio' && !studio.buildMode && !sheet.active && !feedback.active && !dialog.active && !textPrompt.active && !projects.decision && !ending.pending && !studioEvents.showing;
+  const cur = guide.current;
+  if (walks.active && cur?.group && !guide.state.off && !guide.visible && free) {
+    walkStuckAt ||= now;
+    if (now - walkStuckAt > 1500) {
+      walkStuckAt = 0;
+      if (cur.when && !guide.applies(cur)) guide.complete(false);
+      else walks.restart();
+    }
+  } else walkStuckAt = 0;
+  if (guide.state.off || walks.active || guide.current || !mainGuideDone() || !free || !walks.nextOffer()) return void (walkFreeAt = 0);
+  walkFreeAt ||= now;
+  if (now - walkFreeAt < (EVENT_RULES.graceSec + 1) * 1000 || now - walkLastAt < WALK_RULES.gapSec * 1000) return;
+  walkFreeAt = 0;
+  offerWalk(walks.nextOffer());
+}
+function offerWalk(w) {
+  walks.later(w.id); // until a button says otherwise (a closed card counts as Later)
+  walkLastAt = performance.now();
+  dialog.show({
+    title: `New: ${w.title}`,
+    body: `${w.line} Want a quick walkthrough?`,
+    art: w.art,
+    buttons: [
+      { id: 'show', label: 'Show me', accent: COL.good, onTap: () => walks.start(w.id) },
+      { id: 'later', label: 'Later', sub: 'Help keeps it', accent: COL.progress, onTap: () => ((walkLastAt = performance.now()), walks.later(w.id)) },
+    ],
+    onCancel: () => ((walkLastAt = performance.now()), walks.later(w.id)),
+  });
 }
 // Help (top bar): the topics, and every tip and hint card seen so far.
 const helpGuide = {
   get seenSteps() {
-    return [...guide.seenSteps.map(guideFill), ...hintsSeen.map((id) => ({ id: `hint-${id}`, ...SCREEN_HINTS[id] }))];
+    return guide.seenSteps.map(guideFill); // (Milestone 40d: the hint cards became walkthroughs: Help → Walkthroughs)
   },
   get state() {
     return guide.state;
@@ -2322,8 +2434,38 @@ const helpGuide = {
   turnOn: () => guide.turnOn(),
   turnOff: () => guide.turnOff(),
 };
-const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: 'dev_ui_05' });
-const settingsScreen = createSettingsScreen({ layout, assets, settings, onBack: () => router.back() });
+// Milestone 40d: Help → Walkthroughs: every opened feature with Show me (again); Dismiss while it waits.
+const helpWalks = {
+  list: () => WALKTHROUGHS.filter((w) => walks.statusOf(w.id)).map((w) => ({ id: w.id, title: w.title, line: w.line, icon: w.art, status: walks.statusOf(w.id) })),
+  more: () => WALKTHROUGHS.filter((w) => !walks.statusOf(w.id)).length,
+  show: (id) => {
+    walks.start(id);
+    router.go('studio');
+  },
+  dismiss: (id) => walks.dismiss(id),
+};
+const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: 'dev_ui_05', walkthroughs: helpWalks });
+// Milestone 40d: Settings → Guide: on / off, and Reset all walkthroughs (in a studio).
+let walksResetNote = null;
+const settingsScreen = createSettingsScreen({
+  layout,
+  assets,
+  settings,
+  onBack: () => router.back(),
+  extra: () =>
+    started
+      ? [
+          {
+            heading: 'Guide',
+            cards: [
+              { id: 'guide', title: 'Guide', lines: [{ text: 'Coach marks for the first game and a walkthrough for each new feature.', color: COL.textMuted }], buttons: [{ id: 'guideOn', label: `${guide.state.off ? '' : '✓ '}On`, accent: guide.state.off ? COL.progress : COL.good, onTap: () => guide.turnOn() }, { id: 'guideOff', label: `${guide.state.off ? '✓ ' : ''}Off`, accent: guide.state.off ? COL.good : COL.progress, onTap: () => guide.turnOff() }] },
+              { id: 'walks', title: 'Walkthroughs', lines: [{ text: walksResetNote ?? 'Every feature you have opened asks again ("New: … Show me / Later").', color: walksResetNote ? COL.good : COL.textMuted }], buttons: [{ id: 'resetWalks', label: 'Reset all walkthroughs', accent: COL.progress, onTap: () => { walks.resetAll(); guide.turnOn(); walksResetNote = `Reset: ${Object.keys(walks.status).length} will ask again on the studio floor.`; } }] },
+            ],
+          },
+        ]
+      : [],
+});
+bus.on('screen:change', () => (walksResetNote = null));
 const storeScreen = createRealStoreScreen({ layout, assets, monetisation, business, hasRun: () => started, debugProvider: () => (monetisation.provider instanceof FakeStoreProvider ? monetisation.provider : null), onBack: () => router.back() }); // Milestone 36
 const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBar, projects, business, lanes, onOpen: (id) => router.go('project', { id }), onRelease: (n) => openMenu('release', n), onNew: () => router.go('newProject') });
 // Effects the Visual settings turn down (Reduced flashes / Low effects: no confetti; Low effects: no sparks or pops).
@@ -2473,7 +2615,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
