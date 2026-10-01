@@ -39,7 +39,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null, requestById = () => null, describeRequest = () => '' }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -60,7 +60,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     if (t.needs === 'entry' && !(franchises?.eligible(t.id).length)) return `Needs a game out ${t.id === 'remake' ? '2 years' : '1 year'}`;
     return null;
   };
-  const locked = (family) => setup.type !== 'original' && ptype().locks.includes(family) && (setup.ipId || setup.source != null);
+  // Milestone 40c: a request fixes its genre (and theme) too.
+  const reqLocked = (family) => (setup?.reqLocks ?? []).includes(family);
+  const locked = (family) => reqLocked(family) || (setup.type !== 'original' && ptype().locks.includes(family) && (setup.ipId || setup.source != null));
   const trimTitle = (s) => s.slice(0, TITLE_MAX);
   function setType(id) {
     if (typeWhy(projectTypeById(id))) return;
@@ -133,6 +135,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       y += 66;
     };
     const chip = (r, label, on, onTap, opts = {}) => {
+      if (opts.reqLock) opts = { ...opts, locked: true }; // Milestone 40c: the request's scope only
       if (ctx && opts.cost != null) {
         // Milestone 40b: the choice and what it costs, on two lines.
         drawButton(ctx, r, '', { selected: on, accent: opts.accent ?? C.progress, locked: opts.locked });
@@ -230,7 +233,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         text(ctx, f.name, r.x + 150, r.y + 26, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
         text(ctx, el ? el.name : 'Choose…', r.x + 150, r.y + 66, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
         if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, r.y + 108, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
-        else if (locked(f.id)) text(ctx, `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, r.y + 108, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
+        else if (locked(f.id)) text(ctx, reqLocked(f.id) ? 'Fixed by the request' : `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, r.y + 108, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
       }
       if (!locked(f.id)) box(r, () => openPicker(f.id), f.id);
     });
@@ -238,7 +241,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     // Milestone 15: combo hints (a slot to change for an undiscovered combo; known combos by name).
     const hintSlots = comboHints(setup.recipe).map((h) => FAMILIES.find((f) => f.id === h.slot)?.name).filter(Boolean);
     const knownHere = combosIn(setup.recipe);
+    const req = setup.request ? requestById(setup.request) : null;
     const hintLines = [
+      ...(req ? [{ t: `Requested by ${req.asker.name}: ${describeRequest(req)} · pays ${req.pay.toLocaleString('en-GB')} Credits (+${req.bonus.toLocaleString('en-GB')} if you beat the target by 20%)`, c: C.purple }] : []),
       ...(knownHere.length ? [{ t: `Combo: ${knownHere.join(', ')}`, c: C.good }] : []),
       ...(hintSlots.length ? [{ t: `✨ This recipe feels close to something special… try a different ${hintSlots.join(' or ')}.`, c: C.purple }] : []),
     ];
@@ -288,7 +293,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const third = (cw - 40) / 3;
     const grid = (i) => ({ x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
     heading('Scope');
-    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, cost: `${costPerDay(sc.id, setup.budget, setup.type, setup.localise).toLocaleString('en-GB')} Cr / day`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
+    SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, reqLock: !!setup.request && sc.id !== setup.scope, cost: `${costPerDay(sc.id, setup.budget, setup.type, setup.localise).toLocaleString('en-GB')} Cr / day`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
     y += Math.ceil(SCOPES.length / 3) * 130 + 10;
     const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
     const lines = [{ t: scope().line, c: C.text }];
@@ -399,7 +404,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       return missing().length === 0;
     },
     startRect,
-    enter() {
+    enter(params) {
       // Milestone 40b: back from the idea cards keeps everything picked so far.
       if (cameFrom() === 'ideas' && setup) {
         textPrompt.close();
@@ -410,6 +415,17 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       const free = world.staffSystem.staff.filter((s) => !unavailable(s.id));
       const firsts = LEAD_ROLES.map((r) => free.find((s) => s.role === r)).filter(Boolean);
       setup.team = [...firsts, ...free.filter((s) => !firsts.includes(s))].map((s) => s.id).slice(0, SCOPES[0].team.max);
+      // Milestone 40c: a game for a request — its genre (theme) and scope fixed, the rest yours.
+      const q = params?.request ? requestById(params.request) : null;
+      if (q) {
+        setup.request = q.id;
+        setup.recipe.genre = q.genre;
+        if (q.theme) setup.recipe.theme = q.theme;
+        setup.scope = q.scope;
+        setup.reqLocks = ['genre', ...(q.theme ? ['theme'] : [])];
+        const sc = SCOPES.find((x) => x.id === q.scope);
+        setup.team = [...firsts, ...free.filter((s) => !firsts.includes(s))].map((s) => s.id).slice(0, sc?.team.max ?? 3);
+      }
       scroll.scrollY = 0;
     },
     exit() {

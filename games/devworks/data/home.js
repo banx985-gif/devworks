@@ -22,7 +22,7 @@ export const TOP_SHEETS = {
 // Red attention badges: which rule lights each slot (null = nothing yet). Rules are named here and worked out
 // by the game: 'lowCondition' = how many staff are tired or low on Morale. ?debug=1 adds a toggle that lights all.
 export const BADGES = {
-  create: 'decision', // Milestone 7: a game waiting for its Beta / Gold decision
+  create: 'createAll', // Milestone 7: a game waiting for its Beta / Gold decision (Milestone 40c: or new requests)
   staff: 'lowCondition',
   research: null,
   compete: null,

@@ -8,6 +8,9 @@
 //   banners over the panel: "Bugs found!", "Breakthrough!", and a big "Finished!" (milestones keep their beat)
 //   speech bubbles over the team (data/banter.js): at most two, never over the panel
 // Tapping the panel opens the Project screen; ▾ / ▴ collapses / expands it. Only on the studio screen.
+// Milestone 40c: a game made for a request shows its target (a bar with the target marker, the points, the days
+// left) and the panel turns green once it is passed; reward drops (gift boxes, chests) sit on the panel's top edge —
+// or in a small tray above the bottom bar when no game is being made — and a tap opens one.
 import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
@@ -15,6 +18,7 @@ import { BANTER, LIVE_BUILD as L } from '../../data/banter.js';
 import { PROJECT_BALANCE } from '../../data/balance.js';
 import { elementById } from '../../data/elements.js';
 import { reviewGame } from '../systems/reviews.js';
+import { drawRewardBox } from './rewardArt.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -34,7 +38,7 @@ export const MARKERS = (() => {
 })();
 export const starsFor = (score) => Math.max(1, Math.min(5, Math.round(score / 20)));
 
-export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar, studio, fanExpectation = () => 10, reducedMotion = () => false, onOpen = () => {}, random = Math.random }) {
+export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar, studio, fanExpectation = () => 10, reducedMotion = () => false, onOpen = () => {}, random = Math.random, requests = null, rewards = null, onOpenDrop = () => {} }) {
   const state = { collapsed: false, lane: 0 };
   const shown = new Map(); // job id → { outputs (counting), bugs, target outputs }
   const pluses = []; // { key, n, t }
@@ -62,6 +66,12 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
   const laneRects = () => {
     const r = rect();
     return { prev: { x: r.x + r.w - 300, y: r.y + 12, w: 88, h: 80 }, next: { x: r.x + r.w - 200, y: r.y + 12, w: 88, h: 80 } };
+  };
+  const drops = () => rewards?.drops ?? [];
+  const dropRect = (i) => {
+    const sr = layout.safeRect;
+    const top = visible() ? rect().y - 92 : bottomBar.rect().y - 106;
+    return { x: sr.x + sr.w - 24 - (i + 1) * 92, y: top, w: 84, h: 84 };
   };
   const tileRect = (i) => {
     const r = rect();
@@ -125,6 +135,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
   }
 
   function update(dt) {
+    dropT += dt;
     sinceBug += dt;
     sinceBubble += dt;
     if (banner && (banner.t += dt) > L.bannerSec * (banner.big ? 1.4 : 1)) banner = null;
@@ -206,15 +217,36 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     text(ctx, String(n), x + size + 8, y, { size: S.heading, bold: true, baseline: 'middle', color: n ? C.bad : C.good });
   }
 
+  let dropT = 0;
+  function renderDrops(ctx) {
+    drops().slice(0, 5).forEach((d, i) => {
+      const dr = dropRect(i);
+      const bob = reducedMotion() ? 0 : Math.sin(dropT * 3 + i) * 5;
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 249, 236, 0.92)';
+      ctx.strokeStyle = d.kind === 'big' ? C.gold : C.purple;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.roundRect(dr.x, dr.y, dr.w, dr.h, 20);
+      ctx.fill();
+      ctx.stroke();
+      drawRewardBox(ctx, assets, d.kind, { x: dr.x + 8, y: dr.y + 8 + bob, w: dr.w - 16, h: dr.h - 16 });
+      ctx.restore();
+    });
+  }
   function render(ctx) {
     const j = job();
-    if (!j) return;
+    if (!j) {
+      renderDrops(ctx);
+      return;
+    }
     const v = projects.view(j);
     const s = shown.get(j.id) ?? { outputs: v.outputs, bugs: v.bugs };
     const r = rect();
     const score = predicted(v);
+    const rq = requests?.viewFor?.(j) ?? null;
     ctx.save();
-    ctx.fillStyle = 'rgba(255, 249, 236, 0.97)';
+    ctx.fillStyle = rq?.passed ? 'rgba(226, 246, 220, 0.97)' : 'rgba(255, 249, 236, 0.97)';
     ctx.strokeStyle = C.outline;
     ctx.lineWidth = THEME.panel.line;
     ctx.beginPath();
@@ -224,7 +256,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     const genre = elementById(v.recipe?.genre);
     if (state.collapsed) {
       if (genre) assets.drawContained(ctx, genre.art, { x: r.x + 18, y: r.y + 12, w: 56, h: 56 });
-      text(ctx, v.title, r.x + 88, r.y + 18, { size: S.body, bold: true, maxWidth: r.w - 88 - 420 });
+      text(ctx, rq ? `${v.title} · ${rq.passed ? 'Target ✓' : `${Math.max(0, rq.daysLeft)} days left`}` : v.title, r.x + 88, r.y + 18, { size: S.body, bold: true, color: rq?.passed ? C.good : C.text, maxWidth: r.w - 88 - 420 });
       drawStars(ctx, r.x + r.w - 410, r.y + 22, starsFor(score), 34);
       drawBugs(ctx, r.x + r.w - 220, r.y + 40, s.bugs, 40);
       drawBar(ctx, barRect(), v.totalFrac);
@@ -254,6 +286,25 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       drawBar(ctx, barRect(), v.totalFrac);
       const br = barRect();
       drawBugs(ctx, br.x + br.w + 40, br.y + br.h / 2, s.bugs, 52);
+      if (rq) {
+        // The request: its target as a marker on a points bar, the points now, the days left.
+        const y = r.y + 336;
+        const max = Math.max(rq.target * 1.3, rq.points);
+        const bw = r.w * 0.38;
+        const bx = r.x + 24;
+        ctx.fillStyle = C.track;
+        ctx.beginPath();
+        ctx.roundRect(bx, y + 8, bw, 22, 11);
+        ctx.fill();
+        ctx.fillStyle = rq.passed ? C.good : C.progress;
+        ctx.beginPath();
+        ctx.roundRect(bx, y + 8, Math.max(22, (bw * Math.min(rq.points, max)) / max), 22, 11);
+        ctx.fill();
+        const tx = bx + (bw * rq.target) / max;
+        ctx.fillStyle = C.outline;
+        ctx.fillRect(tx - 3, y, 6, 38);
+        text(ctx, `${rq.request.asker.name}: ${rq.label} · now ${rq.points} · ${rq.passed ? 'target passed!' : `${Math.max(0, rq.daysLeft)} days left`}`, bx + bw + 20, y + 19, { size: S.small, bold: true, baseline: 'middle', color: rq.passed ? C.good : rq.daysLeft < 14 ? C.bad : C.actionDark, maxWidth: r.w - bw - 68 });
+      }
     }
     drawButton(ctx, toggleRect(), state.collapsed ? '▴' : '▾', { accent: C.outline, font: font(S.heading, true) });
     // "+N" next to the stats.
@@ -330,9 +381,15 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+    renderDrops(ctx);
   }
 
   function onTap(p) {
+    const di = drops().slice(0, 5).findIndex((_, i) => hitRect(p, dropRect(i)));
+    if (di >= 0) {
+      onOpenDrop(drops()[di].id);
+      return true;
+    }
     if (!visible() || !hitRect(p, rect())) return false;
     if (hitRect(p, toggleRect())) state.collapsed = !state.collapsed;
     else if (!state.collapsed && jobs().length > 1 && hitRect(p, laneRects().prev)) state.lane = (state.lane + jobs().length - 1) % jobs().length;
@@ -351,6 +408,11 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     get visible() {
       return visible();
     },
+    // Milestone 40c: anything to show (a game, or drops waiting).
+    get active() {
+      return visible() || drops().length > 0;
+    },
+    dropRect,
     get bubbles() {
       return bubbles;
     },
@@ -362,7 +424,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     },
     shownOf: (id) => shown.get(id) ?? null,
     predicted: () => (job() ? predicted(projects.view(job())) : null),
-    contains: (p) => visible() && hitRect(p, rect()),
+    contains: (p) => (visible() && hitRect(p, rect())) || drops().slice(0, 5).some((_, i) => hitRect(p, dropRect(i))),
     say,
     update,
     render,

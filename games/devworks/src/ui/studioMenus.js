@@ -55,7 +55,7 @@ const C = THEME.color;
 
 // Milestone 37: the decision sheet's pictures (Outsource QA, the bug icon for the QA-heavy choices).
 const DECISION_ICONS = { ship: 'dev_ui_07', delay: 'dev_ui_06', cut: 'dev_ui_08', outsource: 'business_ui_04', crunch: 'dev_ui_05' };
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null, requests = null, requestIcon = () => 'business_ui_03', startRequest = null }) {
   const menus = new MenuRegistry();
   // Milestone 40b: the cost chip on a choice (BottomSheet `cost`).
   const cr = (n) => (n > 0 ? `${Math.round(n).toLocaleString('en-GB')} Cr` : 'Free');
@@ -123,6 +123,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
                   // Milestone 31: the two peaks, shown only once their secret chain has begun.
                   ...(prestige?.().projectOneShown() ? [{ id: 'projectOne', label: 'PROJECT ONE', sub: prestige().projectOneWhy() ?? 'The ultimate game: ready to start', icon: 'cover_27', accent: C.purple, onTap: () => open('projectOne') }] : []),
                   ...(prestige?.().projectXShown() ? [{ id: 'projectX', label: 'PROJECT X', sub: prestige().projectXWhy() ?? 'The ultimate console: ready to design', icon: 'console_visual_08', accent: C.purple, onTap: () => open('projectX') }] : []),
+                  ...(requests?.().unlocked ? [{ id: 'requests', label: 'Requests', sub: `${requests().board.length} on the board · publishers, platforms, sponsors and fans ask for games`, icon: requestIcon(), badge: requests().unseen || null, accent: C.purple, onTap: () => open('requests') }] : []), // Milestone 40c
                   { id: 'board', label: 'Project Board', sub: 'Every game in the works or waiting', icon: 'dev_ui_07', accent: C.progress, onTap: () => openScreen('projects') }, // Milestone 34
                   { id: 'desks', label: desks.name, icon: desks.art, accent: C.progress, onTap: () => open(desks.id) },
                   ...(debugUnlockAll ? [{ id: 'unlockAll', label: 'Debug: unlock all elements', sub: 'Opens all 50 recipe elements', icon: slot.icon, accent: C.progress, onTap: () => debugUnlockAll() }] : []),
@@ -746,6 +747,44 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     };
   });
 
+  // Milestone 40c: the Request Board and one request.
+  menus.register('requests', () => {
+    const rq = requests?.();
+    if (!rq) return null;
+    rq.markSeen();
+    return {
+      title: 'Request Board',
+      subtitle: 'Someone wants a game: a genre, a scope, a target and a deadline. New requests every month.',
+      art: requestIcon(),
+      accent: C.purple,
+      sections: rq.board.length
+        ? [{ columns: 1, buttons: rq.board.map((q) => ({ id: `request:${q.id}`, label: `${q.asker.name}`, sub: rq.describe(q), cost: `Pays ${q.pay.toLocaleString('en-GB')} Cr`, icon: requestIcon(), accent: C.purple, onTap: () => open('request', q.id) })) }]
+        : [{ lines: [{ text: 'No requests right now. New ones come at the end of the month.', color: C.textMuted }] }],
+    };
+  });
+  menus.register('request', (id) => {
+    const rq = requests?.();
+    const q = rq?.byId(id);
+    if (!q) return null;
+    const rel = rq.relationOf(q.asker.name);
+    return {
+      title: `Request: ${q.asker.name}`,
+      subtitle: rq.describe(q),
+      art: requestIcon(),
+      accent: C.purple,
+      sections: [
+        { lines: [
+          { text: `Hit the target within ${q.deadlineDays} days of starting: ${q.pay.toLocaleString('en-GB')} Credits and Fame. Beat it by 20%: +${q.bonus.toLocaleString('en-GB')} more.`, color: C.actionDark },
+          { text: 'Miss it (short or late): half the pay and a little Fan Trust. Either way the game releases and sells as normal.', color: C.text },
+          { text: `They take ${q.sharePct}% of its sales.${rel ? ` You and ${q.asker.name}: ${rel > 0 ? '+' : ''}${rel}.` : ''}`, color: C.textMuted },
+        ] },
+        { columns: 2, buttons: [
+          { id: 'requestGo', label: 'Make it', sub: 'Opens New Game with the request set', cost: 'Free', accent: C.good, onTap: () => startRequest?.(q.id) },
+          { id: 'requestBack', label: 'Back', sub: 'To the board', cost: 'Free', accent: C.progress, onTap: () => open('requests') },
+        ] },
+      ],
+    };
+  });
   // One picker per recipe slot.
   for (const f of FAMILIES) {
     menus.register(`pick:${f.id}`, () => ({
