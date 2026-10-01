@@ -40,21 +40,25 @@ export function createSettingsScreen({ layout, assets, settings, onBack, extra =
     topBar: bar,
     build: () => {
       const groups = [...new Set(SETTINGS.map((s) => s.group))];
+      // Milestone 40e: the series list first, then the game's own sections (extra), then DEVWORKS's extras (tail).
+      const section = (g) => ({
+        heading: g,
+        cards: SETTINGS.filter((s) => s.group === g).map((s) => ({
+          id: s.id,
+          title: s.label,
+          lines: s.line ? [{ text: s.line, color: C.textMuted }] : [],
+          buttons: s.options.map((o) => ({ id: String(o.id), label: `${settings.get(s.id) === o.id ? '✓ ' : ''}${o.label}`, accent: settings.get(s.id) === o.id ? C.good : C.progress, onTap: () => settings.set(s.id, o.id) })),
+        })),
+      });
+      const tail = (g) => SETTINGS.some((s) => s.group === g && s.tail);
       return {
         title: 'Settings',
         icon: 'dev_ui_05',
         subtitle: 'Kept on this device for every studio. Accessibility never changes rewards or secrets.',
         sections: [
-          ...groups.map((g) => ({
-            heading: g,
-            cards: SETTINGS.filter((s) => s.group === g).map((s) => ({
-              id: s.id,
-              title: s.label,
-              lines: s.line ? [{ text: s.line, color: C.textMuted }] : [],
-              buttons: s.options.map((o) => ({ id: String(o.id), label: `${settings.get(s.id) === o.id ? '✓ ' : ''}${o.label}`, accent: settings.get(s.id) === o.id ? C.good : C.progress, onTap: () => settings.set(s.id, o.id) })),
-            })),
-          })),
+          ...groups.filter((g) => !tail(g)).map(section),
           ...extra(),
+          ...groups.filter(tail).map(section),
         ],
       };
     },

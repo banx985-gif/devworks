@@ -42,6 +42,7 @@ export const RUN_PARTS = {
   ending: 'studio',
   requests: 'deals', // Milestone 40c: the Request Board, requests in the works, relations
   rewards: 'studio', // Milestone 40c: unopened reward drops, the idea boost, vouchers
+  items: 'staff', // Milestone 40e: the Studio Store, everyone's likes, item points this year
   monetisation: 'economy / platform market / franchises', // Milestone 36: rewarded-ad uses this run, the VIP research queue
 };
 // What the account file holds (bible §50 "Account save"), never a run save.
@@ -55,6 +56,7 @@ export function serializeRun(s, extra = {}) {
     ending: ser(s.ending),
     requests: ser(s.requests), // Milestone 40c
     rewards: ser(s.rewards),
+    items: ser(s.items), // Milestone 40e
     monetisation: s.monetisation?.serializeRun(),
     secrets: ser(s.secrets),
     studioEvents: ser(s.studioEvents),
@@ -112,6 +114,7 @@ export function loadRun(s, data) {
   s.monetisation?.loadRun(data.monetisation ?? null); // Milestone 36
   s.requests?.load(data.requests ?? null); // Milestone 40c (a save from before it: open once a game is out)
   s.rewards?.load(data.rewards ?? null);
+  s.items?.load(data.items ?? null); // Milestone 40e (a save from before it: an empty store, likes from now)
 }
 
 export function newRun(s, { team, seed }) {
@@ -139,6 +142,7 @@ export function newRun(s, { team, seed }) {
   s.monetisation?.newGame(); // Milestone 36
   s.requests?.newGame(); // Milestone 40c
   s.rewards?.newGame();
+  s.items?.newGame(); // Milestone 40e
 }
 
 // Critical boundary saves (bible §50). On each boundary event the save is written once the event (and everything

@@ -165,6 +165,15 @@ export const EVENTS = [
     ch('skip', 'Skip it', 'Nothing changes.', []),
   ]),
   F('EV_SPONSORGIFT', 'sponsor', 'Sponsor goodies', 'A box of free gear arrived from your sponsor.', { sponsor: true }, [{ type: 'teamMorale', value: 3 }]),
+  // Milestone 40e: sponsor-run challenges and showcase offers (series common feature §5), each with a reward.
+  C('EV_SPONSORJAM', 'sponsor', 'Sponsor game jam', 'Your sponsor runs a weekend game jam and wants {who} to take part.', { sponsor: true, staffMin: 2 }, [
+    ch('jam', 'Join the jam', '{who} is tired; a prize for the Studio Store and some Fan Trust.', [{ type: 'energy', value: -20 }, { type: 'item', source: 'sponsor' }, { type: 'fanTrust', value: 1 }], true),
+    ch('pass', 'Not this time', 'Nothing changes.', []),
+  ], { cooldownDays: 224 }),
+  C('EV_SPONSORSHOWCASE', 'sponsor', 'Sponsor showcase', 'Your sponsor offers a stand at its showcase for {game}.', { sponsor: true, game: true }, [
+    ch('stand', 'Take the stand', '1,500 Credits for the stand; Hype up and a gift from the sponsor.', [{ type: 'credits', value: -1500 }, { type: 'hype', value: 6 }, { type: 'item', source: 'sponsor' }], true),
+    ch('pass', 'Pass', 'Nothing changes.', []),
+  ], { cooldownDays: 224 }),
   // Crossover hooks (they never read another game's files: they work whether BOTWORKS or RACEWORKS is installed or not).
   C('EV_BOTWORKS_DEMO', 'crossover', 'BOTWORKS technology demo', 'BOTWORKS Systems asks your studio to build a small robot-AI tech demo.', { sponsorId: 'SPN08' }, [
     ch('build', 'Build the demo', 'Research points and the BOTWORKS obligation met.', [{ type: 'rp', value: 80 }, { type: 'signal', name: 'botworksDemo' }, { type: 'clue', id: 'botworksDemo' }], true),

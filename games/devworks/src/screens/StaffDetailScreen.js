@@ -19,7 +19,7 @@ const PAD = 36;
 // history(id) → { crunchDays, crunches } (Milestone 7: crunch exposure) or null.
 // career(id) → the record from recruitment.careerOf (Milestone 13) or null; actions(id) → [{ id, label, sub, disabled,
 // accent, onTap }]; dateLabel(day) for "since".
-export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null, career = () => null, actions = () => [], dateLabel = (d) => `day ${d}`, nameOf = (id) => id, advanced = () => false, legacy = () => false }) {
+export function createStaffDetailScreen({ layout, assets, world, topBar, founderInfo = () => null, history = () => null, career = () => null, actions = () => [], dateLabel = (d) => `day ${d}`, nameOf = (id) => id, advanced = () => false, legacy = () => false, itemsInfo = () => null }) {
   let buttons = []; // screen rects of this frame's action buttons
   let id = null;
   let scrollY = 0;
@@ -132,6 +132,14 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       const lines = wrapLines(def.text, cw, S.body);
       para(ctx, def.text, x, y, cw, { color: C.textMuted });
       y += lines.length * S.body * 1.3 + 24;
+    }
+
+    // Milestone 40e: what they love (items of those groups count ×1.5) and the items they were given.
+    const inf = itemsInfo(s.id);
+    if (inf) {
+      y = heading(ctx, 'Likes and items', x, y);
+      for (const line of inf) y += para(ctx, line.text ?? line, x, y, cw, { color: line.color ?? C.text }) + 10;
+      y += 20;
     }
 
     // Career (Milestone 13).

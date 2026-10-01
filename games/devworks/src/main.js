@@ -146,7 +146,16 @@ import { createStudioSplash } from '../../../core/ui/StudioSplash.js';
 import { Settings } from '../../../core/Settings.js';
 import { GUIDE_STEPS, GUIDE_M40D_STEPS, GUIDE_FACE, WALKTHROUGHS, WALK_RULES, walkSteps, HINT_TO_WALK, HELP_TEXT, HELP_TOPICS } from '../data/guide.js';
 import { createWalkthroughs, walkUnlocks } from './systems/walkthroughs.js'; // Milestone 40d
-import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE } from '../data/settings.js';
+import { createItems } from './systems/items.js'; // Milestone 40e
+import { registerItemArt, ITEM_OPTIONAL_ART, itemIcon } from './ui/itemArt.js';
+import { menuSheet } from '../../../core/ui/MenuSheet.js';
+import { HintLine } from '../../../core/ui/HintLine.js';
+import { MENU_GROUPS, MENU_TEXT, FACILITY_ACTIONS, NEXT_HINTS } from '../data/menu.js';
+import { ITEM_RARITIES, ITEM_RULES, itemTypeById, itemGroupById, ITEM_GROUPS } from '../data/items.js';
+import { STATS as STAFF_STATS, ROLES } from '../data/staff.js';
+import { portraitOf as portraitCrop } from '../data/portraits.js';
+import { createCreditsScreen } from './screens/CreditsScreen.js';
+import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE, SHAKE_LEVELS } from '../data/settings.js';
 import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
 import { Haptics } from '../../../core/Haptics.js';
 import { FrameGovernor } from '../../../core/FrameGovernor.js'; // Milestone 39
@@ -210,7 +219,7 @@ import { createResearchScreen } from './screens/ResearchScreen.js';
 import { RESEARCH } from '../data/research.js';
 const RESEARCH_LIST = () => RESEARCH;
 import { elementById as elementName } from '../data/elements.js';
-import { facilityById, stageById, FACILITIES } from '../data/facilities.js';
+import { facilityById, stageById, FACILITIES, FACILITY_LEVELS } from '../data/facilities.js';
 import { platformById } from '../data/platforms.js';
 import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
@@ -329,6 +338,29 @@ const elements = createElementUnlocks({ bus, state: () => ({ rankIndex: business
 // Milestone 40c: requested games (the Request Board) and reward drops (gift boxes and chests).
 const requests = createRequests({ bus, clock, world, projects, business, elements, seed: () => business.marketing.seed });
 const rewards = createRewards({ bus, clock, world, business, research, projects, seed: () => business.marketing.seed });
+// Milestone 40e: items for staff (the Studio Store); their pictures drawn by code until the files exist.
+const items = createItems({ bus, clock, world, business, seed: () => business.marketing.seed });
+registerItemArt(assets);
+// Milestone 40e: the Menu button's icon, drawn by code (three bars on a cream tile; no file).
+assets.setFallback('dev_ui_menu', (ctx, x, y, w, h) => {
+  const sz = Math.min(w, h);
+  const ox = x + (w - sz) / 2;
+  const oy = y + (h - sz) / 2;
+  ctx.fillStyle = '#FFF6E5';
+  ctx.strokeStyle = COL.outline;
+  ctx.lineWidth = Math.max(2, sz * 0.05);
+  ctx.beginPath();
+  ctx.roundRect(ox + sz * 0.08, oy + sz * 0.08, sz * 0.84, sz * 0.84, sz * 0.18);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = COL.action;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.roundRect(ox + sz * 0.24, oy + sz * (0.28 + i * 0.18), sz * 0.52, sz * 0.09, sz * 0.045);
+    ctx.fill();
+  }
+});
+for (const [k, src] of ITEM_OPTIONAL_ART) assets.loadOptional(k, src);
 for (const [k, src] of OPTIONAL_ART) assets.loadOptional(k, src); // drawn by code until the files exist
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
@@ -380,6 +412,7 @@ const loop = new FixedStepLoop({
       guide.update();
       guideWatch();
       walkWatch(); // Milestone 40d
+      hintLine.update(dt); // Milestone 40e
       breakWatch(); // Milestone 36
     }
   },
@@ -395,6 +428,7 @@ const loop = new FixedStepLoop({
     dialog.render(ctx);
     if (tip) drawTip(ctx);
     if (beat && !feedback.active && router.currentName === 'studio' && !studio.buildMode) drawBeat(ctx);
+    if (hintLine.current) hintLine.render(ctx); // Milestone 40e: the next-step hint
     feedback.render(ctx);
     celebrate.render(ctx, 'screen'); // confetti over the big moments
     if (onTestScreen()) drawButton(ctx, pauseButton(), loop.paused ? 'RESUME' : 'PAUSE', { selected: loop.paused });
@@ -542,6 +576,9 @@ function drawPaused(ctx) {
 // Sheets: one registry for station taps, the bars and Create's "Starter Desks". Opening one replaces the open one.
 const makerId = STATIONS.find((s) => s.role === 'Maker').id;
 const menus = createStudioMenus({
+  facilityExtra: (id, o) => facilityExtra(id, o), // Milestone 40e: a facility's main action and level
+  items: () => items,
+  itemsUi: () => itemsUi,
   requests: () => requests, // Milestone 40c
   requestIcon: () => (assets.has('dev_ui_40') ? 'dev_ui_40' : 'business_ui_03'),
   startRequest: (id) => {
@@ -749,12 +786,23 @@ const topBarOptions = {
 };
 const topBar = createTopBar({ ...topBarOptions, home: true });
 const subTopBar = createTopBar({ ...topBarOptions, home: false, back: { label: '‹ Back', onTap: () => router.back() } });
+const bottomItems = BOTTOM_SLOTS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, badge: () => badgeFor(s.id) }));
+const MENU_SLOT = { id: 'menu', label: MENU_TEXT.button, icon: MENU_TEXT.icon, badge: () => null }; // Milestone 40e
 const bottomBar = createBottomBar({
   layout,
   assets,
-  items: BOTTOM_SLOTS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, badge: () => badgeFor(s.id) })),
+  items: bottomItems,
   open: (id) => (id === 'staff' ? router.go('roster') : id === 'research' ? router.go('research') : openMenu(id)),
 });
+// Milestone 40e: the Menu button sits at the end of the bottom row; Settings → "Show Menu button" Off takes it away.
+function syncMenuSlot() {
+  const on = settings.get('showMenu') !== false;
+  const i = bottomItems.indexOf(MENU_SLOT);
+  if (on && i < 0) bottomItems.push(MENU_SLOT);
+  if (!on && i >= 0) bottomItems.splice(i, 1);
+}
+syncMenuSlot();
+settings.onChange((k) => k === 'showMenu' && syncMenuSlot());
 
 // The sheet is asked before the screen; a tap on the top bar still reaches it (Inbox / Help replace the sheet).
 router.layers.push(
@@ -802,7 +850,7 @@ let slotCards = SAVE.slots.map((_, index) => ({ index, summary: null, error: nul
 let lastSlot = null;
 const INTENT_KEY = 'devworks:intent'; // sessionStorage: what to open straight after a reload
 // Milestone 35: every run system in one place (src/systems/runSave.js serializes / loads / starts them).
-const runSystems = () => ({ requests, rewards, world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending, monetisation });
+const runSystems = () => ({ items, requests, rewards, world, projects, business, profile, research, clock, elements, recruitment, training, combos, engines, publishers, contracts, sponsors, rivals, awards, support, global, hardware, consoles, distribution, studioEvents, secrets, ending, monetisation });
 let lastBoundary = null; // { label, event, day } — the last §50 boundary saved
 const saveData = () => serializeRun(runSystems(), { guide: { ...guide.serialize(), hints: [...hintsSeen], walks: walks.serialize() }, boundary: lastBoundary }); // Milestone 40d: the walkthroughs
 const autosave = new Autosave({
@@ -1056,7 +1104,34 @@ const studio = createStudioScreen({
   labPrototype: () => (hardware?.prototypes.length ? HARDWARE.prototypeArt : null), // Milestone 23: the prototype on the lab
   workerIcons: () => !fx('reducedWorkerDetail'), // Milestone 34 (39: low mode too)
   workerDetail: () => (fx('reducedWorkerDetail') ? { full: 8, every: 6 } : { full: 24, every: 3 }), // Milestone 39: 24 in full detail
+  levelOf: (id) => ({ level: world.levels.level(id), pending: !!world.levels.pending(id) }), // Milestone 40e
+  stationDecor: (ctx, st, r) => drawSponsorBoard(ctx, st, r),
+  shakeScale: () => SHAKE_LEVELS[settings.get('screenShake')] ?? 1,
 });
+// Milestone 40e: the sponsor logo board — active sponsors' logos on the Marketing Wall (or, before there is one, on a
+// small board above the Showcase Shelf).
+function drawSponsorBoard(ctx, st, r) {
+  const deals = sponsors.deals ?? [];
+  if (!deals.length) return;
+  const onWall = st.id === 'F13';
+  if (!onWall && !(st.def.showcase && !world.stationById('F13'))) return;
+  const logos = deals.map((d) => sponsorById(d.id)?.logo).filter(Boolean).slice(0, 4);
+  const n = logos.length;
+  const size = Math.min(r.w * 0.26, 90);
+  const bw = n * size + (n + 1) * 10;
+  const bx = r.x + (r.w - bw) / 2;
+  const by = onWall ? r.y + r.h * 0.18 : r.y - size - 26;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,248,236,0.95)';
+  ctx.strokeStyle = COL.outline;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, size + 20, 14);
+  ctx.fill();
+  ctx.stroke();
+  logos.forEach((k, i) => assets.drawContained(ctx, k, { x: bx + 10 + i * (size + 10), y: by + 10, w: size, h: size }));
+  ctx.restore();
+}
 // A new studio stage (Milestone 11): the big moment with the stage's picture; new scopes open.
 bus.on('studio:stage', ({ stage }) => {
   debug.log(`studio stage ${stage.id}: ${stage.name}`);
@@ -1615,7 +1690,8 @@ audio.installUnlock();
 const studioAudio = createStudioAudio({ bus, audio, clock, projects, world, ending, screen: () => (started ? router.currentName : 'title'), prestigeNow: () => projects.jobs.some((j) => j.data?.projectOne) || !!hardware?.draft?.projectX, settings });
 const haptics = new Haptics({ enabled: () => settings.get('haptics') });
 // Milestone 39: the frame governor; low mode (forced, or auto dropped to 30) also means Low effects + Reduced worker detail.
-const governor = new FrameGovernor({ mode: settings.get('fpsMode') === 'low' ? 'low' : 'auto', bus, capFps: true }); // 60 / 30 by time, on any refresh rate
+const govMode = () => ({ low: 'low', high: 'high' })[settings.get('fpsMode')] ?? 'auto'; // Milestone 40e: Graphics Auto / High / Low
+const governor = new FrameGovernor({ mode: govMode(), bus, capFps: true }); // 60 / 30 by time, on any refresh rate
 loop.governor = governor;
 const lowMode = () => governor.state === 'half';
 function fx(k) {
@@ -1628,7 +1704,7 @@ function applyFx() {
   sheet.instant = !!settings.get('reducedMotion');
 }
 settings.onChange(() => applyFx());
-settings.onChange((k) => k === 'fpsMode' && (governor.setMode(settings.get('fpsMode') === 'low' ? 'low' : 'auto'), applyFx()));
+settings.onChange((k) => k === 'fpsMode' && (governor.setMode(govMode()), applyFx()));
 bus.on('perf:fps', () => applyFx());
 assets.sprites.setMaxPixels(SPRITE_CACHE_MAX_PX);
 assets.sprites.frameBudgetMs = 3; // new sprite copies: one slow copy (or a few quick ones) a frame, the rest on the next frames
@@ -2109,6 +2185,7 @@ function staffActions(id) {
   return [
     { id: 'train', label: t ? `Training (${training.daysLeft(id)}d)` : 'Train', onTap: () => openMenu('train', id) },
     ...(training.canMentor(s) ? [{ id: 'mentor', label: training.pairOfMentor(id) ? 'Mentoring' : 'Mentor', accent: COL.purple, onTap: () => openMenu('mentor', id) }] : []),
+    { id: 'giveItem', label: 'Give an item', accent: COL.purple, sub: items.count ? null : 'Give an item: the Studio Store is empty for now.', onTap: () => openMenu('items') }, // Milestone 40e
     { id: 'letGo', label: 'Let go', accent: COL.bad, disabled: !!letWhy, sub: letWhy ? `Let go: ${letWhy.charAt(0).toLowerCase()}${letWhy.slice(1)}.` : null, onTap: () => confirmLetGo(id) },
   ];
 }
@@ -2153,6 +2230,7 @@ const staffDetail = createStaffDetailScreen({
   nameOf: (id) => staffDefById(id)?.name ?? world.staffSystem.get(id)?.name ?? id,
   advanced: () => settings.get('statsMode') === 'advanced', // Milestone 34
   legacy: (id) => profile.isLegacy(id), // Milestone 33
+  itemsInfo: (id) => itemsUi.cardLines(id), // Milestone 40e
   founderInfo: () => {
     const f = profile.founder();
     return f ? { ...f, flag: profile.data.founder.flag, history: profile.data.founder, years: profile.yearsEmployed() } : null;
@@ -2434,6 +2512,168 @@ const helpGuide = {
   turnOn: () => guide.turnOn(),
   turnOff: () => guide.turnOff(),
 };
+// Milestone 40e: the Menu (core/ui/MenuSheet, rows in data/menu.js). A row runs the very code the art and the bars run.
+const MENU_OPEN = {
+  newGame: () => router.go('newProject'),
+  requests: () => openMenu('requests'),
+  engines: () => router.go('engines'),
+  hardware: () => router.go('hardware'),
+  consoles: () => router.go('consoles'),
+  roster: () => router.go('roster'),
+  hire: () => openMenu('recruit'),
+  training: () => openMenu('trainWho'),
+  items: () => openMenu('items'),
+  research: () => router.go('research'),
+  build: () => {
+    sheet.close();
+    router.go('studio');
+    studio.setBuildMode(true);
+  },
+  studioStage: () => openMenu('studio'),
+  awards: () => router.go('awards'),
+  rivals: () => router.go('rivals'),
+  rankings: () => router.go('rankings'),
+  ledger: () => router.go('ledger'),
+  catalogue: () => router.go('catalogue'),
+  marketing: () => router.go('marketing'),
+  publishers: () => router.go('publishers'),
+  contracts: () => router.go('contracts'),
+  sponsors: () => router.go('sponsors'),
+  platforms: () => router.go('platforms'),
+  store: () => router.go('store'),
+  achievements: () => router.go('achievements'),
+  hallOfFame: () => router.go('hallOfFame'),
+  discoveries: () => router.go('discoveries'),
+  rumours: () => router.go('rumours'),
+  help: () => router.go('help', { back: router.currentName }),
+  settings: () => router.go('settings'),
+  mainMenu: () => toTitle(),
+  projects: () => router.go('projects'),
+  publishingOffice: () => router.go('publishingOffice'),
+  storefront: () => openMenu('storefront'),
+};
+function openMenuRow(id) {
+  sheet.close();
+  MENU_OPEN[id]?.();
+}
+// Locked rows say why (the same rules the bars and sheets use).
+function menuState(id) {
+  if (id === 'requests' && !requests.unlocked) return { locked: 'Opens with your first release' };
+  if (id === 'consoles' && !(consoles.own() || consoles.validPrototypes().length)) return { locked: 'Needs a working console prototype (Create → Hardware)' };
+  if (id === 'items') return { badge: items.count || null, sub: `${items.count} of ${items.max} · items that raise a stat for good` };
+  if (id === 'requests' && requests.unseen) return { badge: requests.unseen };
+  if (id === 'help' && walks.waiting) return { badge: walks.waiting };
+  return {};
+}
+menus.register('menu', () => menuSheet({ title: MENU_TEXT.title, subtitle: MENU_TEXT.subtitle, art: MENU_TEXT.icon, groups: MENU_GROUPS, open: openMenuRow, state: menuState }));
+// Training from the Menu: pick who, then their courses (the staff card's Train).
+menus.register('trainWho', () => ({
+  title: 'Training',
+  subtitle: 'Pick someone to train (their card has Train and, for an Elite, Mentor).',
+  art: 'dev_ui_02',
+  sections: [{ columns: 1, buttons: world.staffSystem.staff.map((p) => ({ id: `trainWho:${p.id}`, label: p.name, sub: training.trainingOf(p.id) ? `Training: ${training.daysLeft(p.id)} days left` : `${ROLES[p.role]?.name ?? p.role} · level ${p.level}`, icon: staffDefById(p.id)?.art, iconCrop: staffDefById(p.id) ? portraitCrop(staffDefById(p.id).art) : null, onTap: () => openMenu('train', p.id) })) }],
+}));
+// Every facility's sheet: what it does (the sheet's subtitle), its main action, and its level (series common feature §1, §3).
+const cr = (n) => (n > 0 ? `${Math.round(n).toLocaleString('en-GB')} Cr` : 'Free');
+function facilityExtra(id, { build = false } = {}) {
+  const def = facilityById(id);
+  if (!def || !world.stationById(id)) return [];
+  const out = [];
+  const act = FACILITY_ACTIONS[id];
+  const row = MENU_GROUPS.flatMap((g) => g.rows).find((r) => r.id === act?.row);
+  const st = act ? menuState(act.row) : {};
+  if (act && !build) out.push({ columns: 1, buttons: [{ id: 'mainAction', label: act.label, sub: st.locked ?? row?.line ?? '', icon: row?.icon ?? def.art, locked: !!st.locked, accent: COL.good, onTap: () => !st.locked && openMenuRow(act.row) }] });
+  const ls = shop.levelStatus(id);
+  if (ls) {
+    const lines = [{ text: `Level ${ls.level} of ${ls.max}${ls.level > 1 ? ` — its effect ×${ls.mult}` : ''}: ${def.line}${Object.keys(def.effects ?? {}).length ? '' : ls.level > 1 ? ` (and Fan Trust gains are ${(ls.level - 1) * (FACILITY_LEVELS.noEffectBonus.fanTrustGainPct ?? 0)}% bigger)` : ''}`, color: COL.actionDark }];
+    if (ls.pending) lines.push({ text: `Upgrading to level ${ls.pending.to}: ready ${clock.shortLabel(ls.pending.doneDay)} (it works at level ${ls.level} until then)`, color: COL.progress });
+    out.push({ title: 'Level', lines });
+    if (ls.next && !ls.pending)
+      out.push({ columns: 1, buttons: [{ id: 'upgrade', label: `Upgrade to level ${ls.next.to}`, sub: ls.next.why ?? `Its effect ×${(def.levelMult ?? FACILITY_LEVELS.mult)[ls.next.to - 1]} · ${ls.next.days} days to finish`, cost: cr(ls.next.cost), disabled: !ls.next.ok, icon: 'facility_f02', accent: COL.purple, onTap: () => {
+        const r = shop.upgradeFacility(id);
+        if (!r.ok) return showTip(r.why);
+        showTip(`${def.name}: upgrading to level ${r.to}`);
+        openMenu(build ? 'facility' : id, build ? id : undefined);
+      } }] });
+  }
+  return out;
+}
+bus.on('facility:levelUp', ({ id, level }) => showBeat({ title: `${facilityById(id)?.name ?? id}: level ${level}`, body: 'Its effect is stronger now.' }));
+// The Studio Store's words (the sheets live in studioMenus.js).
+const statLabel = (k) => STAFF_STATS.find((x) => x.key === k)?.label ?? k.toUpperCase();
+const itemsUi = {
+  storeIcon: () => ITEM_RULES.storeIcon,
+  name: (x) => itemTypeById(x.type)?.name ?? x.type,
+  icon: (x) => itemIcon(x.type, x.rarity),
+  line: (x) => {
+    const t = itemTypeById(x.type);
+    return `${ITEM_RARITIES[x.rarity].name} · ${itemGroupById(t.group).name} · raises ${statLabel(t.stat)} by ${ITEM_RARITIES[x.rarity].gain}`;
+  },
+  statLabel,
+  gainLine: (pv) => (pv.like === 'love' ? `Loves this kind of thing: ×${ITEM_RULES.loveMult} and a little Morale` : pv.like === 'dislike' ? `Doesn't like this kind of thing: ×${ITEM_RULES.dislikeMult}` : 'No strong feelings about it') + (pv.capped === 'tier' ? ' · capped by their tier' : pv.capped === 'period' ? ' · capped by this year’s item points' : ''),
+  lovesText: (id) => {
+    const l = items.likesOf(id);
+    return `${l.loves.map((g) => itemGroupById(g)?.name ?? g).join(' and ') || 'nothing in particular'}${l.dislike ? ` (not ${itemGroupById(l.dislike)?.name ?? l.dislike})` : ''}`;
+  },
+  portrait: (id) => {
+    const d = staffDefById(id);
+    return { art: d?.art ?? null, crop: d ? portraitCrop(d.art) : null };
+  },
+  cardLines: (id) => {
+    const l = items.likesOf(id);
+    const got = items.receivedBy(id);
+    return [
+      { text: `Loves: ${l.loves.map((g) => itemGroupById(g)?.name ?? g).join(', ') || '—'}${l.dislike ? ` · doesn't like ${itemGroupById(l.dislike)?.name ?? l.dislike}` : ''}`, color: COL.actionDark },
+      { text: got.length ? `Items received: ${got.length} — ${got.slice(-3).map((g) => `${itemTypeById(g.type)?.name ?? g.type} (+${g.gain} ${statLabel(g.stat)})`).join(', ')}` : 'Items received: none yet', color: COL.text },
+      { text: `Item points left this year: ${items.pointsLeft(id)} of ${ITEM_RULES.periodCap}`, color: COL.textMuted },
+    ];
+  },
+  give(uid, pid) {
+    const r = items.give(uid, pid);
+    if (!r?.ok) return showTip(r?.why ?? 'It can’t be given');
+    const p = world.staffSystem.get(pid);
+    showTip(`${p?.name.split(' ')[0] ?? 'They'}: +${r.gain} ${statLabel(r.stat)}${r.like === 'love' ? ' — they love it!' : ''}`);
+    openMenu('items');
+  },
+  sell(uid) {
+    const v = items.sell(uid);
+    if (v != null) showTip(`Sold for ${v.toLocaleString('en-GB')} Credits`);
+    openMenu('items');
+  },
+};
+// New items are kept in the Inbox with a toast (never a pop-up over play).
+bus.on('items:arrived', ({ item, text }) => {
+  const t = itemTypeById(item.type);
+  studioEvents.note({ title: `New item: ${t.name}`, body: `${ITEM_RARITIES[item.rarity].name} · raises ${statLabel(t.stat)} · ${text}. Give it from the Studio Store.`, icon: itemIcon(item.type, item.rarity), level: 'minor', toast: true });
+});
+bus.on('item:full', () => studioEvents.note({ title: 'The Studio Store is full', body: `A new item could not be kept (${ITEM_RULES.inventoryMax} at most): give some out or sell spares.`, icon: ITEM_RULES.storeIcon, level: 'minor', toast: true }));
+// The next-step hint line under the date (core/ui/HintLine): quiet while the guide shows a step, and off in Settings.
+const firstUnreleased = () => business.unreleased()[0] ?? null;
+const hintLine = new HintLine({
+  rect: () => {
+    const t = topBar.rect();
+    const sr = layout.safeRect;
+    return { x: sr.x + 24, y: t.y + t.h + 10, w: sr.w - 48, h: 72 };
+  },
+  quiet: () => !started || settings.get('showHints') === false || guide.active || router.currentName !== 'studio' || studio.buildMode || sheet.active || feedback.active || dialog.active || !!beat || !!tip,
+  rules: [
+    { id: 'decision', text: NEXT_HINTS.decision, when: () => !!projects.decision, open: () => openMenu('decision') },
+    { id: 'release', text: NEXT_HINTS.release, when: () => !!firstUnreleased() && !firstUnreleased().ea, open: () => openMenu('release', firstUnreleased().number) },
+    { id: 'firstGame', text: NEXT_HINTS.firstGame, when: () => projects.catalogue.count === 0 && !projects.jobs.length, open: () => openMenu('create') },
+    { id: 'drop', text: NEXT_HINTS.drop, when: () => rewards.drops.length > 0, open: () => openDrop(rewards.drops[0].id) },
+    { id: 'request', text: NEXT_HINTS.request, when: () => requests.unseen > 0, open: () => openMenu('requests') },
+    { id: 'items', text: () => NEXT_HINTS.items(items.count), when: () => items.count > 0 && items.store().some((x) => world.staffSystem.staff.some((p) => items.preview(x.uid, p.id).ok)), open: () => openMenu('items') },
+    { id: 'laneFree', text: NEXT_HINTS.laneFree, when: () => projects.jobs.length < lanes() && projects.catalogue.count > 0, open: () => router.go('newProject') },
+    { id: 'research', text: NEXT_HINTS.research, when: () => !research.active, open: () => router.go('research') },
+    { id: 'walks', text: () => NEXT_HINTS.walks(walks.waiting), when: () => walks.waiting > 0, open: () => router.go('help', { back: 'studio', tab: 'walks' }) },
+  ],
+});
+router.layers.push({
+  get active() {
+    return !!hintLine.current && router.currentName === 'studio' && !sheet.active;
+  },
+  handleInput: (hook, p) => hook === 'onTap' && hintLine.handleTap(p),
+});
 // Milestone 40d: Help → Walkthroughs: every opened feature with Show me (again); Dismiss while it waits.
 const helpWalks = {
   list: () => WALKTHROUGHS.filter((w) => walks.statusOf(w.id)).map((w) => ({ id: w.id, title: w.title, line: w.line, icon: w.art, status: walks.statusOf(w.id) })),
@@ -2452,20 +2692,38 @@ const settingsScreen = createSettingsScreen({
   assets,
   settings,
   onBack: () => router.back(),
-  extra: () =>
-    started
+  extra: () => [
+    ...(started
       ? [
           {
-            heading: 'Guide',
+            heading: 'Help and tutorial',
             cards: [
+              { id: 'replay', title: 'Help / tutorial replay', lines: [{ text: 'Every walkthrough, to watch again (Help → Walkthroughs).', color: COL.textMuted }], buttons: [{ id: 'openWalks', label: 'Show the walkthroughs', accent: COL.progress, onTap: () => router.go('help', { back: 'settings', tab: 'walks' }) }] },
               { id: 'guide', title: 'Guide', lines: [{ text: 'Coach marks for the first game and a walkthrough for each new feature.', color: COL.textMuted }], buttons: [{ id: 'guideOn', label: `${guide.state.off ? '' : '✓ '}On`, accent: guide.state.off ? COL.progress : COL.good, onTap: () => guide.turnOn() }, { id: 'guideOff', label: `${guide.state.off ? '✓ ' : ''}Off`, accent: guide.state.off ? COL.good : COL.progress, onTap: () => guide.turnOff() }] },
               { id: 'walks', title: 'Walkthroughs', lines: [{ text: walksResetNote ?? 'Every feature you have opened asks again ("New: … Show me / Later").', color: walksResetNote ? COL.good : COL.textMuted }], buttons: [{ id: 'resetWalks', label: 'Reset all walkthroughs', accent: COL.progress, onTap: () => { walks.resetAll(); guide.turnOn(); walksResetNote = `Reset: ${Object.keys(walks.status).length} will ask again on the studio floor.`; } }] },
             ],
           },
         ]
-      : [],
+      : []),
+    {
+      heading: 'About',
+      cards: [
+        { id: 'legal', title: 'Privacy & legal', lines: [{ text: 'DEVWORKS keeps your studios on this device. It has no account and collects no personal data of its own.', color: COL.textMuted }], buttons: [{ id: 'openLegal', label: 'Privacy & legal', accent: COL.progress, onTap: () => showLegal() }] },
+        { id: 'credits', title: 'Credits', lines: [{ text: 'The people behind DEVWORKS.', color: COL.textMuted }], buttons: [{ id: 'openCredits', label: 'Credits', accent: COL.progress, onTap: () => router.go('credits') }] },
+      ],
+    },
+  ],
 });
 bus.on('screen:change', () => (walksResetNote = null));
+function showLegal() {
+  dialog.show({
+    title: 'Privacy & legal',
+    body: 'DEVWORKS keeps your saves on this device only. It has no account and collects no personal data of its own. Any ads or purchases go through the store and ad services of your device, under their own privacy policies.',
+    art: 'dev_brand_01',
+    buttons: [{ id: 'ok', label: 'Close', accent: COL.progress }],
+  });
+}
+const creditsScreen = createCreditsScreen({ layout, assets, renderer, onBack: () => router.back() });
 const storeScreen = createRealStoreScreen({ layout, assets, monetisation, business, hasRun: () => started, debugProvider: () => (monetisation.provider instanceof FakeStoreProvider ? monetisation.provider : null), onBack: () => router.back() }); // Milestone 36
 const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBar, projects, business, lanes, onOpen: (id) => router.go('project', { id }), onRelease: (n) => openMenu('release', n), onNew: () => router.go('newProject') });
 // Effects the Visual settings turn down (Reduced flashes / Low effects: no confetti; Low effects: no sparks or pops).
@@ -2615,7 +2873,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router
@@ -2654,6 +2912,7 @@ router
   .register('splash', splashScreen) // Milestone 34
   .register('help', helpScreen)
   .register('settings', settingsScreen)
+  .register('credits', creditsScreen) // Milestone 40e
   .register('store', storeScreen)
   .register('projects', projectBoard)
   .register('saves', saveInspector) // Milestone 35

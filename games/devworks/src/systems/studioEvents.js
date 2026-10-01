@@ -112,6 +112,9 @@ export function createStudioEvents({ bus, clock, world, business, projects, rese
       case 'signal':
         sponsors()?.signal?.(e.name);
         break;
+      case 'item': // Milestone 40e: an item for the Studio Store (src/systems/items.js listens)
+        bus.emit('event:item', { source: e.source ?? 'sponsor', text: words(byId[inst.id].title, p) });
+        break;
       case 'clue':
         if (!clues.some((c) => c.id === e.id)) clues.push({ id: e.id, day: today(), event: inst.id });
         break;

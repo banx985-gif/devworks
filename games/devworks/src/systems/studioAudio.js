@@ -35,8 +35,8 @@ export function createStudioAudio({ bus, audio, clock, projects, world, ending =
   }
   function applyVolumes() {
     if (!settings) return;
-    const m = (settings.get('master') ?? 100) / 100;
-    audio.setVolumes({ sfx: m * ((settings.get('sfx') ?? 100) / 100), music: m * 0.6 * ((settings.get('music') ?? 75) / 100) });
+    const m = settings.get('muted') ? 0 : (settings.get('master') ?? 100) / 100; // Milestone 40e: Sound off, and each mute
+    audio.setVolumes({ sfx: settings.get('sfxMuted') ? 0 : m * ((settings.get('sfx') ?? 100) / 100), music: settings.get('musicMuted') ? 0 : m * 0.6 * ((settings.get('music') ?? 75) / 100) });
   }
   settings?.onChange?.(() => applyVolumes());
   applyVolumes();

@@ -47,7 +47,7 @@ import { DECISIONS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 import { actionById, CONVENTIONS } from '../../data/marketing.js';
 import { elementById } from '../../data/elements.js';
 import { fanExpectationFor } from '../systems/marketing.js';
-import { facilityById, stageById } from '../../data/facilities.js';
+import { facilityById, stageById, FACILITIES } from '../../data/facilities.js';
 import { HW_SLOTS, componentsOf } from '../../data/hardware.js';
 import { DISTRIBUTION } from '../../data/distribution.js';
 
@@ -55,7 +55,7 @@ const C = THEME.color;
 
 // Milestone 37: the decision sheet's pictures (Outsource QA, the bug icon for the QA-heavy choices).
 const DECISION_ICONS = { ship: 'dev_ui_07', delay: 'dev_ui_06', cut: 'dev_ui_08', outsource: 'business_ui_04', crunch: 'dev_ui_05' };
-export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null, requests = null, requestIcon = () => 'business_ui_03', startRequest = null }) {
+export function createStudioMenus({ today = () => 0, debugSkipYear = null, decide = null, dateOf = (d) => `day ${d}`, world, open, projects, business, newGame, openProject, isUnlocked, lockReason = () => 'Locked', recipe = () => ({}), debugUnlockAll = null, onPick, picked, doRelease, openScreen, toTitle = null, runMarketing = null, shop = null, buyFacility = null, sellFacility = null, upgradeStudio = null, buildMode = null, debugAward = null, recruitment = null, training = null, hireCard = null, startCourse = null, lanes = () => 1, openProjectById = null, debugHire = null, debugSpawn = null, engines = null, startEngine = null, publishers = null, contracts = null, acceptContract = null, sponsors = null, support = null, startSupport = null, newGameAs = null, global = null, hardware = null, pickPart = null, startHardware = null, consoles = null, rumours = null, prestige = null, achievements = null, distribution = null, fullLaunch = null, setStorefront = null, knownBefore = () => false, yearEnding = null, saveInspector = null, requests = null, requestIcon = () => 'business_ui_03', startRequest = null, facilityExtra = () => [], items = null, itemsUi = null }) {
   const menus = new MenuRegistry();
   // Milestone 40b: the cost chip on a choice (BottomSheet `cost`).
   const cr = (n) => (n > 0 ? `${Math.round(n).toLocaleString('en-GB')} Cr` : 'Free');
@@ -76,8 +76,13 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
           lines.push({ text: `${x.staff.name} (${ROLES[x.staff.role].name}): ${w.stateLine(x, WORK_STATE[x.phase].line)}`, color: C.actionDark });
         }
       }
-      return { title: def.name, subtitle: def.purpose, art: def.art, sections: lines.length ? [{ lines }] : [] };
+      return { title: def.name, subtitle: def.purpose, art: def.art, sections: [...(lines.length ? [{ lines }] : []), ...facilityExtra(def.id)] }; // Milestone 40e: main action + level
     });
+  }
+  // Milestone 40e: every other facility has a sheet too (tapped on the floor): what it does, its main action, its level.
+  for (const def of FACILITIES) {
+    if (STATIONS.some((x) => x.id === def.id)) continue;
+    menus.register(def.id, () => (world().stationById(def.id) ? { title: def.name, subtitle: `${def.role} · ${def.line}${def.later ? ` (with ${def.later})` : ''}`, art: def.art, sections: facilityExtra(def.id) } : null));
   }
 
   // Bottom bar sheets (Staff opens the Roster screen instead). Create leads to the Starter Desks, the Maker station.
@@ -360,7 +365,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       title: def.name,
       subtitle: `${def.role} · ${def.line}${def.later ? ` (with ${def.later})` : ''}`,
       art: def.art,
-      sections: [{ columns: 1, buttons: [{ id: 'sell', label: 'Sell it', sub: why ?? `Half of its ${def.cost.toLocaleString('en-GB')} back; the space is free again`, cost: `+${s.refundOf(id).toLocaleString('en-GB')} Cr`, disabled: !!why, accent: C.bad, onTap: () => sellFacility?.(id) }] }],
+      sections: [...facilityExtra(id, { build: true }), { columns: 1, buttons: [{ id: 'sell', label: 'Sell it', sub: why ?? `Half of what it cost (and its upgrades) back; the space is free again`, cost: `+${s.refundOf(id).toLocaleString('en-GB')} Cr`, disabled: !!why, accent: C.bad, onTap: () => sellFacility?.(id) }] }],
     };
   });
   // The studio stage (Business → Studio).
@@ -781,6 +786,68 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
         { columns: 2, buttons: [
           { id: 'requestGo', label: 'Make it', sub: 'Opens New Game with the request set', cost: 'Free', accent: C.good, onTap: () => startRequest?.(q.id) },
           { id: 'requestBack', label: 'Back', sub: 'To the board', cost: 'Free', accent: C.progress, onTap: () => open('requests') },
+        ] },
+      ],
+    };
+  });
+  // Milestone 40e: the Studio Store — pick an item, then a person; the exact gain shows before it is given.
+  menus.register('items', () => {
+    const it = items?.();
+    if (!it) return null;
+    const U = itemsUi();
+    const list = it.store();
+    return {
+      title: 'Studio Store',
+      subtitle: `${list.length} of ${it.max} · items raise one stat for good. Tap one to give it to someone.`,
+      art: U.storeIcon(),
+      accent: C.purple,
+      sections: list.length
+        ? [{ columns: 1, buttons: list.map((x) => ({ id: `item:${x.uid}`, label: U.name(x), sub: U.line(x), icon: U.icon(x), accent: C.purple, onTap: () => open('item', x.uid) })) }]
+        : [{ lines: [{ text: 'No items yet. They come from well-reviewed launches, fan mail, requests, great training, sponsors, awards, achievements and well-wishers.', color: C.textMuted }] }],
+    };
+  });
+  menus.register('item', (uid) => {
+    const it = items?.();
+    const x = it?.system.get(uid);
+    if (!x) return null;
+    const U = itemsUi();
+    const people = world().staffSystem.staff.map((p) => ({ p, pv: it.preview(uid, p.id) })).sort((a, b) => b.pv.gain - a.pv.gain);
+    return {
+      title: U.name(x),
+      subtitle: U.line(x),
+      art: U.icon(x),
+      accent: C.purple,
+      sections: [
+        { title: 'Give it to…', columns: 1, buttons: people.map(({ p, pv }) => ({ id: `giveTo:${p.id}`, label: p.name, sub: pv.ok ? U.gainLine(pv) : pv.why, cost: pv.ok ? `+${pv.gain} ${U.statLabel(pv.stat)}` : null, icon: U.portrait(p.id).art, iconCrop: U.portrait(p.id).crop, disabled: !pv.ok, accent: pv.like === 'love' ? C.good : C.progress, onTap: () => open('itemGive', `${uid}|${p.id}`) })) },
+        { columns: 2, buttons: [
+          { id: 'itemSell', label: 'Sell it', sub: 'A few Credits back', cost: `+${it.system.sellValue(uid).toLocaleString('en-GB')} Cr`, accent: C.bad, onTap: () => itemsUi().sell(uid) },
+          { id: 'itemBack', label: 'Back', sub: 'To the Studio Store', cost: 'Free', accent: C.progress, onTap: () => open('items') },
+        ] },
+      ],
+    };
+  });
+  menus.register('itemGive', (key) => {
+    const [uid, pid] = String(key).split('|');
+    const it = items?.();
+    const x = it?.system.get(uid);
+    const p = world().staffSystem.get(pid);
+    if (!x || !p) return null;
+    const U = itemsUi();
+    const pv = it.preview(uid, pid);
+    return {
+      title: `Give ${U.name(x)} to ${p.name.split(' ')[0]}?`,
+      subtitle: U.line(x),
+      art: U.icon(x),
+      accent: C.purple,
+      sections: [
+        { lines: [
+          { text: pv.ok ? `${U.statLabel(pv.stat)} ${pv.now} → ${pv.now + pv.gain} (+${pv.gain})` : pv.why, color: pv.ok ? C.good : C.bad },
+          { text: U.gainLine(pv), color: C.text },
+          { text: `${p.name.split(' ')[0]} loves ${U.lovesText(pid)}. Item points left this year: ${it.pointsLeft(pid)}.`, color: C.textMuted },
+        ] },
+        { columns: 2, buttons: [
+          { id: 'itemConfirm', label: 'Give it', sub: 'The item is used up', cost: pv.ok ? `+${pv.gain} ${U.statLabel(pv.stat)}` : null, disabled: !pv.ok, accent: C.good, onTap: () => itemsUi().give(uid, pid) },
+          { id: 'itemCancel', label: 'Back', sub: 'Pick someone else', cost: 'Free', accent: C.progress, onTap: () => open('item', uid) },
         ] },
       ],
     };

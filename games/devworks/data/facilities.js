@@ -64,7 +64,9 @@ export const FACILITIES = [
   { id: 'F35', name: 'The Vault', role: 'Secret', unlock: { secret: 'SEC-FAC-02' }, cost: 22000, line: 'PROJECT ONE / PROJECT X clue hub', effects: {}, later: 'PROJECT ONE / X (Milestone 31)', size: { w: 3, h: 3 } },
 ].map((f) => {
   const size = f.size ?? { w: 2, h: 2 };
-  return { ...f, art: `facility_${f.id.toLowerCase()}`, size, seats: f.role === 'Showcase' || f.role === 'Secret' || f.role === 'Arena link' ? [] : seat1(size.w, size.h) };
+  // Milestone 40e: the speed facilities (work speed, bug fixing, rest) level up more gently: ×1 / ×1.15 / ×1.3.
+  const speed = Object.keys(f.effects).some((k) => /^(progressPct|statPct.|phasePct.|bugFixPct|restEnergyPct)/.test(k));
+  return { ...f, ...(speed ? { levelMult: [1, 1.15, 1.3] } : {}), art: `facility_${f.id.toLowerCase()}`, size, seats: f.role === 'Showcase' || f.role === 'Secret' || f.role === 'Arena link' ? [] : seat1(size.w, size.h) };
 });
 export const facilityById = (id) => FACILITIES.find((f) => f.id === id) ?? null;
 
@@ -87,3 +89,18 @@ export const STAGES = [
   { id: 5, name: 'Global Campus', cols: 22, rows: 28, staffCap: 32, lanes: 3, cost: 90000, shell: 'studio_shell_upgrade_04', event: 'dev_event_12', unlock: { rank: 'S', year: 16 }, line: 'World-class campus; hardware, publishing and Mega Projects.', deskShare: 2, look: { wallFace: '#EFEADF', wallSide: '#DDD5C4', floorA: '#C9D3C0', floorB: '#BFCAB6', grout: '#A2AE98' }, zoomMin: 0.45 },
 ];
 export const stageById = (id) => STAGES.find((s) => s.id === id) ?? STAGES[0];
+
+// Milestone 40e: facility levels 1–3 (series common feature §3; core/FacilityLevels). Bought with Credits from the
+// facility's sheet; each level multiplies the facility's effects (×1 / ×1.5 / ×2; count effects such as dealOffers round
+// down: 1 / 1 / 2). Rank-gated, a few game days to finish (it works at the old level meanwhile). Selling pays back
+// SELL_BACK_PCT of the build price and of every upgrade. A facility with no effect of its own gets noEffectBonus per
+// level above 1 (a better-kitted room: Fan Trust gains a little bigger). All numbers are placeholders (M40e Log).
+export const FACILITY_LEVELS = {
+  max: 3,
+  mult: [1, 1.5, 2], // the speed facilities (work speed: progressPct, statPct.*, phasePct.*) plus bug fixing and rest, have levelMult [1, 1.15, 1.3]
+  rank: [null, 'D', 'B'], // the rank needed for level 2 / level 3
+  costPct: [0, 100, 200], // % of the build price for the upgrade to that level
+  days: [0, 7, 14], // game days the upgrade to that level takes
+  countKeys: ['dealOffers', 'legacyArchive'], // whole-number effects
+  noEffectBonus: { fanTrustGainPct: 2 }, // a better-kitted room: visitors and fans notice
+};

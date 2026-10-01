@@ -9,8 +9,12 @@
 // Research is Milestone 12 (researched() is empty until then) and awards Milestone 19 (state.awards, with a debug
 // award so S3 can be reached before then). Secret facilities (F34 / F35) stay hidden.
 //
+// Milestone 40e: facility levels 1–3 (data FACILITY_LEVELS, the world's core/FacilityLevels): levelStatus(id) → { level,
+// max, pending, next: { to, cost, days, rank, ok, why } }; upgradeFacility(id) pays and starts it (finished on a later
+// day: 'facility:levelUp'); selling pays back SELL_BACK_PCT of the price and of every upgrade.
+//
 // Events: 'facility:bought' { station, cost }, 'facility:sold' { id, refund }, and the world's 'studio:stage'.
-import { FACILITIES, facilityById, SELL_BACK_PCT, KEEP, STAGES, stageById } from '../../data/facilities.js';
+import { FACILITIES, FACILITY_LEVELS, facilityById, SELL_BACK_PCT, KEEP, STAGES, stageById } from '../../data/facilities.js';
 import { FAME } from '../../data/balance.js';
 import { researchById } from '../../data/research.js';
 import { rankIndexOf } from '../../../../core/CompanyRank.js';
@@ -58,7 +62,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     return { ok: true, station: st };
   }
 
-  const refundOf = (id) => Math.round(((facilityById(id)?.cost ?? 0) * SELL_BACK_PCT) / 100);
+  const refundOf = (id) => Math.round((((facilityById(id)?.cost ?? 0) + (world.levels?.invested(id) ?? 0)) * SELL_BACK_PCT) / 100); // Milestone 40e: upgrades too
   function sellWhy(id) {
     const st = world.stationById(id);
     if (!st) return 'Not in the studio';
@@ -72,6 +76,7 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     if (why) return { ok: false, why };
     const refund = refundOf(id);
     world.removeStation(id);
+    world.levels?.remove(id); // Milestone 40e: its levels go with it
     business.economy.add('credits', refund, `Sold: ${facilityById(id).name}`, 'facilities');
     bus?.emit('facility:sold', { id, refund });
     return { ok: true, refund };
@@ -92,6 +97,32 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     const miss = reqs.find((r) => !r.ok);
     return { stage: st, reqs, ok: !miss, why: miss ? `Needs ${miss.label}` : null };
   }
+  // Milestone 40e: facility levels.
+  const LV = FACILITY_LEVELS;
+  function levelStatus(id) {
+    const def = facilityById(id);
+    if (!def || !world.stationById(id)) return null;
+    const lv = world.levels.level(id);
+    const pending = world.levels.pending(id);
+    let nx = null;
+    if (lv < LV.max) {
+      const to = lv + 1;
+      const cost = Math.round((def.cost * LV.costPct[to - 1]) / 100);
+      const rank = LV.rank[to - 1];
+      const why = pending ? `Upgrading: ready on day ${pending.doneDay - clock.totalDays > 0 ? `${pending.doneDay - clock.totalDays} more` : 'today'}` : rank && rankIndex() < rankIndexOf(FAME.ranks, rank) ? `Needs Rank ${rank}` : business.credits < cost ? `Needs ${cost.toLocaleString('en-GB')} Credits` : null;
+      nx = { to, cost, days: LV.days[to - 1], rank, ok: !why, why };
+    }
+    return { level: lv, max: LV.max, pending, next: nx, mult: world.levels.mult(id, def.levelMult ?? null) };
+  }
+  function upgradeFacility(id) {
+    const s = levelStatus(id);
+    if (!s?.next?.ok) return { ok: false, why: s?.next?.why ?? (s ? 'Top level' : 'Not in the studio') };
+    const def = facilityById(id);
+    business.economy.spend('credits', s.next.cost, `Upgrade: ${def.name} to level ${s.next.to}`, 'facilities');
+    return world.levels.start(id, { cost: s.next.cost, today: clock.totalDays, days: s.next.days });
+  }
+  bus?.on('clock:day', () => world.levels.tick(clock.totalDays));
+
   function upgrade() {
     const n = next();
     if (!n?.ok) return { ok: false, why: n?.why ?? 'Already the biggest studio for now' };
@@ -108,6 +139,8 @@ export function createFacilityShop({ bus, world, business, clock, projects, rese
     refundOf,
     next,
     upgrade,
+    levelStatus, // Milestone 40e
+    upgradeFacility,
     lockReason,
     stage: () => stageById(world.stage),
     // The shop list: every facility not hidden, open ones first, then locked, then owned.

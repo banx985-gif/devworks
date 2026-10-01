@@ -20,7 +20,8 @@ import { Agent } from '../../../../core/Agent.js';
 import { StaffSystem } from '../../../../core/StaffSystem.js';
 import { STUDIO, STATIONS, PROPS, DOORWAY, WALKER } from '../../data/studio.js';
 import { STAFF_BALANCE } from '../../data/balance.js';
-import { FACILITIES, stageById } from '../../data/facilities.js';
+import { FACILITIES, FACILITY_LEVELS, stageById } from '../../data/facilities.js';
+import { FacilityLevels } from '../../../../core/FacilityLevels.js'; // Milestone 40e
 import { STARTERS, STAT_KEYS, ROLES, TIERS, TRAITS, staffDefById } from '../../data/staff.js';
 import { RECRUIT } from '../../data/recruitment.js';
 
@@ -182,7 +183,27 @@ export function createStudioWorld({ bus, rng, debug }) {
   // The effect query (Milestone 11): the sum of one effect over every facility in the studio.
   // Milestone 18: other sources (the sponsors' perks) add to it through addEffectSource(fn(key) → number).
   const effectSources = [];
-  const effect = (key) => stations.reduce((t, st) => t + (st.def.effects?.[key] ?? 0), 0) + effectSources.reduce((t, f) => t + (f(key) ?? 0), 0);
+  // Milestone 40e: a facility's level multiplies its effects (core/FacilityLevels; data/facilities.js FACILITY_LEVELS):
+  // ×1 / ×1.5 / ×2, whole-number effects round down; one with no effect of its own gets noEffectBonus per level above 1.
+  const levels = new FacilityLevels({ maxLevel: FACILITY_LEVELS.max, mult: FACILITY_LEVELS.mult, bus });
+  const L = FACILITY_LEVELS;
+  function stationEffect(st, key) {
+    const own = st.def.effects ?? {};
+    const lv = levels.level(st.id);
+    if (!Object.keys(own).length) return lv > 1 ? (L.noEffectBonus[key] ?? 0) * (lv - 1) : 0;
+    const v = own[key] ?? 0;
+    if (!v || lv === 1) return v;
+    const m = levels.mult(st.id, st.def.levelMult ?? null);
+    return L.countKeys.includes(key) ? Math.floor(v * m) : v * m;
+  }
+  const effect = (key) => stations.reduce((t, st) => t + stationEffect(st, key), 0) + effectSources.reduce((t, f) => t + (f(key) ?? 0), 0);
+  // What one facility gives now (its sheet: "+12% bug fixing at level 2").
+  const facilityEffects = (id) => {
+    const st = stationById(id);
+    if (!st) return {};
+    const keys = Object.keys(st.def.effects ?? {}).length ? Object.keys(st.def.effects) : Object.keys(L.noEffectBonus);
+    return Object.fromEntries(keys.map((k) => [k, +stationEffect(st, k).toFixed(2)]));
+  };
 
   // Studio stage (Milestone 11): a bigger floor. The grid is rebuilt at the new size; every station is checked again
   // where it stands (settle keeps a legal one exactly where it is; only an illegal one moves, to its home spot or the
@@ -307,6 +328,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   // in through the door to their stations. Each starter's station is placed; the room starts from its home layout.
   function newGame(team = STARTERS) {
     setStage(1, { quiet: true });
+    levels.load(null); // Milestone 40e
     for (const st of pool) st.fp = { ...st.def.fp };
     setStations(stationIdsFor(team));
     settle();
@@ -359,6 +381,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   function serialize() {
     return {
       stage, // Milestone 11
+      levels: levels.serialize(), // Milestone 40e
       stations: stations.map((s) => ({ id: s.id, fp: { ...s.fp } })),
       staff: staffSystem.serialize(),
       workers: workers.map((w) => ({ id: w.id, x: Math.round(w.agent.x), y: Math.round(w.agent.y), phase: w.phase, facing: w.agent.facing, tiredIcon: w.tiredIcon, station: w.station?.id ?? null, away: w.away })),
@@ -369,6 +392,7 @@ export function createStudioWorld({ bus, rng, debug }) {
   // Back to where everyone was: walkers carry on to where they were going.
   function load(data) {
     setStage(data.stage ?? 1, { quiet: true }); // a save from before Milestone 11 is S1
+    levels.load(data.levels ?? null); // Milestone 40e: an older save has every facility at level 1
     // This studio's stations: the saved ones, the "always" ones (a pre-Milestone 5 save gains the shelf) and each
     // member of staff's own station.
     for (const st of pool) st.fp = { ...st.def.fp };
@@ -429,6 +453,9 @@ export function createStudioWorld({ bus, rng, debug }) {
     setStage,
     removeStation,
     effect,
+    levels, // Milestone 40e
+    facilityEffects,
+    facilityLevel: (id) => (stationById(id) ? levels.level(id) : 0), // for secrets and achievements: 0 = not in the studio
     addEffectSource: (fn) => effectSources.push(fn),
     stations,
     stationPool: pool,

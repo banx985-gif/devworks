@@ -43,7 +43,7 @@ const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes b
 const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }) }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1 }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -536,6 +536,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
           assets.draw(ctx, it.def.art, r.x, r.y, r.w, r.h);
           if (it === shelf) drawShelfCovers(ctx, r);
           if (it.id === 'F28' && labPrototype()) assets.drawContained(ctx, labPrototype(), { x: r.x + r.w * 0.3, y: r.y + r.h * 0.12, w: r.w * 0.4, h: r.h * 0.32 }); // Milestone 23: the prototype on the lab
+          stationDecor?.(ctx, it, r); // Milestone 40e: the sponsor logo board
+          drawLevelBadge(ctx, it, r); // Milestone 40e
         }
       }
       if (moving) drawMovingStation(ctx);
@@ -657,6 +659,29 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     }
   }
 
+  // Milestone 40e: a facility's level (code-drawn): a round badge with the level and stars; an arrow while upgrading.
+  function drawLevelBadge(ctx, it, r) {
+    const lv = levelOf(it.id);
+    if (!lv || (lv.level <= 1 && !lv.pending)) return;
+    const R = Math.max(26, Math.min(40, r.w * 0.09));
+    const cx = r.x + r.w * 0.86;
+    const cy = r.y + r.h * 0.16;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = lv.level >= 3 ? '#D99A00' : lv.level === 2 ? '#2F7FD0' : '#8A8F98';
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `bold ${Math.round(R * 1.1)}px ${THEME.family}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(lv.pending ? '↑' : String(lv.level), cx, cy + 1);
+    ctx.restore();
+  }
+
   function drawProp(ctx, it) {
     const r = artRect(it);
     if (!it.def.flip) {
@@ -693,7 +718,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       pose.sy = own.sy;
     }
     const f = feetOf(w);
-    const shakeX = m.shake > 0 ? Math.sin(animT * 70) * 5 * Math.min(1, m.shake / 0.2) : 0;
+    const shakeX = m.shake > 0 ? Math.sin(animT * 70) * 5 * Math.min(1, m.shake / 0.2) * shakeScale() : 0; // Milestone 40e: Settings → Screen shake
     const r = workerRect(w);
     drawCharacter(ctx, assets, w.def.art, f.x + shakeX, f.y, r.w, r.h, pose);
   }
