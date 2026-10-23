@@ -3,9 +3,12 @@
 // caps and sources are game data; the game says how to read and raise a person's stat.
 //
 //   const items = new ItemSystem({ types, rarities, rules, rng, bus, person, statOf, statCap, raise, morale })
-//     types: [{ id, name, group, stat }] · rarities: { id: { name, gain, sell, weight } } (gain = stat points)
+//     types: [{ id, name, group, stat, gainMult? }] · rarities: { id: { name, gain, sell, weight } } (gain = stat points)
+//     gainMult (optional, BOTWORKS Milestone 26c): this type's share of the rarity's points, at least 1 (e.g. 0.34 for an
+//       item that raises every stat a little — the game's statOf / raise decide what its stat means); none = ×1
 //     rules: { inventoryMax, periodCap (item points per person per period), loveMult 1.5, dislikeMult 0.5,
-//              loveMorale (morale for a loved item), likes: { loves: [min, max], dislikeChance } }
+//              loveMorale (morale for a loved item), likes: { loves: [min, max], dislikeChance },
+//              periodWord ('this year' — the period's name in the no-points-left reason; GOALWORKS M12c: 'this season') }
 //     person(id) → the person or null · statOf(p, stat) · statCap(p, stat) · raise(p, stat, n) · morale(p, n)
 //   Inventory: add(typeId, rarity, source) → the item or null (full: 'item:full') · remove / sell(uid) → money
 //   Likes: likesOf(id) → { loves: [group], dislike: group | null } · setLikes(id, likes) · rollLikes(id, groups)
@@ -130,14 +133,14 @@ export class ItemSystem {
     const lk = this.likesOf(personId);
     const like = lk.loves.includes(t.group) ? 'love' : lk.dislike === t.group ? 'dislike' : null;
     const mult = like === 'love' ? this.rules.loveMult : like === 'dislike' ? this.rules.dislikeMult : 1;
-    const base = this.rarities[it.rarity].gain;
+    const base = t.gainMult == null ? this.rarities[it.rarity].gain : Math.max(1, Math.round(this.rarities[it.rarity].gain * t.gainMult));
     const want = Math.max(1, Math.round(base * mult));
     const now = this.statOf(p, t.stat);
     const room = Math.max(0, this.statCap(p, t.stat) - now);
     const left = this.pointsLeft(personId);
     const gain = Math.min(want, room, left);
     const capped = gain < want ? (room <= left ? 'tier' : 'period') : null;
-    const why = gain <= 0 ? (capped === 'tier' ? 'Already at their tier cap' : 'No item points left this year') : null;
+    const why = gain <= 0 ? (capped === 'tier' ? 'Already at their tier cap' : `No item points left ${this.rules.periodWord ?? 'this year'}`) : null;
     return { ok: !why, why, stat: t.stat, base, mult, like, want, gain, capped, now };
   }
 

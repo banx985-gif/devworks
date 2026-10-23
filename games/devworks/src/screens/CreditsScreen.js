@@ -11,7 +11,7 @@ export const CREDITS_BLOCKS = [
   { gap: 40 },
   { image: 'dev_brand_01', h: 220 },
   { heading: 'DEVWORKS' },
-  { line: 'A Banx Gamex game' },
+  { line: 'A Banx Games game' },
   { line: 'Canvas Management Series' },
   { gap: 60 },
   { heading: 'Game design and art direction' },

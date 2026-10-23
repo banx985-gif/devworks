@@ -143,7 +143,7 @@ export function createEndingScreen({ layout, assets, ending, credits = () => [],
         cy2 += ms;
         const ly = cy2 + 40;
         if (assets.has?.(ENDING.logo)) assets.drawContained(ctx, ENDING.logo, { x: cx - logoS / 2, y: ly, w: logoS, h: logoS });
-        else text(ctx, 'BANX GAMEX', cx, ly + logoS / 2, { size: S.title, bold: true, align: 'center' });
+        else text(ctx, 'BANX GAMES', cx, ly + logoS / 2, { size: S.title, bold: true, align: 'center' });
         text(ctx, 'Thanks for playing DEVWORKS', cx, ly + logoS + 30, { size: S.body, bold: true, align: 'center', color: C.textMuted });
         assets.drawContained(ctx, ENDING.seriesMark, { x: cx - 90, y: ly + logoS + 90, w: 180, h: 110 }); // the series end-card mark
       }

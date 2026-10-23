@@ -1757,7 +1757,7 @@ const endingCredits = () => {
   return [
     { heading: profile.name || 'Your studio', names: [`Studio Director ${profile.data?.director ?? ''}`, ...(founderName ? [`Founding Developer ${founderName}`] : [])] },
     { heading: 'The team', names: world.staffSystem.staff.filter((s) => s.id !== f?.id).map((s) => s.name) },
-    { heading: 'DEVWORKS', names: ['A Banx Gamex game', 'Canvas Management Series'] },
+    { heading: 'DEVWORKS', names: ['A Banx Games game','Canvas Management Series'] },
   ];
 };
 const endingScreen = createEndingScreen({

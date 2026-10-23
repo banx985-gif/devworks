@@ -257,7 +257,7 @@ export const HELP_TEXT = {
 
 // One short page per major system (Help → Topics).
 export const HELP_TOPICS = [
-  { id: 'about', title: 'About DEVWORKS', icon: 'dev_brand_01', art: 'dev_brand_02', paras: ['Build a game studio, one hit at a time: from a rented office to a Global Campus in twenty years.', 'A Banx Gamex game in the Canvas Management Series, with friends from BOTWORKS and RACEWORKS.'] },
+  { id: 'about', title: 'About DEVWORKS', icon: 'dev_brand_01', art: 'dev_brand_02', paras: ['Build a game studio, one hit at a time: from a rented office to a Global Campus in twenty years.', 'A Banx Games game in the Canvas Management Series, with friends from BOTWORKS and RACEWORKS.'] },
   { id: 'bugs', title: 'Bugs and QA', icon: 'dev_ui_06', art: 'dev_mascot_03', paras: ['Every game ships with some bugs; QA facilities, traits and time cut them.', 'At Beta and Gold you can delay, cut a feature, outsource QA or crunch. Patches after launch fix the rest.'] },
   { id: 'games', title: 'Making a game', icon: 'dev_ui_08', art: 'dev_event_01', paras: ['Create → New Game: six recipe slots, a scope, a budget focus and a team of leads.', 'The team works through five milestones. At Beta and Gold you choose: ship, delay, cut a feature, outsource QA or crunch.', 'A finished game waits for you in Create → Release.'] },
   { id: 'release', title: 'Releasing and reviews', icon: 'dev_ui_21', art: 'dev_event_02', paras: ['Pick platforms that are out now; each has its own players and fit.', 'Reviews come in on launch day. Better reviews sell more, for longer.', 'Everything you released is in Business → Catalogue.'] },
