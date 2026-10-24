@@ -35,7 +35,7 @@ import { estimateDays, phaseWeights } from './gameProject.js';
 import { PROJECT_BALANCE } from '../../data/balance.js';
 
 export const ROLE_ORDER = ['PRG', 'DSN', 'ART', 'WRT', 'PRO'];
-const TIER_ORDER = ['standard', 'rare', 'elite', 'legendary', 'secret'];
+const TIER_ORDER = ['standard', 'rare', 'elite', 'legendary', 'secret', 'divine']; // Milestone 40g: Divine
 export const tierRank = (tier) => TIER_ORDER.indexOf(tier);
 
 // Why this person can't be found yet (null = eligible). ctx: { rankIndex, roleGames(role), hasFacility(id), major }.

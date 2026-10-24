@@ -36,7 +36,7 @@ export function createSponsors({ bus, clock, world, business, needs = () => fals
   const stipendOf = (id, tier = tierOf(id)) => {
     const d = sponsorById(id);
     const base = (S.stipend.base + S.stipend.perRank * rankIndexOf(FAME.ranks, rankId())) * (1 + (S.stipend.tierPct * tier) / 100);
-    return Math.round((base * (1 + (d.perk.stipendPct ?? 0) / 100)) / 10) * 10;
+    return Math.round((base * (1 + (d.perk.stipendPct ?? 0) / 100) * (1 + (world.effect?.('sponsorPayPct') ?? 0) / 100)) / 10) * 10; // Milestone 40g: Kaching (sponsorPayPct)
   };
   // The perks of every active deal, summed.
   const effect = (key) => deals.reduce((t, d) => t + (sponsorById(d.id).perk[key] ?? 0), 0);

@@ -18,6 +18,8 @@ export const CREDITS_BLOCKS = [
   { line: 'Aaron' },
   { heading: 'Built with' },
   { line: 'Claude Code' },
+  { heading: 'The Works Gods' }, // Milestone 40g
+  { line: 'Bolt · Jinx · Zip · Kaching · Havoc' },
   { heading: 'Friends from the series' },
   { line: 'BOTWORKS · RACEWORKS · GOALWORKS · CAREWORKS' },
   { gap: 60 },

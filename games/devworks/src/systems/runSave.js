@@ -199,3 +199,12 @@ export function migrateToV3(record) {
   data.boundary ??= null;
   return { ...record, data };
 }
+
+// Save version 3 → 4 (Milestone 40g, the Works Gods): a save from before the gods has none of them — no god on the
+// roster or the board, no waiting arrival, no god secret found. Its secret counters get the empty waiting-arrival
+// list; everything else is carried over untouched (the gods' secrets start from nothing, like any new secret).
+export function migrateToV4(record) {
+  const data = { ...record.data };
+  if (data.secrets?.counters) data.secrets = { ...data.secrets, counters: { ...data.secrets.counters, pendingArrivals: data.secrets.counters.pendingArrivals ?? [] } };
+  return { ...record, data };
+}

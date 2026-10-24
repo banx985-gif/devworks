@@ -1,6 +1,6 @@
 // Achievements and the Hall of Fame (Milestone 32), card lists (src/ui/cardListScreen.js), from Compete, the Business
 // (Studio) sheet or the Museum / Hall of Fame (F33).
-//   Achievements: all 40 (they are visible by design, so "x of 40" counts only what the player can see), earned ones
+//   Achievements: all 41 (40 + Pantheon, Milestone 40g; they are visible by design, so "x of 41" counts only what the player can see), earned ones
 //     first with the date and run, then the rest with their condition and a progress line where it counts.
 //   Hall of Fame: every entry (games, engines, consoles) with its picture, the Hall of Fame Star (dev_reward_10), its
 //     numbers and credited staff, and the run it came from; then the account records.

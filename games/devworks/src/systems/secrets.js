@@ -20,6 +20,9 @@
 // copies (28 days after launch), commercial failure (revenue after 168 days below its production cost), fast patching
 // (support brought bugs under 5 within 84 days of launch; abandoned = support ended before that) and the team's
 // average Morale when a game is finished. Continuous employment = never left since hired (founders: Milestone 5b).
+// Milestone 40g (the Works Gods): a game's breakthroughs and earlyDays (days it finished before its deadline);
+// sponsorDealsDone (sponsor deals ended with their obligations met, this run); godsWorkedWith (account: the gods ever
+// hired, in any run — kept in the account's godsWorked bag). The Divine secrets don't count in secretsEver.
 // Clue stages: 1 rumour, 2 hint, 3 nearly explicit (the rule's clueStages), 4 the recipe (found, in any run).
 // Rewards (core/UnlockActions, and an account ledger so nothing is ever granted twice — not after loading an older
 // save, not in a later run): arrival (a Legendary / Prestige person arrives: the dev_event_13 moment and a special
@@ -47,7 +50,7 @@ const matches = (recipe, need) => Object.entries(need).every(([slot, ids]) => id
 export function createSecrets({ bus, clock, world, business, projects, rules = [], profile = () => null, awards = () => null, combos = () => null, consoles = () => null, studioEvents = () => null, research = () => null, franchises = () => null, global = () => null, engines = () => null, sponsors = () => null, runId = () => 'run', saveAccount = null, hallOfFame = null }) {
   const staff = world.staffSystem;
   const today = () => clock.totalDays;
-  const blank = () => ({ games: {}, crashIncidents: 0, loadingComplaints: 0, chart: { start: 0, copies: {}, weeks: 0 }, chartByGame: {}, history: [], hired: {}, left: {}, flags: {}, starters: [], legendaryHired: [], awardStages: {}, researchPrototypes: 0 });
+  const blank = () => ({ pendingArrivals: [], games: {}, crashIncidents: 0, loadingComplaints: 0, chart: { start: 0, copies: {}, weeks: 0 }, chartByGame: {}, history: [], hired: {}, left: {}, flags: {}, starters: [], legendaryHired: [], awardStages: {}, researchPrototypes: 0 });
   let counters = blank();
 
   // --- the facts ---------------------------------------------------------------------------------------------------
@@ -111,6 +114,8 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
       finalYear: plats.some((id) => platformById(id)?.era?.to === relYear),
       deal: !!r.result.deal,
       projectOne: !!r.result.projectOne, // Milestone 31
+      breakthroughs: r.result.breakthroughs ?? 0, // Milestone 40g
+      earlyDays: r.result.deadlineDay == null || r.result.finishedDay == null ? 0 : Math.max(0, r.result.deadlineDay - r.result.finishedDay),
     };
   }
   // The exact measurements of one release (plan review C), fixed at launch.
@@ -240,7 +245,9 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     .define('rivalUpsets', () => rivalUpsets())
     .define('ghostlightDefeats', () => ghostlightDefeats())
     .define('researchPrototypes', () => counters.researchPrototypes)
-    .define('secretsEver', () => engine.rules.filter((r) => engine.everUnlocked(r.id)).length)
+    .define('secretsEver', () => engine.rules.filter((r) => r.group !== 'Divine' && engine.everUnlocked(r.id)).length) // Milestone 40g: the bible's 50
+    .define('sponsorDealsDone', () => (sponsors()?.history ?? []).filter((h) => h.met).length) // Milestone 40g
+    .define('godsWorkedWith', () => Object.keys(acct().godsWorked ?? {}).length) // Milestone 40g (account)
     .define('secretsRun', () => Object.keys(engine.run.unlocked).length)
     .define('secretTechsEver', () => everCount(rulesIn('SEC-TECH-')))
     .define('secretCombosEver', () => everCount(rulesIn('SEC-COMBO-')))
@@ -284,7 +291,10 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
       arrival: (a) =>
         once(a, () => {
           add('arrivals', a.id, today());
-          bus.emit('secret:arrival', { staffId: a.id, rule: engine.byId[a.secret] });
+          // Milestone 40g: someone with arriveAfterEvent (Havoc) waits for the next random event to be dealt with (or
+          // ARRIVE_LATE_DAYS at most, checked at a month end), then arrives with their own words.
+          if (staffDefById(a.id)?.arriveAfterEvent) counters.pendingArrivals.push({ id: a.id, secret: a.secret, day: today() });
+          else bus.emit('secret:arrival', { staffId: a.id, rule: engine.byId[a.secret] });
         }),
       recipe: (a) => once(a, () => add('recipes', a.id, today())),
       tech: (a) => once(a, () => add('tech', a.id, today())),
@@ -342,6 +352,10 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     counters.hired[s.id] = today();
     delete counters.left[s.id];
     if (PRESTIGE_TIERS.includes(tierOf(s.id)) && !counters.legendaryHired.includes(s.id)) counters.legendaryHired.push(s.id);
+    if (tierOf(s.id) === 'divine' && acct().godsWorked?.[s.id] == null) {
+      add('godsWorked', s.id, today()); // Milestone 40g: the account's gods worked with (Havoc, Pantheon)
+      persistAccount();
+    }
     notify('hired', { id: s.id });
   });
   bus.on('staff:removed', ({ staff: s }) => {
@@ -380,7 +394,17 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     }
   });
   const measureBugs = (r) => (r.result.bugs ?? 0) + (r.release?.qaBugs ?? 0);
+  // Milestone 40g: a waiting arrival (Havoc) turns up after the next random event, or after ARRIVE_LATE_DAYS anyway.
+  const ARRIVE_LATE_DAYS = 56;
+  function arriveWaiting(late = false) {
+    const due = counters.pendingArrivals.filter((p) => !late || today() - p.day >= ARRIVE_LATE_DAYS);
+    if (!due.length) return;
+    counters.pendingArrivals = counters.pendingArrivals.filter((p) => !due.includes(p));
+    for (const p of due) bus.emit('secret:arrival', { staffId: p.id, rule: engine.byId[p.secret], special: staffDefById(p.id)?.arriveAfterEvent ?? null });
+  }
+  bus.on('event:resolved', () => arriveWaiting());
   bus.on('clock:month', () => {
+    arriveWaiting(true);
     notify('monthEnd');
     if (consoles()?.consoles?.length) notify('consoleMonth');
   });

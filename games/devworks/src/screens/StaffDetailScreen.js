@@ -9,7 +9,7 @@ import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { elementById } from '../../data/elements.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
-import { STATS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
+import { STATS, ROLES, TIERS, TRAITS, staffDefById } from '../../data/staff.js';
 import { STATUS_ICONS } from '../../data/home.js';
 
 const C = THEME.color;
@@ -73,7 +73,8 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     let ty = pr.y;
     text(ctx, s.name, tx, ty, { size: S.title, bold: true, maxWidth: tw });
     ty += 70;
-    text(ctx, `${ROLES[s.role].name} · ${TIERS[s.tier].name}${legacy(s.id) ? ' · Legacy' : ''}`, tx, ty, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxWidth: tw }); // Milestone 33: Legacy Staff
+    const godTitle = staffDefById(s.id)?.title; // Milestone 40g: a Works God says what they are god of
+    text(ctx, `${ROLES[s.role].name} · ${TIERS[s.tier].name}${godTitle ? ` · ${godTitle}` : ''}${legacy(s.id) ? ' · Legacy' : ''}`, tx, ty, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxWidth: tw }); // Milestone 33: Legacy Staff
     ty += 60;
     const need = sys.xpNeeded(s.level);
     text(ctx, `Level ${s.level}`, tx, ty, { bold: true });
@@ -121,13 +122,14 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     y = heading(ctx, s.traits.length > 1 ? 'Traits' : 'Trait', x, y);
     for (const t of s.traits) {
       const def = TRAITS[t] ?? { name: t, text: '' };
+      const label = def.signature ? `★ ${def.name}` : def.name; // Milestone 40g: a signature / blessing in gold
       ctx.font = font(S.body, true);
-      const chipW = ctx.measureText(def.name).width + 40;
+      const chipW = ctx.measureText(label).width + 40;
       ctx.fillStyle = C.panelInfo;
       ctx.beginPath();
       ctx.roundRect(x, y, chipW, 58, 29);
       ctx.fill();
-      text(ctx, def.name, x + 20, y + 10, { bold: true, color: C.purple });
+      text(ctx, label, x + 20, y + 10, { bold: true, color: def.signature ? C.actionDark : C.purple });
       y += 74;
       const lines = wrapLines(def.text, cw, S.body);
       para(ctx, def.text, x, y, cw, { color: C.textMuted });

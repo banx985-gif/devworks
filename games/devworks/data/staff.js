@@ -27,6 +27,7 @@ export const TIERS = {
   elite: { name: 'Elite', statCap: 400, traitSlots: 2 },
   legendary: { name: 'Legendary', statCap: 520, traitSlots: 2, signature: true }, // "2 + signature" (bible §9)
   secret: { name: 'Secret', statCap: 650, traitSlots: 3, signature: true }, // "3 + signature"
+  divine: { name: 'Divine', statCap: 650, traitSlots: 3, signature: true }, // Milestone 40g: the Works Gods, "3 + blessing"
 };
 
 // Trait effects are not numbered in the bible: these are placeholders. energyLossPct and bugFixPct since Milestone 2;
@@ -86,6 +87,20 @@ export const TRAITS = {
   dreamRender: { name: 'Dream Render', signature: true, text: 'Signature: +10 Graphics and +4 Innovation on games they work on.', effects: { outputBonus: { graphics: 10, innovation: 4 } } },
   impossibleEnding: { name: 'Impossible Ending', signature: true, text: 'Signature: +10 Story and +4 Audience Fit on games they work on.', effects: { outputBonus: { story: 10, audienceFit: 4 } } },
   futureProof: { name: 'Future Proof', signature: true, text: 'Signature: loses 30% less Energy and +5 Audience Fit on games they work on.', effects: { energyLossPct: -30, outputBonus: { audienceFit: 5 } } },
+  // Milestone 40g: the Works Gods' blessings (signatures of the Divine tier). New effect keys, read where they act:
+  //   bugMakePct      bugs made on their games (−50 = half as many)            src/systems/gameProject.js
+  //   breakthroughPct breakthrough chance on their games (+50 = ×1.5)          src/systems/gameProject.js
+  //   phaseSpeedPct   progress on their games (the same Energy per day)        src/systems/gameProject.js
+  //   chaosRoll       a roll at the end of every phase of their games           src/systems/gameProject.js
+  //   reviewReroll    each reviewer's random wobble rolls twice, keeps the better  src/systems/reviews.js
+  //   salesPct        sales income per copy on their games                      src/systems/business.js
+  //   studio          { key: n } added to the studio's effect query while they are on the roster (sponsorPayPct:
+  //                   sponsor stipends and bonuses; advancePct: publisher advances)   src/main.js effect source
+  divineToolkit: { name: 'Divine Toolkit', signature: true, text: 'Blessing: his games make 50% fewer bugs, he fixes bugs 50% faster, and +4 Polish.', effects: { bugMakePct: -50, bugFixPct: 50, outputBonus: { polish: 4 } } },
+  luckyPaw: { name: 'Lucky Paw', signature: true, text: 'Blessing: breakthroughs 1.5× as likely on her games, and the reviewers are in a good mood (each reviewer’s luck rolls twice and keeps the better).', effects: { breakthroughPct: 50, reviewReroll: 1 } },
+  lightningPrototype: { name: 'Lightning Prototype', signature: true, text: 'Blessing: every milestone of his games goes 15% faster for the same Energy, and +4 Innovation.', effects: { phaseSpeedPct: 15, outputBonus: { innovation: 4 } } },
+  goldenTouch: { name: 'Golden Touch', signature: true, text: 'Blessing: +15% sales income on his games; while he is in the studio, sponsors pay 20% more and publisher advances are 20% bigger.', effects: { salesPct: 15, studio: { sponsorPayPct: 20, advancePct: 20 } } },
+  gloriousChaos: { name: 'Glorious Chaos', signature: true, text: 'Blessing: at the end of every milestone of his games, chaos! 70%: a big breakthrough (+6 to +10 on one output). 30%: a funny setback (+2 bugs or −3 on one output).', effects: { chaosRoll: { goodPct: 70, goodMin: 6, goodMax: 10, badBugs: 2, badPoints: 3 } } },
 };
 
 // The start staff (bible §10, fixed 26 Sept; plan review A1; Milestone 5b adds Niko and Sam). station = the facility
@@ -232,13 +247,31 @@ export const RECRUITS = [
   person('WRT10', 'Oracle Quill', 'WRT', 'secret', 24, [430, 441, 452, 510, 441], 5700, ['branchingMind', 'impossibleEnding'], { secret: 'SEC-STAFF-S4' }),
   person('PRO10', 'One Kane', 'PRO', 'secret', 24, [437, 448, 426, 437, 528], 5700, ['launchCaptain', 'futureProof'], { secret: 'SEC-STAFF-S5' }),
 ];
-// Tiers that only arrive through a secret: never on a board, never hired before then (Milestone 14).
-export const PRESTIGE_TIERS = ['legendary', 'secret'];
+// Milestone 40g: the Works Gods (series cast, SERIES_WORKS_GODS.md) — five new people in the Divine tier, one per role,
+// each brought only by their own SEC-GOD secret (data/secrets.js, group "Divine"). Not part of the bible's 50 (ROSTER):
+// staffDefById finds them too. Their pictures are the series stand-ins (not the staff_<id> pattern); Kaching sits on
+// his coin cushion, whose bottom is the bottom of the picture, so he lines up with everyone's feet. Level 26, a little
+// above the Secret staff in their main stat; salary 6,500 a month (Secret 5,700). divine: a gold glow in the studio.
+const god = (id, name, title, role, s, traits, art, secret) => ({ ...person(id, name, role, 'divine', 26, s, 6500, traits, { secret }), art, title, divine: true });
+export const GODS = [
+  god('GOD1', 'Bolt', 'God of Tinkering', 'PRG', [560, 470, 450, 460, 470], ['optimizer', 'cleanCode', 'toolsmith', 'divineToolkit'], 'staff_god_bolt', 'SEC-GOD-1'),
+  god('GOD2', 'Jinx', 'Goddess of Luck', 'ART', [470, 455, 562, 470, 450], ['colourSense', 'lightingEye', 'animator', 'luckyPaw'], 'staff_god_jinx', 'SEC-GOD-2'),
+  god('GOD3', 'Zip', 'God of Speed', 'DSN', [465, 545, 455, 465, 445], ['prototypeFast', 'systemsEye', 'fastConcept', 'lightningPrototype'], 'staff_god_zip', 'SEC-GOD-3'),
+  god('GOD4', 'Kaching', 'God of Fortune', 'PRO', [455, 465, 445, 455, 566], ['budgetHawk', 'marketingRead', 'publisherSense', 'goldenTouch'], 'staff_god_kaching', 'SEC-GOD-4'),
+  { ...god('GOD5', 'Havoc', 'God of Chaos', 'WRT', [450, 460, 470, 548, 460], ['comedyBeat', 'worldBuilder', 'questWeaver', 'gloriousChaos'], 'staff_god_havoc', 'SEC-GOD-5'), arriveAfterEvent: { title: 'Something’s glitching in the studio…', text: 'The coffee machine is printing purple sparks. Havoc, God of Chaos, is on the Recruitment board for 56 days.' } },
+];
+export const GOD_SECRETS = GODS.map((d) => d.eligibility.secret);
+export const isGod = (id) => GODS.some((d) => d.id === id);
+
+// Tiers that only arrive through a secret: never on a board, never hired before then (Milestone 14; 40g: Divine).
+export const PRESTIGE_TIERS = ['legendary', 'secret', 'divine'];
 // The SEC-STAFF secrets (bible §41) the gated rows may name.
 export const STAFF_SECRETS = ['L1', 'L2', 'L3', 'L4', 'L5', 'S1', 'S2', 'S3', 'S4', 'S5'].map((k) => `SEC-STAFF-${k}`);
 // Everyone the game knows (start staff first). The five founders are Standard recruits too when not picked.
 export const ROSTER = [...START_STAFF.map((d) => ({ ...d, eligibility: { start: true } })), ...RECRUITS];
-export const staffDefById = (id) => ROSTER.find((d) => d.id === id) ?? null;
+// Milestone 40g: the bible's 50 and the five gods.
+export const ALL_PEOPLE = [...ROSTER, ...GODS];
+export const staffDefById = (id) => ALL_PEOPLE.find((d) => d.id === id) ?? null;
 
 // The Milestone 2–5 starting team (Alex, Mina, Tess): the default layout, and the team of every save from before 5b.
 export const STARTERS = ['PRG01', 'DSN01', 'PRO01'].map(startStaffById);
@@ -296,4 +329,9 @@ export const STAFF_LIKES = {
   ART10: { loves: ['gear'], dislike: null },
   WRT10: { loves: ['books', 'inspiration'], dislike: null },
   PRO10: { loves: ['snacks'], dislike: 'toys' },
+  GOD1: { loves: ['gear', 'trophies'], dislike: null },
+  GOD2: { loves: ['toys', 'inspiration'], dislike: null },
+  GOD3: { loves: ['snacks', 'gear'], dislike: 'books' },
+  GOD4: { loves: ['trophies', 'snacks'], dislike: null },
+  GOD5: { loves: ['toys', 'snacks'], dislike: 'books' },
 };

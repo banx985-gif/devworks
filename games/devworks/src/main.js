@@ -118,6 +118,7 @@ import { createPublishers } from './systems/publishers.js';
 import { createContracts } from './systems/contracts.js';
 import { createPublishersScreen, createContractsScreen } from './screens/BusinessDealsScreens.js';
 import { createSponsors } from './systems/sponsors.js';
+import { rosterEffect } from './systems/gods.js'; // Milestone 40g
 import { createRivals } from './systems/rivals.js';
 import { createSupport } from './systems/support.js';
 import { createGlobalBusiness } from './systems/globalBusiness.js';
@@ -164,13 +165,13 @@ import { createStudioAudio } from './systems/studioAudio.js';
 import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
 import { createProjectBoardScreen } from './screens/ProjectBoardScreen.js';
 import { setCardSymbols } from './ui/cardListScreen.js';
-import { serializeRun, loadRun, newRun, migrateToV3, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35
+import { serializeRun, loadRun, newRun, migrateToV3, migrateToV4, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35 (40g: v4)
 import { createAccountFile } from './systems/accountFile.js';
 import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
 import { FakeStoreProvider } from '../../../core/FakeStoreProvider.js';
 import { validateAssets, assetSummary } from '../../../core/AssetValidator.js'; // Milestone 37
-import { ART_LIST, SHARED_ART, TEST_ART } from '../data/artList.js';
+import { ART_LIST, SHARED_ART, TEST_ART, GOD_ART } from '../data/artList.js';
 import { createRealStoreScreen } from './screens/StoreScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
@@ -289,6 +290,7 @@ const training = createTraining({ bus, clock, world, business, projects, researc
 engines = createEngines({ bus, clock, world, business, projects, research, studioName: () => profile.name || 'Studio', extraBusy: (id) => (contracts?.jobOf(id) ? 'On a contract' : null) });
 const sponsors = createSponsors({ bus, clock, world, business, needs: (n) => (n === 'hardwareLab' ? !!world.stationById('F28') : n === 'botworksEvents') }); // Milestone 18 (Milestone 27: IronPeak and BOTWORKS)
 world.addEffectSource((key) => sponsors.effect(key));
+world.addEffectSource(rosterEffect(world.staffSystem)); // Milestone 40g: a god's studio-wide blessing (Kaching)
 // Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
 // Milestone 30: Ghostlight (R08), once SEC-RIVAL-01 has enabled it: its yearly plan is the player's best-reviewed genre and
 // theme of the released games in the years before (never a game still being made) and that best review.
@@ -894,7 +896,7 @@ async function prepareSaves() {
   } catch (err) {
     console.error('[DEVWORKS] account file unreadable', err);
   }
-  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3 }, rolling: SAVE.rolling, bus });
+  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3, 3: migrateToV4 }, rolling: SAVE.rolling, bus });
   // Milestone 36: ?debug=1 → the pretend store (its next ad / purchase is set on the Store screen); none otherwise.
   if (new URLSearchParams(window.location.search).has('debug')) {
     const persist = { load: () => JSON.parse(localStorage.getItem('devworks:fakeStore') ?? 'null'), save: (st) => localStorage.setItem('devworks:fakeStore', JSON.stringify(st)) };
@@ -1870,13 +1872,18 @@ bus.on('award:won', ({ award: a, result }) => {
   prestigeMoment({ title: `${a.name}!`, subtitle: `"${result.entrants[0].title}" wins. ${a.rewardText}. Prestige Tokens: ${secrets.prestigeTokens}.`, art: a.event, badge: a.trophy });
 });
 // Milestone 29: a Legendary / Prestige arrival — the big moment (dev_event_13 and their portrait) and a special card for 56 days.
-bus.on('secret:arrival', ({ staffId }) => {
+// Milestone 40g: a Works God says who they are ("Bolt, God of Tinkering") and gets a gold halo; Havoc has his own words
+// (special, after the next random event).
+const TIER_WORD = { legendary: 'Legendary', secret: 'Prestige', divine: 'Divine' };
+bus.on('secret:arrival', ({ staffId, special = null }) => {
   const def = staffDefById(staffId);
   if (!def) return;
-  recruitment.specialArrival(staffId, `${def.tier === 'secret' ? 'Prestige' : 'Legendary'} arrival: a secret brought them here`);
+  const word = TIER_WORD[def.tier] ?? 'Legendary';
+  recruitment.specialArrival(staffId, `${word} arrival: ${def.divine ? 'a god has noticed your studio' : 'a secret brought them here'}`);
+  const roleName = def.role === 'PRG' ? 'Programmer' : def.role === 'DSN' ? 'Designer' : def.role === 'ART' ? 'Artist' : def.role === 'WRT' ? 'Writer' : 'Producer';
   feedback.show({
-    title: `${def.name} wants to join!`,
-    subtitle: `A ${def.tier === 'secret' ? 'Prestige' : 'Legendary'} ${def.role === 'PRG' ? 'Programmer' : def.role === 'DSN' ? 'Designer' : def.role === 'ART' ? 'Artist' : def.role === 'WRT' ? 'Writer' : 'Producer'} is on the Recruitment board for 56 days.`,
+    title: special?.title ?? (def.divine ? `${def.name}, ${def.title}, wants to join!` : `${def.name} wants to join!`),
+    subtitle: special?.text ?? `A ${word} ${roleName} is on the Recruitment board for 56 days.`,
     accent: COL.gold,
     onShow: () => celebrate.confetti('screen', W / 2, renderer.height * 0.72, { count: 40, speed: 900, spreadX: 120 }),
     drawFn: (ctx, t) => {
@@ -1885,9 +1892,24 @@ bus.on('secret:arrival', ({ staffId }) => {
       const size = 520 * (0.6 + 0.4 * k);
       ctx.save();
       ctx.globalAlpha = k;
-      assets.drawContained(ctx, 'dev_event_13', { x: W / 2 - size / 2, y: sr.y + sr.h * 0.26 - size / 2, w: size, h: size });
-      const p = 200 * (0.6 + 0.4 * k);
-      drawPortrait(ctx, assets, def.art, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.26 + size / 2 - p * 0.3, w: p, h: p }, COL.gold);
+      if (def.divine) {
+        // A god: the whole figure in a slow golden halo instead of the event card.
+        const cy = sr.y + sr.h * 0.3;
+        const glow = ctx.createRadialGradient(W / 2, cy, 40, W / 2, cy, size * 0.62);
+        glow.addColorStop(0, 'rgba(255, 214, 90, 0.85)');
+        glow.addColorStop(1, 'rgba(255, 214, 90, 0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(W / 2, cy, size * 0.62 * (1 + 0.04 * Math.sin(t * 3)), 0, Math.PI * 2);
+        ctx.fill();
+        const h = size * 1.05;
+        const w = h * assets.aspect(def.art);
+        assets.draw(ctx, def.art, W / 2 - w / 2, cy - h / 2, w, h);
+      } else {
+        assets.drawContained(ctx, 'dev_event_13', { x: W / 2 - size / 2, y: sr.y + sr.h * 0.26 - size / 2, w: size, h: size });
+        const p = 200 * (0.6 + 0.4 * k);
+        drawPortrait(ctx, assets, def.art, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.26 + size / 2 - p * 0.3, w: p, h: p }, COL.gold);
+      }
       ctx.restore();
     },
     onAck: afterFeedback,
@@ -2797,7 +2819,7 @@ let artCheck = null;
 function logArtCheck() {
   const manifest = Object.fromEntries(Object.entries(ASSETS).filter(([k]) => !SHARED_ART.includes(k) && !TEST_ART.includes(k)));
   const files = Object.fromEntries([...assets.images.keys()].filter((k) => manifest[k]).map((k) => [k, manifest[k]]));
-  artCheck = validateAssets({ artList: ART_LIST, manifest, files });
+  artCheck = validateAssets({ artList: [...ART_LIST, ...GOD_ART], manifest, files }); // Milestone 40g: + the Works Gods
   debug.log(assetSummary(artCheck));
   if (!artCheck.ok) console.warn('[DEVWORKS art]', JSON.stringify({ missing: artCheck.missing, unused: artCheck.unused, unlisted: artCheck.unlisted }));
   return artCheck;
@@ -2880,13 +2902,37 @@ if (debug.enabled) {
     }
     return world.staffSystem.staff.length;
   };
+  // Milestone 40g (?debug=1): a Works God's arrival moment, hiring them from the board, and their staff card (the
+  // browser check and screenshots). The arrival is opened as its secret's reward would open it.
+  const debugGodArrival = (id) => {
+    const def = defOf(id);
+    if (!def?.divine) return { ok: false, why: 'not a god' };
+    secrets.setOpened('arrivals', id);
+    bus.emit('secret:arrival', { staffId: id, rule: secrets.engine.byId[def.eligibility.secret], special: def.arriveAfterEvent ?? null });
+    return { ok: feedback.active && /join|glitching/.test(feedback.current?.title ?? ''), title: feedback.current?.title ?? null, card: recruitment.cards.some((c) => c.personId === id) };
+  };
+  const debugGodHire = (id) => {
+    if (world.stage < 5) world.setStage(5);
+    business.economy.add('credits', 500000, 'Debug: god test', 'other');
+    const card = recruitment.cards.find((c) => c.personId === id);
+    if (card && /station|full/i.test(recruitment.hireCheck(card.id).why ?? '')) for (const fac of FACILITIES) if (!fac.unlock?.secret && !world.stationById(fac.id)) world.addStation(fac.id);
+    const r = card ? recruitment.hire(card.id) : { ok: false, why: 'no card on the board' };
+    const w = world.workerById?.(id);
+    return { hired: !!world.staffSystem.get(id) && !!w, why: r.why ?? null, station: w?.station?.id ?? null };
+  };
+  const debugGodCard = (id) => {
+    openStaff(id);
+    const def = defOf(id);
+    const blessing = def?.traits.map((t) => TRAITS[t]).find((t) => t?.signature);
+    return { ok: router.currentName === 'staff' && !!blessing && /^Blessing: /.test(blessing.text), text: blessing ? `${blessing.name}: ${blessing.text}` : '' };
+  };
   const debugFullStudio = () => {
     world.setStage(5);
     for (const fac of FACILITIES) if (!fac.unlock?.secret) world.addStation(fac.id);
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

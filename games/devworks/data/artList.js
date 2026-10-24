@@ -52,3 +52,6 @@ export const ART_LIST = [
 ];
 export const SHARED_ART = ['studio_logo_banx_gamex', 'studio_logo_banx_gamex_dark'];
 export const TEST_ART = ['m0Real', 'm0Missing'];
+// Milestone 40g: the Works Gods' pictures (series cast, SERIES_WORKS_GODS.md; filed by Cowork, not on the locked 360 list:
+// Cowork swaps Aaron's DEVWORKS outfit versions in under the same names). 600 px tall.
+export const GOD_ART = ['staff_god_bolt', 'staff_god_jinx', 'staff_god_zip', 'staff_god_kaching', 'staff_god_havoc'];

@@ -2,7 +2,7 @@
 // Art not drawn yet shows its stand-in (src/ui/placeholders.js) until the file is filed here.
 import { STATIONS, PROPS, DEV_POPS } from './studio.js';
 import { FACILITIES, STAGES } from './facilities.js';
-import { ROSTER } from './staff.js';
+import { ROSTER, GODS } from './staff.js';
 import { PUBLISHERS } from './publishers.js';
 import { SPONSORS } from './sponsors.js';
 import { RIVALS } from './rivals.js';
@@ -20,6 +20,7 @@ export const ASSETS = {
   // Studio: the starting stations (with the Showcase Shelf, Milestone 5) and the five start staff (Milestone 5b).
   ...Object.fromEntries(STATIONS.map((s) => art('facilities', s.art))),
   ...Object.fromEntries(ROSTER.map((d) => art('staff', d.art))), // Milestone 13: everyone recruitment can find
+  ...Object.fromEntries(GODS.map((d) => art('staff', d.art))), // Milestone 40g: the Works Gods (series cast, not on the 360 list)
   ...Object.fromEntries([art('vfx', 'dev_vfx_02')]), // Milestone 13: training courses
   ...Object.fromEntries([art('ui', 'dev_ui_11')]), // Milestone 16: the Engine icon
   // Milestone 17: the publishers' logos, the Publishers / Contract Board icons.

@@ -56,7 +56,10 @@ export function reviewGame(game, { fanExpectation = REVIEW_BALANCE.start.fanExpe
   const facts = { outputs: game.outputs, bugs: game.bugs, scope: game.scope, genre: game.recipe?.genre, fanExpectation, fatiguePenalty };
   const used = new Set(); // no two outlets print the same line in one round
   const outlets = OUTLETS.map((o) => {
-    const jitter = (rng.next() * 2 - 1) * R.jitter;
+    // Milestone 40g: Jinx's Lucky Paw (game.reviewLuck) — each outlet's wobble rolls twice and keeps the better. The
+    // second roll has its own seed, so every other review (and every other outlet) stays exactly as it was.
+    let jitter = (rng.next() * 2 - 1) * R.jitter;
+    if (game.reviewLuck) jitter = Math.max(jitter, (new Rng(`${game.reviewSeed}|luck|${o.id}`).next() * 2 - 1) * R.jitter);
     const score = Math.round(clamp(outletScore(facts, o.id, R) + jitter, 0, 100));
     let line = reviewLine(game, o.id, score, R);
     for (let k = 2; used.has(line) && k < 12; k++) line = reviewLine(game, `${o.id}|${k}`, score, R);

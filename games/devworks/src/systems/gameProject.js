@@ -36,8 +36,15 @@
 // starts — Stability lowers bugs, Tooling speeds progress — and at the end its strength for the recipe's Technology
 // moves Graphics, Performance moves Polish, the tier adds Innovation. The finished game remembers the engine.
 //
+// Milestone 40g: the Works Gods' blessings, read from the team's traits (never by id): bugMakePct on bugs made,
+// breakthroughPct on the breakthrough chance, phaseSpeedPct on progress (same Energy per day) — all three on any game
+// the god is on the core team of, whether or not they are at their desk that day —, chaosRoll at the end of
+// every phase (seeded, from the project's own random state), and on the finished game reviewReroll (reviewLuck) and
+// salesPct (business.js reads both).
+//
 // Events on the bus: 'project:start' / 'project:phase' / 'project:complete' (core), plus 'project:bug' { count },
-// 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:decision' { job, point } and
+// 'project:fix' { count }, 'project:breakthrough' { key, points }, 'project:chaos' { job, good, key, points, bugs },
+// 'project:decision' { job, point } and
 // 'project:decided' { job, point, choice }.
 import { ProjectSystem } from '../../../../core/ProjectSystem.js';
 import { JobHistory } from '../../../../core/JobHistory.js';
@@ -252,7 +259,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
       workerModifier: (job, phase, s) => (world.onDuty(s.id) && !decisionOpen(job) ? 1 : 0),
       // The milestone role weights for this scope and phase, and the founder perk.
       statModifier: (job, phase, s, k) => phaseWeights(job.data.scope, job.phaseIndex, B)[k] * founderStatMult(founder(), s.id, k) * (1 + fx(`statPct.${k}`) / 100),
-      progressModifier: (job) => (1 + (job.data.engine?.fx.progressPct ?? 0) / 100) * (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1) * (1 + (fx('progressPct') + fx(`phasePct.${B.phases[job.phaseIndex].id}`)) / 100),
+      progressModifier: (job) => (1 + staff.groupEffect(system.teamOf(job), 'phaseSpeedPct') / 100) * (1 + (job.data.engine?.fx.progressPct ?? 0) / 100) * (job.data.crunchLeft > 0 ? 1 + B.decisions.crunch.progressPct / 100 : 1) * (1 + (fx('progressPct') + fx(`phasePct.${B.phases[job.phaseIndex].id}`)) / 100),
       onPhaseStart: (job) => {
         const d = job.data;
         if (d.pendingFocus) [d.focus, d.pendingFocus] = [d.pendingFocus, null];
@@ -274,6 +281,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         }
         const team = onDutyTeam(job);
         if (!team.length) return; // everyone on a break: no work, no bugs, no ideas
+        const core = system.teamOf(job); // Milestone 40g: a blessing works on the god's games, at their desk or not
         const members = team.map((s) => ({ stats: statsOf(s), mult: staff.workMultiplier(s) }));
         const str = outputStrengths(members, B);
         d.acc.days++;
@@ -292,7 +300,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
         const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct') + (['FEA02', 'FEA03'].includes(d.recipe.feature) ? fx('onlineQaPct') : 0); // Milestone 18: NovaNet
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
-        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0); // Milestone 15: QA load; Milestone 16: engine Stability
+        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0) + staff.groupEffect(core, 'bugMakePct'); // Milestone 15: QA load; Milestone 16: engine Stability; 40g: Bolt
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
         const behind = behindOf(job);
         withRng(job, (r) => {
@@ -306,7 +314,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
             d.bugs -= fixed;
             bus?.emit('project:fix', { job, count: fixed });
           }
-          if (r.next() < B.breakthrough.chancePerDay) {
+          if (r.next() < B.breakthrough.chancePerDay * (1 + staff.groupEffect(core, 'breakthroughPct') / 100)) {
             const keys = Object.keys(B.outputMix);
             const key = keys[Math.floor(r.next() * keys.length)];
             const points = B.breakthrough.min + Math.floor(r.next() * (B.breakthrough.max - B.breakthrough.min + 1));
@@ -318,6 +326,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
       },
       onPhaseComplete: (job) => {
         job.data.phaseQuality.push(qualityOf(job.data.acc));
+        chaosRoll(job);
         if (job.phaseIndex === BETA_END) openDecision(job, 'beta');
       },
       onComplete: (job) => {
@@ -350,6 +359,8 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
           if (d.polishCap != null) outputs.polish = Math.min(outputs.polish, d.polishCap);
         }
         const hypePcts = d.phaseFocus.map((f) => focusOf(f, B).hypePct ?? 0);
+        const reviewLuck = staff.groupEffect(team, 'reviewReroll') > 0; // Milestone 40g: Jinx
+        const salesPct = staff.groupEffect(team, 'salesPct'); // Milestone 40g: Kaching
         return {
           title: job.name,
           scope: d.scope,
@@ -360,6 +371,9 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
           outputs,
           bugs: d.bugs,
           breakthroughs: d.breakthroughs.length,
+          ...(reviewLuck ? { reviewLuck } : {}),
+          ...(salesPct ? { salesPct } : {}),
+          ...(d.chaos?.length ? { chaos: d.chaos.map((x) => ({ ...x })) } : {}),
           cost: Math.round(d.cost),
           // Milestone 31: PROJECT ONE's own cover. Milestone 37: a secret recipe gets the Secret Crossover family (cover_28).
           cover: d.projectOne ? 'cover_29' : coverFor(d.recipe, d.secretRecipe ? 'cover_28' : cfx.cover),
@@ -390,6 +404,36 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
       now: () => (clock ? clock.now() : null),
     },
   });
+
+  // Milestone 40g: Havoc's Glorious Chaos — a seeded roll at the end of a phase when someone on the team has chaosRoll:
+  // goodPct% a big breakthrough (goodMin–goodMax on a random output, counted as a breakthrough), else a funny setback
+  // (badBugs more bugs, or −badPoints on a random output, half and half).
+  function chaosRoll(job) {
+    const team = system.teamOf(job);
+    const c = team.flatMap((s) => s.traits ?? []).map((t) => staff.traits[t]?.effects?.chaosRoll).find(Boolean);
+    if (!c) return;
+    const d = job.data;
+    const keys = Object.keys(B.outputMix);
+    withRng(job, (r) => {
+      const good = r.next() * 100 < c.goodPct;
+      const key = keys[Math.floor(r.next() * keys.length)];
+      let ev;
+      if (good) {
+        const points = c.goodMin + Math.floor(r.next() * (c.goodMax - c.goodMin + 1));
+        d.bonus[key] = (d.bonus[key] ?? 0) + points;
+        d.breakthroughs.push({ day: job.day, key, points, chaos: true });
+        ev = { phase: job.phaseIndex, good, key, points };
+      } else if (r.next() < 0.5) {
+        d.bugs += c.badBugs;
+        ev = { phase: job.phaseIndex, good, bugs: c.badBugs };
+      } else {
+        d.bonus[key] = (d.bonus[key] ?? 0) - c.badPoints;
+        ev = { phase: job.phaseIndex, good, key, points: -c.badPoints };
+      }
+      (d.chaos ||= []).push(ev);
+      bus?.emit('project:chaos', { job, ...ev });
+    });
+  }
 
   function openDecision(job, point) {
     job.data.decision = { point, day: today() };

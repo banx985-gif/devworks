@@ -269,5 +269,5 @@ export const HELP_TOPICS = [
   { id: 'business', title: 'Deals', icon: 'business_ui_01', art: 'dev_event_07', paras: ['Publishers, sponsors and contracts all live in Business.', 'Later: engine licensing, publishing other studios and acquisitions.'] },
   { id: 'compete', title: 'Awards and rivals', icon: 'award_trophy_01', art: 'dev_event_08', paras: ['Compete shows the awards (C01–C10), the rivals and the rankings.', 'Year 20 ends in a ceremony and a grade — then postgame or New Game+.'] },
   { id: 'hardware', title: 'Hardware (optional)', icon: 'dev_ui_26', art: 'dev_event_11', paras: ['From Year 11 with the Hardware Prototype Lab: design, build and launch your own console.', 'Hardware is optional: a software-only studio can still reach grade S.'] },
-  { id: 'secrets', title: 'Secrets', icon: 'dev_ui_30', art: 'dev_mascot_01', paras: ['Some things are never listed. Rumours hint at them in Compete → Rumour Archive.'] },
+  { id: 'secrets', title: 'Secrets', icon: 'dev_ui_30', art: 'dev_mascot_01', paras: ['Some things are never listed. Rumours hint at them in Compete → Rumour Archive.', 'Legend says gods visit only the very best studios.'] }, // Milestone 40g
 ];

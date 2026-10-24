@@ -36,7 +36,7 @@ import { MenuRegistry } from '../../../../core/ui/BottomSheet.js';
 import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
 import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
-import { ROLES, STATS, TIERS, TRAITS, ROSTER, staffDefById } from '../../data/staff.js';
+import { ROLES, STATS, TIERS, TRAITS, ROSTER, GODS, staffDefById } from '../../data/staff.js';
 import { portraitOf } from '../../data/portraits.js';
 import { MENTORING } from '../../data/recruitment.js';
 import { SUPPORT_OPTIONS } from '../../data/support.js';
@@ -553,12 +553,12 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
     const w = world();
     return {
       title: 'Staff book',
-      subtitle: 'All 50 staff (bible §10). Legendary and Secret staff arrive only through their secrets, later.',
+      subtitle: 'All 50 staff (bible §10) and the five Works Gods (Milestone 40g). Legendary, Secret and Divine staff arrive only through their secrets.',
       accent: C.purple,
       sections: Object.keys(ROLES).map((role) => ({
         title: ROLES[role].name,
         columns: 2,
-        buttons: ROSTER.filter((d) => d.role === role).map((d) => ({ id: `book:${d.id}`, label: d.name, sub: `${TIERS[d.tier].name}${w.staffSystem.get(d.id) ? ' · here' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: ['legendary', 'secret'].includes(d.tier) ? C.gold : C.progress, onTap: () => open('staffPreview', d.id) })),
+        buttons: [...ROSTER, ...GODS].filter((d) => d.role === role).map((d) => ({ id: `book:${d.id}`, label: d.name, sub: `${TIERS[d.tier].name}${w.staffSystem.get(d.id) ? ' · here' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: ['legendary', 'secret', 'divine'].includes(d.tier) ? C.gold : C.progress, onTap: () => open('staffPreview', d.id) })),
       })),
     };
   });

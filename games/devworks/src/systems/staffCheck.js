@@ -6,7 +6,9 @@
 //   - salary and starting level sane; the portrait crop inside the picture
 //   - eligibility: known rule keys only; ranks real; the role facility real; Legendary / Secret gated by a real
 //     SEC-STAFF secret, and nobody else gated by one; the five start staff and Start Candidates are Standard
-import { ROSTER, ROLES, TIERS, TRAITS, STAT_KEYS, PRESTIGE_TIERS, STAFF_SECRETS, START_STAFF } from '../../data/staff.js';
+//   - Milestone 40g: the five Works Gods (GODS, outside the 50): Divine, one per role, each gated by their own SEC-GOD
+//     secret, a portrait crop and a real signature (blessing)
+import { ROSTER, ROLES, TIERS, TRAITS, STAT_KEYS, PRESTIGE_TIERS, STAFF_SECRETS, START_STAFF, GODS, GOD_SECRETS } from '../../data/staff.js';
 import { RECRUIT } from '../../data/recruitment.js';
 import { FACILITIES } from '../../data/facilities.js';
 import { FAME } from '../../data/balance.js';
@@ -24,7 +26,7 @@ export function checkStaff(v) {
   for (const [id, t] of Object.entries(TRAITS)) {
     v.check(typeof t.name === 'string' && typeof t.text === 'string' && t.text.length > 0, `trait ${id}: no name or text`);
     v.check(t.effects && Object.keys(t.effects).length > 0, `trait ${id}: no effect`);
-    v.check(ROSTER.some((p) => p.traits.includes(id)), `trait ${id}: nobody has it`);
+    v.check([...ROSTER, ...GODS].some((p) => p.traits.includes(id)), `trait ${id}: nobody has it`);
   }
   for (const p of ROSTER) {
     const o = `staff ${p.id}`;
@@ -53,4 +55,17 @@ export function checkStaff(v) {
   }
   for (const d of START_STAFF) v.check(ROSTER.includes(ROSTER.find((p) => p.id === d.id)), `staff: start staff ${d.id} missing from the roster`);
   v.check(new Set(ROSTER.filter((p) => p.eligibility.secret).map((p) => p.eligibility.secret)).size === STAFF_SECRETS.length, 'staff: each SEC-STAFF secret should bring exactly one person');
+  // Milestone 40g: the Works Gods.
+  v.staffRoster('gods', GODS, { roles: ROLES, tiers: TIERS, traits: TRAITS, statKeys: STAT_KEYS, artPath: (p) => `assets/images/staff/${p.art}.png` });
+  v.check(GODS.length === 5, `gods: ${GODS.length}, the series has 5`);
+  v.check(new Set(GODS.map((p) => p.role)).size === GODS.length, 'gods: one per role');
+  for (const p of GODS) {
+    const o = `god ${p.id}`;
+    v.check(p.tier === 'divine' && PRESTIGE_TIERS.includes(p.tier), `${o}: tier ${p.tier}`);
+    v.check(/^staff_god_[a-z]+$/.test(p.art), `${o}: art key ${p.art}`);
+    v.check(!!PORTRAITS[p.art], `${o}: no portrait crop`);
+    v.check(GOD_SECRETS.includes(p.eligibility?.secret) && Object.keys(p.eligibility).length === 1, `${o}: must be gated by its own SEC-GOD secret`);
+    v.check(p.traits.filter((t) => TRAITS[t]?.signature).length === 1, `${o}: exactly one blessing`);
+  }
+  v.check(new Set(GOD_SECRETS).size === GODS.length, 'gods: each SEC-GOD secret brings exactly one god');
 }

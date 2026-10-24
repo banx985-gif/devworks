@@ -1,4 +1,5 @@
-// Achievements (Milestone 32, bible §39): the 40 visible achievements, exactly as the bible numbers them. Plain data;
+// Achievements (Milestone 32, bible §39): the 40 visible achievements, exactly as the bible numbers them, and (Milestone
+// 40g) ACH41 Pantheon. Plain data;
 // core/AchievementSystem.js checks them on trigger events against the facts src/systems/achievements.js provides.
 // Account-wide: once earned, earned in every later run and never granted again (reload, re-earn, NG+).
 //
@@ -63,6 +64,8 @@ export const ACHIEVEMENTS = [
   A(38, 'Profitable Hardware Generation', 'A console generation with a lifetime profit.', at('hw.profitableGenerations', 1), { icon: 'dev_ui_29' }),
   A(39, 'Hall of Fame 10', 'Put 10 entries in the Hall of Fame.', at('hallOfFame.total', 10), { icon: 'dev_reward_10', progress: { fact: 'hallOfFame.total', target: 10 } }),
   A(40, 'Year-20 Survivor', 'Reach the end of Year 20 with no debt.', { all: [at('yearsDone', 20), { fact: 'solvent', op: 'eq', value: true }] }, { icon: 'award_trophy_07' }),
+  // Milestone 40g (not in bible §39): the Works Gods. godsWorkedWith is the account's gods ever hired (src/systems/secrets.js).
+  A(41, 'Pantheon', 'Work with all five Works Gods (in any run).', at('godsWorkedWith', 5), { icon: 'staff_god_havoc', progress: { fact: 'godsWorkedWith', target: 5 } }),
 ];
 export const achievementById = (id) => ACHIEVEMENTS.find((a) => a.id === id) ?? null;
 

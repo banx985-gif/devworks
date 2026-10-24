@@ -274,6 +274,7 @@ export function createBusiness({ bus, clock, world, projects }) {
         byPlatform[x.id].curve = dist.shapeCurve(byPlatform[x.id].curve, fx.curve);
         if (fx.netMult !== 1) byPlatform[x.id].netMult = fx.netMult;
       }
+      if (g.salesPct) byPlatform[x.id].netMult = +((byPlatform[x.id].netMult ?? 1) * (1 + g.salesPct / 100)).toFixed(4); // Milestone 40g: Kaching's Golden Touch (income per copy)
     }
     record.sales = { byPlatform, platform: ids[0], releasedDay: clock.totalDays, lifetime: +Object.values(byPlatform).reduce((t, s) => t + s.lifetime, 0).toFixed(3), copies: 0, revenue: 0, days: 0 };
     state.shipped++;
@@ -313,6 +314,7 @@ export function createBusiness({ bus, clock, world, projects }) {
         const sc = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny;
         record.sales.byPlatform ||= {};
         record.sales.byPlatform[p.id] = startSales({ score: record.release.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(p.id), platform: p.id, reviewSeed: `${g.reviewSeed}|port|${p.id}`, day: clock.totalDays, salesMult: sc.salesMult * p.fit * p.niche, price: record.release.price, audience: p.buyers, hype: 0, clash: null });
+        if (g.salesPct) record.sales.byPlatform[p.id].netMult = +(1 + g.salesPct / 100).toFixed(4); // Milestone 40g: Golden Touch
         record.release.platforms = [...(record.release.platforms ?? [record.release.platform]), p.id];
         bus.emit('game:ported', { record, platform: p.id });
       }

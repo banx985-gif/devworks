@@ -52,6 +52,13 @@ export const PORTRAITS = {
   staff_wrt08: { x: 0.2275, y: 0, w: 0.5776, h: 0.3537 },
   staff_wrt09: { x: 0.1555, y: 0, w: 0.5844, h: 0.3536 },
   staff_wrt10: { x: 0.2583, y: 0, w: 0.4589, h: 0.3538 },
+  // Milestone 40g: the Works Gods (600 px tall stand-ins; worked out by eye from each picture, same head-and-shoulders
+  // square). Havoc's head sits lower (his horn and sparks are above it).
+  staff_god_bolt: { x: 0.176, y: 0.02, w: 0.541, h: 0.383 },
+  staff_god_jinx: { x: 0.199, y: 0.02, w: 0.547, h: 0.367 },
+  staff_god_zip: { x: 0.323, y: 0.03, w: 0.568, h: 0.367 },
+  staff_god_kaching: { x: 0.31, y: 0.03, w: 0.476, h: 0.383 },
+  staff_god_havoc: { x: 0.22, y: 0.12, w: 0.568, h: 0.367 },
 };
 // The crop for an art key (the old fixed crop when a picture has none).
 export const portraitOf = (art) => PORTRAITS[art] ?? { x: 0.15, y: 0, w: 0.7, h: 0.42 };

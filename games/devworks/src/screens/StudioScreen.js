@@ -720,6 +720,18 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const f = feetOf(w);
     const shakeX = m.shake > 0 ? Math.sin(animT * 70) * 5 * Math.min(1, m.shake / 0.2) * shakeScale() : 0; // Milestone 40e: Settings → Screen shake
     const r = workerRect(w);
+    // Milestone 40g: a Works God has a small, slowly pulsing gold glow behind them.
+    if (w.def.divine) {
+      const cy = f.y - r.h * 0.5;
+      const rad = r.h * (0.6 + 0.03 * Math.sin(animT * 2.5));
+      const glow = ctx.createRadialGradient(f.x, cy, r.h * 0.08, f.x, cy, rad);
+      glow.addColorStop(0, 'rgba(255, 214, 90, 0.55)');
+      glow.addColorStop(1, 'rgba(255, 214, 90, 0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.ellipse(f.x, cy, rad * 0.8, rad, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     drawCharacter(ctx, assets, w.def.art, f.x + shakeX, f.y, r.w, r.h, pose);
   }
 
