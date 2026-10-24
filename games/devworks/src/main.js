@@ -533,6 +533,19 @@ const feedback = new MajorFeedback({
     return show(m);
   };
 }
+// Kairosoft check (24 Oct): a moment with its own long reveal (the four reviews) never blocks taps — a tap after the
+// normal short guard jumps the reveal to the end; the next tap closes it.
+{
+  const tap = feedback.onTap.bind(feedback);
+  feedback.onTap = () => {
+    const m = feedback.current;
+    if (m && !feedback.canAck && m.minShowSec > feedback.minShowSec && feedback.time >= feedback.minShowSec) {
+      feedback.time = m.minShowSec;
+      return;
+    }
+    tap();
+  };
+}
 // After a big moment: back to the speed from before it — unless another one is showing now (they queue).
 function afterFeedback() {
   if (feedback.active) return;
