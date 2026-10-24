@@ -34,7 +34,7 @@ export const MENU_GROUPS = [
     row('contracts', 'Contracts', 'Short jobs for other studios', 'business_ui_03'),
     row('sponsors', 'Sponsors', 'Six-month deals with perks, promises and gifts', 'business_ui_02'),
     row('platforms', 'Platform Market', 'Which platforms are out, and who plays on them', 'dev_ui_09'),
-    row('store', 'Store', 'Remove Ads, Studio Tokens, VIP and free rewards', 'dev_reward_01'),
+    row('store', 'Store', 'Supporter Pack, Remove Ads, Studio Tokens and free rewards', 'dev_reward_01'),
   ] },
   { title: 'Records', rows: [
     row('achievements', 'Achievements', 'What you have earned, kept across every studio', 'dev_ui_04'),

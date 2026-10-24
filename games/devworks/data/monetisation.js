@@ -8,22 +8,25 @@
 // every grant below is Credits-free convenience (a refresh, a speed-up, RP, Studio Tokens) — tested against that list.
 
 // Products. Studio Token pack sizes (logged): 20 / 120 / 300.
+// Milestone 40h (Kairosoft rule 9): the VIP monthly subscription is gone. The one-time Supporter Pack replaces it:
+// bought once, kept for good — Remove Ads, a Supporter plaque in the studio and a one-off gift of 120 Studio Tokens. No
+// power perks (no daily tokens, no Support Lead boost, no second research queue, no monthly refresh, no training
+// speed-up). It has no entitlement of its own: the account keeps a supporter flag, restored from the store's list of
+// owned one-time items (core CommerceService owned(keys)). An old save with VIP becomes a Supporter Pack owner.
 export const PRODUCTS = {
   remove_ads: { kind: 'nonConsumable', entitlement: 'removeAds', name: 'Remove Ads', price: '£3.99', line: 'No automatic ads, ever. Rewarded ads stay optional.' },
   tokens_20: { kind: 'consumable', name: '20 Studio Tokens', price: '£0.99', grant: { tokens: 20 } },
   tokens_120: { kind: 'consumable', name: '120 Studio Tokens', price: '£4.99', grant: { tokens: 120 } },
   tokens_300: { kind: 'consumable', name: '300 Studio Tokens', price: '£9.99', grant: { tokens: 300 } },
-  vip_monthly: { kind: 'subscription', entitlement: 'vip', name: 'VIP (monthly)', price: '£4.99 a month', line: 'Ad-free, daily Studio Tokens and small conveniences. No VIP-only content.' },
+  supporter_pack: { kind: 'nonConsumable', supporter: true, name: 'Supporter Pack', price: '£4.49', grant: { tokens: 120 }, line: 'Bought once, yours for good: Remove Ads, a Supporter plaque in your studio and a one-off gift of 120 Studio Tokens. Thank you!' },
 };
-export const PRODUCT_ORDER = ['remove_ads', 'tokens_20', 'tokens_120', 'tokens_300', 'vip_monthly'];
+export const PRODUCT_ORDER = ['supporter_pack', 'remove_ads', 'tokens_20', 'tokens_120', 'tokens_300'];
 
-// VIP (§45): ad-free · daily Studio Tokens · Support Lead 35% · a second research queue · a monthly recruitment refresh ·
-// a minor Auto Training speed-up. The perks are effects the studio reads (world.effect), never a rule's fact.
-export const VIP = {
-  graceHours: 72,
-  dailyTokens: 5,
-  perks: { supportLeadPct: 35, trainingDaysPct: -10 },
-  lines: ['No automatic ads', '5 Studio Tokens a day (claim in the Store)', 'Support Lead +35%: the lead of a post-launch team works 35% faster', 'A second research queue: pick the next topic, it starts by itself', 'A free recruitment refresh every month', 'Training courses 10% shorter'],
+// The Supporter Pack (Milestone 40h). Nothing in it changes how the game plays.
+export const SUPPORTER = {
+  key: 'supporter_pack',
+  giftTokens: 120,
+  lines: ['No automatic ads (Remove Ads)', 'A Supporter plaque in your studio', 'A one-off gift of 120 Studio Tokens', 'No power: it changes nothing about how the game plays'],
 };
 
 // Rewarded ads (§45): the player chooses to watch; only an ad watched to the end grants anything.
@@ -37,7 +40,7 @@ export const REWARDED = [
 ];
 
 // Interstitials (§45): natural boundaries only — after a release, after a year end — capped (logged here), never during
-// a decision, an ending, a ceremony or a sheet, and never with Remove Ads or VIP.
+// a decision, an ending, a ceremony or a sheet, and never with Remove Ads or the Supporter Pack.
 export const INTERSTITIAL_CAPS = { firstInstallQuietMin: 10, minGapMin: 15, maxPerHour: 2, afterResumeQuietSec: 60, afterPurchaseQuietMin: 10, breakPoints: ['afterRelease', 'yearEnd'] };
 
 // Studio Token spends (§45): refreshes, cosmetics, normal training / research speed-ups, offer refresh.

@@ -121,7 +121,7 @@ export function createSupport({ bus, clock, world, business, projects, lanes = (
       business.economy.spend('credits', o.costPerDay, `Post-launch: ${o.name} (${record(job.number)?.result.title})`, 'support');
       for (const id of job.team) {
         const s = staff.get(id);
-        const lead = id === job.team[0] ? 1 + (world.effect?.('supportLeadPct') ?? 0) / 100 : 1; // Milestone 36: VIP Support Lead
+        const lead = id === job.team[0] ? 1 + (world.effect?.('supportLeadPct') ?? 0) / 100 : 1; // Milestone 36 (no source since 40h's VIP removal)
         if (s && world.onDuty(id)) job.progress += ((s.stats[o.stat] ?? 0) * staff.workMultiplier(s) * lead) / S.progressDivisor;
       }
       job.progress = +job.progress.toFixed(4);

@@ -8,7 +8,7 @@
 //
 // The queue: core research needs a worker on a queue. Until hiring (Milestone 13) brings researchers, the studio
 // researches as a team: the queue's worker is the built-in 'studio' researcher (stat 0), so a topic advances
-// RP_BALANCE.workPerDay a day × (1 + the facilities' progressPct + researchPct). Queue 2 is the later / VIP hook
+// RP_BALANCE.workPerDay a day × (1 + the facilities' progressPct + researchPct). Queue 2 is a closed "later" hook
 // (closed). RP: every day (base + on-duty workers at research stations), each release (review × scope), and firsts
 // (a genre's first release, each element's first release).
 //
@@ -54,7 +54,7 @@ export function createResearch({ bus, clock, world, R = RP_BALANCE }) {
     nodes: RESEARCH.map((r) => ({ id: r.id, name: r.name, cost: r.rp, requires: [...r.requires], actions: unlocksOf(r.id) })),
     queues: [
       { id: 'main', name: 'Research' },
-      { id: 'second', name: 'Second queue', rule: { later: 'vip' } }, // the later / VIP convenience hook: closed
+      { id: 'second', name: 'Second queue', rule: { later: 'closed' } }, // a closed "later" hook (Milestone 40h: VIP, its only user, is gone)
     ],
     runner,
     staff: { get: (id) => (id === STUDIO_RESEARCHER ? team : world.staffSystem.get(id)) },

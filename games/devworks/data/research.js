@@ -44,7 +44,7 @@ export const researchById = (id) => RESEARCH.find((r) => r.id === id) ?? null;
 //   firsts: the first release in a genre, and each recipe element released for the first time
 //   work: a started topic needs its RP in work too; the queue does workPerDay a day (+ the facilities' progressPct —
 //         Server Rack, Engine Build Farm — and researchPct), so ENG1 takes about 3 weeks. Queue 1 only; a second
-//         queue is the later / VIP hook (queues[1], closed).
+//         queue is a closed "later" hook (queues[1]).
 export const RP_BALANCE = {
   release: { perReview: 1, scopeMult: { tiny: 1, small: 1.5, standard: 2.2, large: 3, blockbuster: 4, mega: 5 } },
   daily: { base: 1, statDiv: 120 },

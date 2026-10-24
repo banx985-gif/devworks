@@ -1,7 +1,9 @@
 // DEVWORKS monetisation stubs (Milestone 36, bible §45, §2.8, §44): the shared core services — AdService,
 // CommerceService, EntitlementService — with this game's data (data/monetisation.js) and what each rewarded ad,
-// purchase, VIP perk and Studio Token spend does here. No real provider: a normal web build has none (ads and the store
-// say "not available"; the game carries on); ?debug=1 (and the tests) install core FakeStoreProvider.
+// purchase and Studio Token spend does here. Milestone 40h: no subscription — the one-time Supporter Pack (Remove Ads,
+// the studio plaque, a one-off 120 Studio Tokens; no power perks) replaced VIP (monthly). No real provider: a normal
+// web build has none (ads and the store say "not available"; the game carries on); ?debug=1 (and the tests) install
+// core FakeStoreProvider.
 //
 // Paid convenience never buys prestige: every grant here is a refresh, a speed-up, RP or Studio Tokens. Nothing reads
 // or writes a secret, an award, Prestige Tokens, C11 / C12, PROJECT ONE / X, the true ending or the grade.
@@ -14,26 +16,29 @@
 //                                  contracts, world, profile, commit, saveAccount, now, context })
 //   m.setProvider(p) · m.startup()
 //   m.rewardTarget(id) → { show, scope, target, block, line }   m.watch(id) → Promise<{ ok, status, message }>
-//   m.buy(key) · m.restore() · m.claimDaily() · m.spend(id) · m.interstitial(breakPoint)
-//   m.vip · m.removeAds · m.adFree · m.perk(key) (the studio's effect source)
-//   m.queueResearch(id) · m.queuedResearch (VIP: the second research queue)
+//   m.buy(key) · m.restore() · m.spend(id) · m.interstitial(breakPoint)
+//   m.supporter (the Supporter Pack is owned) · m.removeAds · m.adFree
 //   serializeAccount / loadAccount · serializeRun / loadRun · payHeld()
 import { EntitlementService } from '../../../../core/EntitlementService.js';
 import { AdService } from '../../../../core/AdService.js';
 import { CommerceService } from '../../../../core/CommerceService.js';
-import { PRODUCTS, REWARDED, VIP, INTERSTITIAL_CAPS, TOKEN_SPENDS, STORE_MESSAGES, AD_TEXT } from '../../data/monetisation.js';
+import { PRODUCTS, REWARDED, SUPPORTER, INTERSTITIAL_CAPS, TOKEN_SPENDS, STORE_MESSAGES, AD_TEXT } from '../../data/monetisation.js';
 import { STUDIO_COLOURS } from '../../data/setup.js';
 
 const REWARD_BY_ID = Object.fromEntries(REWARDED.map((r) => [r.id, r]));
 const SPEND_BY_ID = Object.fromEntries(TOKEN_SPENDS.map((s) => [s.id, s]));
 
 export function createMonetisation({ bus, clock, business, research = null, recruitment = null, training = null, sponsors = null, publishers = null, contracts = null, profile = null, commit = async () => {}, saveAccount = null, now = () => Date.now(), context = () => ({}) }) {
-  const entitlements = new EntitlementService({ graceHours: VIP.graceHours, now, bus });
-  const ads = new AdService({ caps: INTERSTITIAL_CAPS, placements: REWARDED, now, adFree: () => entitlements.adFree(now()), bus });
+  const entitlements = new EntitlementService({ now, bus });
+  // Milestone 40h: the Supporter Pack — bought (the store lists it as owned; a refund takes it away at the next store
+  // check) or carried over from an old VIP save (kept for good). Either way: no automatic ads, the studio plaque.
+  let supporterBought = false;
+  let supporterFromVip = false;
+  const supporter = () => supporterBought || supporterFromVip;
+  const adFree = () => entitlements.removeAds || supporter();
+  const ads = new AdService({ caps: INTERSTITIAL_CAPS, placements: REWARDED, now, adFree, bus });
   let heldTokens = 0; // bought with no run open: paid into the next one
   let hasRun = () => !!clock && business.credits != null;
-  let queued = null; // VIP: the next research topic
-  let monthRefresh = null; // VIP: the game month of the last free recruitment refresh
   const persist = () => saveAccount?.(api.serializeAccount());
   const tokensIn = (n, why) => {
     if (!hasRun()) heldTokens += n;
@@ -43,8 +48,13 @@ export function createMonetisation({ bus, clock, business, research = null, recr
     products: PRODUCTS,
     entitlements,
     grant: (p) => {
+      if (p.supporter) {
+        if (supporter()) return; // already owned: the one-off Studio Tokens are never given twice
+        setSupporter(true);
+      }
       if (p.grant?.tokens) tokensIn(p.grant.tokens, `Store: ${p.name}`);
     },
+    owned: (keys) => setSupporter(keys.includes(SUPPORTER.key)), // Restore purchases / the quiet store check
     commit: async () => {
       persist();
       await commit();
@@ -54,6 +64,12 @@ export function createMonetisation({ bus, clock, business, research = null, recr
     bus,
   });
   let provider = null;
+  function setSupporter(on) {
+    if (supporterBought === !!on) return;
+    supporterBought = !!on;
+    persist();
+    bus?.emit('entitlements:change', { removeAds: entitlements.removeAds, supporter: supporter() });
+  }
   bus?.on('commerce:purchased', () => ads.notePurchase());
   bus?.on('entitlements:change', () => persist());
 
@@ -163,39 +179,6 @@ export function createMonetisation({ bus, clock, business, research = null, recr
     return ads.interstitial(breakPoint, { tutorial: !!ctx.tutorial, decisionPending: !!ctx.busy });
   }
 
-  // --- VIP ------------------------------------------------------------------------------------------------------------
-  const dayKey = (t = now()) => {
-    const d = new Date(t);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  function claimBlock() {
-    if (!entitlements.vipActive(now())) return 'VIP is not active';
-    if (entitlements.claimDayBlock(dayKey())) return 'Already claimed today';
-    return null;
-  }
-  function claimDaily() {
-    const b = claimBlock();
-    if (b) return { ok: false, why: b };
-    entitlements.claimDay(dayKey());
-    tokensIn(VIP.dailyTokens, 'VIP: daily Studio Tokens');
-    persist();
-    return { ok: true, amount: VIP.dailyTokens };
-  }
-  // The studio's effect source: VIP perks (never a rule's fact).
-  const perk = (key) => (entitlements.vipActive(now()) ? VIP.perks[key] ?? 0 : 0);
-  // VIP: a free recruitment refresh each game month; the queued research topic starts when the current one finishes.
-  bus?.on('clock:month', () => {
-    if (!entitlements.vipActive(now()) || monthRefresh === gameMonth()) return;
-    monthRefresh = gameMonth();
-    recruitment?.refreshWith?.('ad');
-  });
-  bus?.on('research:complete', () => {
-    if (!queued || !entitlements.vipActive(now()) || research?.active) return;
-    const id = queued;
-    queued = null;
-    if (!research.why(id)) research.start(id);
-  });
-
   const api = {
     entitlements,
     ads,
@@ -217,36 +200,25 @@ export function createMonetisation({ bus, clock, business, research = null, recr
       const check = await commerce.recheck();
       return { pending, check };
     },
-    get vip() {
-      return entitlements.vipActive(now());
+    get supporter() {
+      return supporter();
     },
     get removeAds() {
-      return entitlements.removeAds;
+      return adFree();
     },
     get adFree() {
-      return entitlements.adFree(now());
+      return adFree();
     },
     get heldTokens() {
       return heldTokens;
     },
-    perk,
     rewardTarget,
     watch,
     spendBlock,
     spend,
     interstitial,
-    claimBlock,
-    claimDaily,
     buy: (key) => commerce.buy(key),
     restore: () => commerce.restore(),
-    queueResearch(id) {
-      if (!entitlements.vipActive(now())) return { ok: false, why: 'VIP: a second research queue' };
-      queued = id;
-      return { ok: true };
-    },
-    get queuedResearch() {
-      return queued;
-    },
     // force: the run is being opened right now (its first frame hasn't run yet).
     payHeld(force = false) {
       if (!heldTokens || (!force && !hasRun())) return 0;
@@ -256,23 +228,29 @@ export function createMonetisation({ bus, clock, business, research = null, recr
       persist();
       return n;
     },
-    serializeAccount: () => ({ entitlements: entitlements.serialize(), processed: entitlements.serializeProcessed(), ads: ads.serializeAccount(), heldTokens }),
+    serializeAccount: () => ({ entitlements: entitlements.serialize(), processed: entitlements.serializeProcessed(), ads: ads.serializeAccount(), heldTokens, supporter: supporterBought, supporterFromVip }),
     loadAccount(d) {
-      entitlements.load(d?.entitlements ?? null);
+      // Milestone 40h: an old account with VIP (active, or bought and in its grace time) becomes a Supporter Pack owner
+      // for good, with the pack's one-off Studio Tokens (paid into the next run opened); its VIP state is dropped.
+      const e = d?.entitlements ?? null;
+      const hadVip = !!(e && d?.supporterFromVip == null && (e.vipActive || e.vipExpiresAt != null || e.vipGraceUntil != null));
+      entitlements.load(e ? { ...e, vipActive: false, vipExpiresAt: null, vipGraceUntil: null, vipLastValidatedAt: null } : null);
       entitlements.loadProcessed(d?.processed ?? []);
       ads.loadAccount(d?.ads ?? null);
       heldTokens = d?.heldTokens ?? 0;
+      supporterBought = !!d?.supporter;
+      supporterFromVip = !!d?.supporterFromVip || hadVip;
+      if (hadVip) {
+        if (!supporterBought) heldTokens += SUPPORTER.giftTokens;
+        persist();
+      }
     },
-    serializeRun: () => ({ ads: ads.serializeRun(), queued, monthRefresh }),
+    serializeRun: () => ({ ads: ads.serializeRun() }),
     loadRun(d) {
-      ads.loadRun(d?.ads ?? null);
-      queued = d?.queued ?? null;
-      monthRefresh = d?.monthRefresh ?? null;
+      ads.loadRun(d?.ads ?? null); // a save from before Milestone 40h may hold VIP's research queue: ignored
     },
     newGame() {
       ads.loadRun(null);
-      queued = null;
-      monthRefresh = null;
     },
   };
   ads.loadAccount(null);

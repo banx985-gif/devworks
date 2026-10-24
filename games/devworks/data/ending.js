@@ -4,6 +4,10 @@
 // not needed to reach the ending. The grade is core GradeEngine: nine categories with bible §56's maxima, each made of
 // parts (a fact, the value for full points, an optional floor below which it scores 0; points × (value − floor) ÷
 // (full − floor), kept between 0 and the part's points). No part reads hardware, so a software-only run can reach S.
+// Milestone 40h (Kairosoft rule 5: the top grade is rare): the bands stay bible §56's, but the "full" marks of the parts
+// every soak run maxed out were raised to what a great studio reaches, and Research / Engines leans on the research
+// (an own engine and licence customers count less), so S comes a few times in 20 careful runs and in about a third of
+// expert runs (the rarity soak, tests/devworks/soak_grades.mjs; before / after in docs/DECISIONS.md).
 export const ENDING = {
   endYear: 20,
   total: 1000,
@@ -23,7 +27,7 @@ export const ENDING = {
         { fact: 'releases', label: 'Games released', full: 30, points: 50 },
         { fact: 'bestReview', label: 'Best review', floor: 60, full: 95, points: 50 },
         { fact: 'topReviewAvg', label: 'Average review of your best 10', floor: 55, full: 90, points: 60 },
-        { fact: 'lifetimeCopies', label: 'Copies sold, all games', full: 40000000, points: 60 },
+        { fact: 'lifetimeCopies', label: 'Copies sold, all games', full: 75000000, points: 60 }, // Milestone 40h: 40M → 75M
       ],
     },
     {
@@ -31,7 +35,7 @@ export const ENDING = {
       name: 'Awards',
       max: 160,
       parts: [
-        { fact: 'awardWins', label: 'Awards won', full: 25, points: 60 },
+        { fact: 'awardWins', label: 'Awards won', full: 170, points: 60 }, // Milestone 40h: 25 → 170
         { fact: 'awardKinds', label: 'Different awards won (C01–C10)', full: 8, points: 40 },
         { fact: 'c10Won', label: 'Game of the Year / Studio of the Year (C10)', full: 1, points: 60 },
       ],
@@ -42,7 +46,7 @@ export const ENDING = {
       max: 120,
       parts: [
         { fact: 'staffCount', label: 'Staff at the end', full: 24, points: 30 },
-        { fact: 'staffAvgLevel', label: 'Average staff level', floor: 1, full: 10, points: 40 },
+        { fact: 'staffAvgLevel', label: 'Average staff level', floor: 1, full: 15, points: 40 }, // Milestone 40h: 10 → 15
         { fact: 'legendaryHired', label: 'Legendary / Prestige people hired', full: 4, points: 30 },
         { fact: 'founderStayed', label: 'Founder with you all the way', full: 1, points: 20 },
       ],
@@ -52,9 +56,9 @@ export const ENDING = {
       name: 'Research / Engines',
       max: 120,
       parts: [
-        { fact: 'researchedVisible', label: 'Research topics done', full: 36, points: 70 },
-        { fact: 'engineVersions', label: 'Own engine versions built', full: 6, points: 30 },
-        { fact: 'engineCustomers', label: 'Engine licence customers', full: 10, points: 20 },
+        { fact: 'researchedVisible', label: 'Research topics done', full: 36, points: 105 }, // Milestone 40h: 70 → 105 points
+        { fact: 'engineVersions', label: 'Own engine versions built', full: 6, points: 10 }, // 30 → 10
+        { fact: 'engineCustomers', label: 'Engine licence customers', full: 10, points: 5 }, // 20 → 5
       ],
     },
     {
@@ -62,7 +66,7 @@ export const ENDING = {
       name: 'Franchises',
       max: 100,
       parts: [
-        { fact: 'bigFranchises', label: 'Franchises with 3+ released games', full: 4, points: 40 },
+        { fact: 'bigFranchises', label: 'Franchises with 3+ released games', full: 2, points: 40 }, // Milestone 40h: 4 → 2
         { fact: 'legendaryFranchises', label: 'Legendary franchises', full: 2, points: 40 },
         { fact: 'bestFranchiseCopies', label: 'Copies of your biggest franchise', full: 10000000, points: 20 },
       ],
@@ -72,7 +76,7 @@ export const ENDING = {
       name: 'Finance / Business',
       max: 90,
       parts: [
-        { fact: 'credits', label: 'Credits at the end', full: 50000000, points: 30 },
+        { fact: 'credits', label: 'Credits at the end', full: 450000000, points: 30 }, // Milestone 40h: 50M → 450M
         { fact: 'solvent', label: 'No debt at the end', full: 1, points: 30 },
         { fact: 'profitableYears', label: 'Years with income above costs', full: 15, points: 30 },
       ],

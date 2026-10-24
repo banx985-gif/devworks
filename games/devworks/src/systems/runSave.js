@@ -43,7 +43,9 @@ export const RUN_PARTS = {
   requests: 'deals', // Milestone 40c: the Request Board, requests in the works, relations
   rewards: 'studio', // Milestone 40c: unopened reward drops, the idea boost, vouchers
   items: 'staff', // Milestone 40e: the Studio Store, everyone's likes, item points this year
-  monetisation: 'economy / platform market / franchises', // Milestone 36: rewarded-ad uses this run, the VIP research queue
+  mastery: 'research', // Milestone 40h: element mastery (uses per element this run)
+  copycat: 'awards', // Milestone 40h: the late twist (rivals copying a combo)
+  monetisation: 'economy / platform market / franchises', // Milestone 36: rewarded-ad uses this run
 };
 // What the account file holds (bible §50 "Account save"), never a run save.
 export const ACCOUNT_PARTS = ['combos', 'secrets', 'achievements', 'legacy', 'monetisation']; // Milestone 36: entitlements, purchases, ad timing
@@ -57,6 +59,8 @@ export function serializeRun(s, extra = {}) {
     requests: ser(s.requests), // Milestone 40c
     rewards: ser(s.rewards),
     items: ser(s.items), // Milestone 40e
+    mastery: ser(s.mastery), // Milestone 40h
+    copycat: ser(s.copycat),
     monetisation: s.monetisation?.serializeRun(),
     secrets: ser(s.secrets),
     studioEvents: ser(s.studioEvents),
@@ -115,6 +119,8 @@ export function loadRun(s, data) {
   s.requests?.load(data.requests ?? null); // Milestone 40c (a save from before it: open once a game is out)
   s.rewards?.load(data.rewards ?? null);
   s.items?.load(data.items ?? null); // Milestone 40e (a save from before it: an empty store, likes from now)
+  s.mastery?.load(data.mastery ?? null); // Milestone 40h (a save from before it: its released games counted)
+  s.copycat?.load(data.copycat ?? null); // (a save from before it: no copy yet)
 }
 
 export function newRun(s, { team, seed }) {
@@ -143,6 +149,8 @@ export function newRun(s, { team, seed }) {
   s.requests?.newGame(); // Milestone 40c
   s.rewards?.newGame();
   s.items?.newGame(); // Milestone 40e
+  s.mastery?.newGame(); // Milestone 40h
+  s.copycat?.newGame();
 }
 
 // Critical boundary saves (bible §50). On each boundary event the save is written once the event (and everything
@@ -206,5 +214,17 @@ export function migrateToV3(record) {
 export function migrateToV4(record) {
   const data = { ...record.data };
   if (data.secrets?.counters) data.secrets = { ...data.secrets, counters: { ...data.secrets.counters, pendingArrivals: data.secrets.counters.pendingArrivals ?? [] } };
+  return { ...record, data };
+}
+
+// Save version 4 → 5 (Milestone 40h, Kairosoft fixes): element mastery is null, so loading counts the released games
+// so far (src/systems/mastery.js); no late-twist copy yet; VIP's run state (the queued research topic, the monthly
+// refresh) is dropped with VIP. An old account with VIP becomes a Supporter Pack owner when the account loads
+// (src/systems/monetisation.js loadAccount). Everything else is carried over untouched.
+export function migrateToV5(record) {
+  const data = { ...record.data };
+  data.mastery ??= null;
+  data.copycat ??= null;
+  if (data.monetisation) data.monetisation = { ads: data.monetisation.ads ?? null };
   return { ...record, data };
 }

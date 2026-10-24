@@ -63,7 +63,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 const PERFECT_COVER = { score: 97 }; // Milestone 37
 
-export function createBusiness({ bus, clock, world, projects }) {
+// Milestone 40h: copycatFor(recipe) → the late twist's effect on a game launched now ({ salesPct, expectPlus }) or null.
+export function createBusiness({ bus, clock, world, projects, copycatFor = () => null }) {
   const economy = new EconomySystem({
     bus,
     currencies: { credits: { name: 'Credits' }, tokens: { name: 'Studio Tokens' } },
@@ -234,7 +235,10 @@ export function createBusiness({ bus, clock, world, projects }) {
     const fanExpectation = fanExpectationFor(hype);
     const clash = marketing.clashFor(g.recipe?.genre, clock.totalDays);
     const fr = franchises.effectFor(record); // Milestone 10: fatigue and fans
-    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation, fatiguePenalty: fr?.reviewPenalty ?? 0 });
+    // Milestone 40h: a rival is copying this combo — it sells less and reviewers expect more (the late twist).
+    const cc = copycatFor(g.recipe);
+    const reviewExpectation = cc ? fanExpectation + cc.expectPlus : fanExpectation;
+    const review = reviewGame({ ...g, bugs: g.bugs + plan.extraBugs }, { fanExpectation: reviewExpectation, fatiguePenalty: fr?.reviewPenalty ?? 0 });
     const sc0 = PROJECT_BALANCE.scopes[g.scope] ?? PROJECT_BALANCE.scopes.tiny; // Milestone 7: price and reach by scope
     const sc = { ...sc0, price: Math.round(sc0.price * typeOf(g.type).priceMult) }; // Milestone 10: a Remaster sells cheaper
     const ids = plan.platforms.map((x) => x.id);
@@ -251,6 +255,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       hype,
       franchise: fr ? { ipId: g.ipId, fatigue: fr.fatigue, fanbase: fr.fanbase, salesMult: fr.salesMult, reviewPenalty: fr.reviewPenalty, relief: fr.relief } : null,
       clash: clash ? { title: clash.competitor.title, studio: clash.competitor.studio, big: clash.competitor.big, pct: clash.pct } : null,
+      copycat: cc ? { studio: cc.studio, salesPct: cc.salesPct, expectation: reviewExpectation } : null, // Milestone 40h
       qaBugs: plan.extraBugs,
       cost: plan.cost,
       certFailed: plan.platforms.filter((x) => x.cert?.failed).map((x) => x.id),
@@ -269,7 +274,7 @@ export function createBusiness({ bus, clock, world, projects }) {
       return (AUDIENCE_GROUPS.casual.includes(grp) ? cfx.casualPct ?? 0 : 0) + (AUDIENCE_GROUPS.core.includes(grp) ? cfx.corePct ?? 0 : 0);
     };
     for (const x of plan.platforms) {
-      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? reach : 0) / 100) * locMult * distMult, price: sc.price, audience: x.buyers, hype, clash });
+      byPlatform[x.id] = startSales({ tailPct: cfx.tailPct ?? 0, score: review.score, fit: g.outputs.audienceFit, trust: state.fanTrust, demand: market.demand(x.id), platform: x.id, reviewSeed: x === plan.platforms[0] ? g.reviewSeed : `${g.reviewSeed}|${x.id}`, day: clock.totalDays, salesMult: sc.salesMult * x.fit * x.niche * (fr?.salesMult ?? 1) * (1 + (world.effect?.('launchSalesPct') ?? 0) / 100) * (1 + audiencePct(x.id) / 100) * (1 + (g.deal && (!g.deal.pcOnly || x.id === 'P01') ? reach : 0) / 100) * locMult * distMult * (1 + (cc?.salesPct ?? 0) / 100), price: sc.price, audience: x.buyers, hype, clash });
       if (fx && !dist.isNeutral(fx)) {
         byPlatform[x.id].curve = dist.shapeCurve(byPlatform[x.id].curve, fx.curve);
         if (fx.netMult !== 1) byPlatform[x.id].netMult = fx.netMult;

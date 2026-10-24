@@ -4,7 +4,7 @@
 // (its own save key, so every run and slot shares it). The rules are data/secrets.js (SECRETS; SYNTHETIC_SECRETS only
 // for the Milestone 28 tests and ?synthetic=1).
 //
-// Facts (all measured by the game; nothing a premium purchase — Studio Tokens, VIP, store stubs — can move):
+// Facts (all measured by the game; nothing a premium purchase — Studio Tokens, the Supporter Pack, store stubs — can move):
 //   year · yearsDone · ngPlus · rank (highest rank index) · stage · credits · solvent · fanTrust · releases · games
 //   (released games in release order, see summary()) · awards (award ids won) · awardCount · awardWins ({ award, year,
 //   number, art, stage }) · platforms · researched · researchedVisible · facilities · discoveries · combosFound ·

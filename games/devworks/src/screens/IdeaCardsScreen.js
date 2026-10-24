@@ -3,6 +3,7 @@
 // ticked; a card the recipe so far can't take says what it needs. Tapping a card fills the info strip at the bottom
 // (src/ui/ideaInfo.js: fit with your genre — "?" until that pairing has shipped — who is good at it, how hard it is,
 // what it plays to) and the big Choose button puts it in the recipe and goes back to New Game.
+// Milestone 40h: an element's mastery (1–3 small stars on its card; a Mastery row in the strip).
 import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton, drawPadlock, hitRect } from '../../../../core/ui/Button.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
@@ -16,8 +17,26 @@ const PAD = 24;
 const GAP = 20;
 const STRIP_H = 450;
 const FIT_COL = { Great: C.good, Good: C.progress, OK: C.actionDark, Poor: C.bad, '?': C.textMuted };
+export const MASTERY_COL = '#C98A0B'; // Milestone 40h: the mastery stars' gold
 
-export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => ({}), isUnlocked, lockReason = () => 'Locked', lastUsed = () => null, shipped = () => false, onChoose }) {
+// Milestone 40h: 1–3 small gold stars, right-aligned at (right, y) on a cream pill (element mastery).
+export function drawStars(ctx, right, y, level) {
+  const str = '★'.repeat(level);
+  ctx.save();
+  ctx.font = font(S.small, true);
+  const w = ctx.measureText(str).width + 24;
+  ctx.fillStyle = '#FFF6DA';
+  ctx.strokeStyle = MASTERY_COL;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(right - w, y - 22, w, 44, 22);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  text(ctx, str, right - w / 2, y + 1, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: MASTERY_COL });
+}
+
+export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => ({}), isUnlocked, lockReason = () => 'Locked', lastUsed = () => null, shipped = () => false, mastery = () => null, onChoose }) {
   let family = 'genre';
   let selected = null;
   let rects = []; // content-space { id, r }
@@ -75,6 +94,8 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
       const tag = !x.open ? x.why : now === x.e.id ? '✓ Chosen' : x.clash ? `Needs ${x.clash.split(' needs ')[1] ?? 'more'}` : null;
       if (tag) text(ctx, tag, r.x + r.w / 2, r.y + r.w + 36, { size: S.small, bold: true, align: 'center', color: !x.open || x.clash ? C.bad : C.good, maxWidth: r.w - 20 });
       if (!x.open) drawPadlock(ctx, r.x + r.w - 40, r.y + 44, 32, C.textFaint);
+      const mlv = x.open ? mastery(x.e.id)?.level ?? 0 : 0; // Milestone 40h: element mastery, 1–3 small stars
+      if (mlv) drawStars(ctx, r.x + r.w - 18, r.y + 38, mlv);
       if (last === x.e.id) {
         ctx.fillStyle = C.purple;
         ctx.beginPath();
@@ -115,6 +136,8 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
       row('Who', info.who);
       row('Difficulty', info.difficulty, info.difficulty === 'Hard' ? C.bad : info.difficulty === 'Medium' ? C.actionDark : C.good);
       row('Plays to', info.playsTo);
+      const m = mastery(x.e.id); // Milestone 40h
+      if (m) row('Mastery', m.line ? `${'★'.repeat(m.level)} ${m.line}` : m.toNext ? `${m.toNext} more released game${m.toNext === 1 ? '' : 's'} for ★${m.level + 1}` : '★★★', m.level ? MASTERY_COL : C.textMuted);
       if (!x.open) text(ctx, x.why, s.x + 24, y, { size: S.small, bold: true, color: C.bad, maxWidth: chooseRect().x - s.x - 40 });
       else if (x.clash) text(ctx, x.clash, s.x + 24, y, { size: S.small, bold: true, color: C.bad, maxWidth: chooseRect().x - s.x - 40 });
     }

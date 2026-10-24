@@ -31,6 +31,7 @@ import { ROLES, STATS } from '../../data/staff.js';
 import { portraitOf } from '../../data/portraits.js'; // Milestone 14: the same head crop everywhere
 import { PROJECT_TYPES, projectTypeById } from '../../data/franchises.js';
 import { PROJECT_BALANCE, FRANCHISE_BALANCE } from '../../data/balance.js'; // Milestone 40b: what each choice costs
+import { drawStars, MASTERY_COL } from './IdeaCardsScreen.js'; // Milestone 40h: element mastery
 import { LOCALISATION } from '../../data/global.js';
 
 const C = THEME.color;
@@ -39,7 +40,7 @@ const PAD = 32;
 const TITLE_MAX = 28;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
-export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null, requestById = () => null, describeRequest = () => '' }) {
+export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null, requestById = () => null, describeRequest = () => '', mastery = () => null }) {
   let setup = null;
   const panelRect = () => {
     const t = topBar.rect();
@@ -232,7 +233,10 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         else text(ctx, '+', ir.x + ir.w / 2, ir.y + ir.h / 2, { size: 90, bold: true, color: C.action, align: 'center', baseline: 'middle' });
         text(ctx, f.name, r.x + 150, r.y + 26, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
         text(ctx, el ? el.name : 'Choose…', r.x + 150, r.y + 66, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
+        const m = el ? mastery(el.id) : null; // Milestone 40h: element mastery stars and line
+        if (m?.level) drawStars(ctx, r.x + r.w - 14, r.y + 30, m.level);
         if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, r.y + 108, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
+        else if (m?.line && !locked(f.id)) text(ctx, m.line, r.x + 150, r.y + 108, { size: S.small, bold: true, color: MASTERY_COL, maxWidth: r.w - 166 });
         else if (locked(f.id)) text(ctx, reqLocked(f.id) ? 'Fixed by the request' : `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, r.y + 108, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
       }
       if (!locked(f.id)) box(r, () => openPicker(f.id), f.id);

@@ -33,7 +33,7 @@ export const REQUIRED_SCREENS = [
   { name: 'Rumour Archive', screen: 'rumours', route: 'Compete → Rumour Archive' },
   { name: 'Hall of Fame', screen: 'hallOfFame', route: 'Compete → Hall of Fame' },
   { name: 'Ledger', screen: 'ledger', route: 'Business → Ledger' },
-  { name: 'Store / VIP', screen: 'store', route: 'Business → Store / VIP' },
+  { name: 'Store', screen: 'store', route: 'Business → Store' },
   { name: 'Settings / Accessibility', screen: 'settings', route: 'Main Menu → Settings; Business → Settings' },
   { name: 'Ending Ceremony', screen: 'ending', route: 'Automatic after Year 20; Business → Year-20 ending' },
   { name: 'New Game+ Setup', screen: 'ngplus', route: 'Ending → Start New Game+' },

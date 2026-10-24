@@ -38,6 +38,15 @@ export const RIVAL_BALANCE = {
   maxPerMonth: 3, // at most this many rival releases in one month (in rival order)
 };
 
+// Milestone 40h — the late twist (Kairosoft rule 5), src/systems/copycat.js: from Year fromYear a rival copies your
+// best-selling genre + theme combo. For `years` years after that, a game you launch with that combo sells salesPct less,
+// and reviewers expect more of it: its Fan Expectation is expectPlus higher (the review's usual expectation penalty, ×0.5
+// a point, then bites only where the game doesn't beat what is expected of it). New combos are unaffected. One copy at a
+// time; once it is over, the next one comes when one of your games tops a week's chart (the #1 chart week line of
+// data/secrets.js COUNTERS) with a combo that wasn't the last one copied. The copier: the first of `copiers` active that
+// year.
+export const LATE_TWIST = { fromYear: 15, years: 2, salesPct: -25, expectPlus: 10, copiers: ['R07', 'R06', 'R05', 'R02', 'R03'] };
+
 // Generated titles: one word from each list per rival style (all made up).
 export const RIVAL_TITLES = {
   first: ['Iron', 'Crystal', 'Neon', 'Silent', 'Hollow', 'Golden', 'Rapid', 'Lost', 'Emerald', 'Storm', 'Echo', 'Velvet', 'Rogue', 'Sky', 'Paper', 'Ember'],

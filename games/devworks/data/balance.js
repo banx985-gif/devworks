@@ -319,8 +319,8 @@ export const FAME = {
     { id: 'D', min: 300 },
     { id: 'C', min: 1100 },
     { id: 'B', min: 3000 },
-    { id: 'A', min: 6500 },
-    { id: 'S', min: 11000 },
+    { id: 'A', min: 7000 }, // Milestone 40h: 6500 → 7000 (element mastery makes reviews a little better)
+    { id: 'S', min: 12500 }, // Milestone 40h: 11000 → 12500
   ],
   release: { perPoint: 2, minus: 40 }, // Fame at release = max(0, review × 2 − 40). Milestone 40: was × 3 − 60
   copiesPerFame: 2000, // then +1 Fame for every 2,000 copies sold. Milestone 40: was 20 (Rank S by Year 3)

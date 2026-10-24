@@ -174,7 +174,9 @@ export function founderStatMult(founder, staffId, statKey) {
 // studioVariancePct() → the studio's own schedule effect (the Producer Desk while it stands).
 // Milestone 29: recipeBonus(recipe) → a known secret recipe's bonus ({ output, tailPct, franchisePct, recipes }) or null,
 // fixed when the game starts like a combo.
-export function createGameProjects({ engineFor = () => null, recipeBonus = () => null, bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
+// Milestone 40h: mastery(recipe) → the recipe's element mastery ({ bugPct, output }, src/systems/mastery.js) or null,
+// fixed when the game starts: bugPct on bugs made, output added to the finished game.
+export function createGameProjects({ engineFor = () => null, recipeBonus = () => null, mastery = () => null, bus, world, clock = null, charge = null, founder = () => null, studioVariancePct = () => 0, B = PROJECT_BALANCE }) {
   const staff = world.staffSystem;
   const fx = (key) => world.effect?.(key) ?? 0; // Milestone 11: the facilities' effects
   // A worker's stats with the founder perk applied (outputs), and the perk's own numbers.
@@ -239,6 +241,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
     d.hype ??= 0;
     d.combos ??= []; // Milestone 15 (a game started before it keeps none)
     d.engine ??= null; // Milestone 16
+    d.mastery ??= null; // Milestone 40h (a game started before it: none)
     d.deal ??= null; // Milestone 17: a publisher deal (its id)
     d.request ??= null; // Milestone 40c: a request (its id)
     d.localised ??= null; // Milestone 21: null | 'studio' (paid by the studio) | 'publisher' (a global deal pays it)
@@ -300,7 +303,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         const avgEnergy = team.reduce((t, s) => t + s.energy, 0) / team.length;
         const bugFixPct = staff.groupEffect(team, 'bugFixPct') + fx('bugFixPct') + (['FEA02', 'FEA03'].includes(d.recipe.feature) ? fx('onlineQaPct') : 0); // Milestone 18: NovaNet
         const founderBug = 1 + (founderIn(team.map((s) => s.id))?.perk.bugPct ?? 0) / 100;
-        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0) + staff.groupEffect(core, 'bugMakePct'); // Milestone 15: QA load; Milestone 16: engine Stability; 40g: Bolt
+        const bugPct = (focus.bugPct ?? 0) + (crunching ? B.decisions.crunch.bugPct : 0) + comboEffects(d.combos).bugPct + (d.engine?.fx.bugPct ?? 0) + staff.groupEffect(core, 'bugMakePct') + (d.mastery?.bugPct ?? 0); // Milestone 15: QA load; Milestone 16: engine Stability; 40g: Bolt; 40h: mastery
         const complexity = recipeComplexity(d.recipe, d.scope, d.cut, B);
         const behind = behindOf(job);
         withRng(job, (r) => {
@@ -342,6 +345,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         add(cfx.output);
         add(d.secretRecipe?.output); // Milestone 29: a secret recipe
         add(d.engine?.fx.output); // Milestone 16: the own engine
+        add(d.mastery?.output); // Milestone 40h: element mastery
         for (const id of job.slots) {
           const s = staff.get(id);
           if (s) s.assigned = false;
@@ -579,6 +583,7 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         costMult: +(T.costMult * (1 + cfx.costPct / 100) * locCost).toFixed(4), // Milestone 15: a combo's production cost; Milestone 21: localisation
         combos,
         secretRecipe: recipeBonus(setup.recipe) ?? null, // Milestone 29
+        mastery: mastery(setup.recipe) ?? null, // Milestone 40h: the recipe's element mastery, fixed at the start
         projectOne: !!setup.projectOne, // Milestone 31: the PROJECT ONE template
         engine: setup.engine ? engineFor(setup.engine, setup.recipe.technology) : null, // Milestone 16: a snapshot
         deal: setup.deal ?? null, // Milestone 17: the publisher deal this game is made under (src/systems/publishers.js)

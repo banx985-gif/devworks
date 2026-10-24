@@ -46,6 +46,7 @@ export const STUDIO_WALLS = {
   window: { side: 'right', t0: 6.2, t1: 8.7, h0: 105, h1: 215 },
   door: { side: 'left', t0: 9.4, t1: 11.2, h0: 0, h1: 190 },
   sign: { side: 'right', t0: 3.4, t1: 5.8, h0: 150, h1: 222 }, // Milestone 5b: the studio's name, in the studio colour
+  plaque: { side: 'right', t0: 3.7, t1: 5.5, h0: 102, h1: 142 }, // Milestone 40h: the Supporter plaque, under the sign
 };
 // The rug and the patch of window light on the floor, in cells.
 export const STUDIO_FLOOR = {

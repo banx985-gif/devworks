@@ -13,7 +13,7 @@ export const SAVE = {
   achievementsKey: 'devworks:account:achievements', // Milestone 32: achievements, the Hall of Fame, account records // Milestone 28: secrets found in any run, prestige tokens, account flags
   legacyAccountKey: 'devworks:account:legacy', // Milestone 33: legacy summaries of finished runs, the staff you have worked with
   rolling: 3, // each slot keeps its last 3 saves; a damaged newest copy falls back to the one before
-  version: 4, // Milestone 35: 2 → 3 normalises the shape (src/systems/runSave.js migrateToV3); Milestone 40g: 3 → 4 (the Works Gods, migrateToV4)
+  version: 5, // Milestone 35: 2 → 3 normalises the shape (src/systems/runSave.js migrateToV3); Milestone 40g: 3 → 4 (the Works Gods, migrateToV4); Milestone 40h: 4 → 5 (mastery, the late twist, no VIP: migrateToV5)
   accountFileKey: 'devworks:account:file', // Milestone 35: the one account file (the four records above are read once, then left)
   accountVersion: 1,
   intervalMs: 10000, // save every 10 s of running game time if anything changed (and on leaving the app)

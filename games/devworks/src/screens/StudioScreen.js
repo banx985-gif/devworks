@@ -622,6 +622,24 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     ctx.textBaseline = 'middle';
     ctx.fillText(sg.name, len / 2, 2, len - 30);
     ctx.restore();
+    if (sg.supporter) drawPlaque(ctx);
+  }
+
+  // Milestone 40h: the Supporter Pack's plaque, a small gold plate under the sign (drawn by code, no art).
+  function drawPlaque(ctx) {
+    const at = STUDIO_WALLS.plaque;
+    if (!at) return;
+    fillPatch(ctx, wallPatch(iso, at.side, at.t0, at.t1, at.h0, at.h1), '#E8B33C', '#8A5A12', 3);
+    const o = wallPoint(iso, at.side, at.t0, (at.h0 + at.h1) / 2);
+    const len = (at.t1 - at.t0) * HW;
+    ctx.save();
+    ctx.transform(1, HH / HW, 0, 1, o.x, o.y);
+    ctx.font = font(28, true);
+    ctx.fillStyle = '#4A2E05';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('★ SUPPORTER', len / 2, 1, len - 16);
+    ctx.restore();
   }
 
   function fillPatch(g, pts, fill, stroke = null, width = 2) {

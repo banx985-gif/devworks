@@ -1,4 +1,4 @@
-// Settings / Accessibility (Milestone 34, bible §51) and the Store / VIP stub (Milestone 36 fills it), card lists
+// Settings / Accessibility (Milestone 34, bible §51) and the Store stub (Milestone 36 fills it), card lists
 // (src/ui/cardListScreen.js) with their own small bar (a Back button), so they open from the title screen too.
 // Each setting is a card with its choices as buttons; the chosen one is ticked. Values: core/Settings (data/settings.js).
 import { THEME } from '../../../../core/Theme.js';
@@ -66,7 +66,7 @@ export function createSettingsScreen({ layout, assets, settings, onBack, extra =
   return { ...screen, bar }; // Back (the bar, or the phone's) → the router goes back a screen
 }
 
-// Store / VIP (bible §6): a stub until Milestone 36 (no real store; nothing here can be bought yet).
+// Store (bible §6): a stub until Milestone 36 (no real store; nothing here can be bought yet).
 export function createStoreScreen({ layout, assets, onBack, build = null }) {
   const bar = backBar(layout, () => onBack());
   const screen = createCardListScreen({
@@ -76,10 +76,10 @@ export function createStoreScreen({ layout, assets, onBack, build = null }) {
     build:
       build ??
       (() => ({
-        title: 'Store / VIP',
+        title: 'Store',
         icon: 'dev_reward_01',
         subtitle: 'The store opens in a later update. DEVWORKS is fully playable without spending.',
-        sections: [{ heading: 'Coming later', cards: [], empty: 'Remove Ads, Studio Tokens and VIP will be offered here. Nothing paid ever buys a secret, an award or a prestige unlock.' }],
+        sections: [{ heading: 'Coming later', cards: [], empty: 'Remove Ads, Studio Tokens and a Supporter Pack will be offered here. Nothing paid ever buys a secret, an award or a prestige unlock.' }],
       })),
   });
   return { ...screen, bar }; // Back (the bar, or the phone's) → the router goes back a screen
