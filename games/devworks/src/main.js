@@ -96,7 +96,7 @@ import { TextPrompt } from '../../../core/ui/TextPrompt.js';
 import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
-import { createTopBar } from '../../../core/ui/TopBar.js';
+import { createDevTopBar, shortNumber } from './ui/devTopBar.js'; // Milestone 40i: the core top bar, with a stats chip that always fits
 import { createBottomBar } from '../../../core/ui/BottomBar.js';
 import { drawButton, hitRect, setPressPoint, clearPress } from '../../../core/ui/Button.js';
 import { drawToasts } from '../../../core/ui/Toast.js';
@@ -795,8 +795,8 @@ const topBarOptions = {
   assets,
   clock,
   stats: () => [
-    { icon: TOP_ICONS.credits, text: business.credits.toLocaleString('en-GB'), color: business.inDebt ? COL.bad : COL.text },
-    ...(business.tokens ? [{ icon: TOP_ICONS.tokens, text: String(business.tokens), gap: 20 }] : []), // Studio Tokens once there are any (Milestone 12: room for RP)
+    { icon: TOP_ICONS.credits, text: business.credits.toLocaleString('en-GB'), short: shortNumber(business.credits), color: business.inDebt ? COL.bad : COL.text },
+    ...(business.tokens ? [{ icon: TOP_ICONS.tokens, text: String(business.tokens), short: shortNumber(business.tokens), gap: 20 }] : []), // Studio Tokens once there are any (Milestone 12: room for RP)
     { icon: 'dev_ui_19', iconSize: 44, text: String(Math.round(business.state.fanTrust)), gap: 10 }, // Fan Trust (Milestone 9)
     { icon: 'dev_reward_03', iconSize: 44, text: research.rp >= 10000 ? `${Math.floor(research.rp / 1000)}k` : String(research.rp), gap: 10 }, // RP (Milestone 12)
     { text: `Rank ${business.rank.id}`, gap: 10 },
@@ -809,8 +809,8 @@ const topBarOptions = {
   inboxCount: () => (debugBadges ? 1 : studioEvents.unread()), // Milestone 27: unread messages
   helpCount: () => (started && !guide.state.off ? walks.waiting : 0), // Milestone 40d: walkthroughs left for Later
 };
-const topBar = createTopBar({ ...topBarOptions, home: true });
-const subTopBar = createTopBar({ ...topBarOptions, home: false, back: { label: '‹ Back', onTap: () => router.back() } });
+const topBar = createDevTopBar({ ...topBarOptions, home: true });
+const subTopBar = createDevTopBar({ ...topBarOptions, home: false, back: { label: '‹ Back', onTap: () => router.back() } });
 const bottomItems = BOTTOM_SLOTS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, badge: () => badgeFor(s.id) }));
 const MENU_SLOT = { id: 'menu', label: MENU_TEXT.button, icon: MENU_TEXT.icon, badge: () => null }; // Milestone 40e
 const bottomBar = createBottomBar({
