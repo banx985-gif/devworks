@@ -11,6 +11,7 @@ import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { card, text, para } from '../../../../core/ui/Kit.js';
 import { ENDING } from '../../data/ending.js';
+import { drawCastFace } from '../ui/castArt.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -19,7 +20,9 @@ const BAND_COLOUR = { S: '#B8860B', A: '#2E7D32', B: '#1565C0', C: '#6A1B9A', D:
 
 // ending(): src/systems/ending.js; credits(): [{ heading, names: [] }]; onOffer(): the ceremony reached the offer (save);
 // onContinue(): keep playing; onNgPlus(): open the NG+ setup.
-export function createEndingScreen({ layout, assets, ending, credits = () => [], onOffer = () => {}, onContinue, onNgPlus, ngLevel = () => 1 }) {
+// Milestone 40k: host = { face, name } (the series cast's awards host) opens the recap and stands by the grade; a
+// missing face leaves both steps as they were.
+export function createEndingScreen({ layout, assets, ending, credits = () => [], onOffer = () => {}, onContinue, onNgPlus, ngLevel = () => 1, host = null }) {
   let step = 'recap';
   let t = 0;
   const P = ENDING.ceremony;
@@ -62,6 +65,15 @@ export function createEndingScreen({ layout, assets, ending, credits = () => [],
     const pad = 48;
     const w = sr.w - pad * 2;
     if (step === 'recap') {
+      // Milestone 40k: the host's line first ("Twenty years! Let's look back."), when his face is in.
+      if (host && assets.has?.(host.face)) {
+        if (ctx) {
+          drawCastFace(ctx, assets, host.face, { x: sr.x + pad, y: y - 20, w: 120, h: 120 }, C.gold);
+          text(ctx, host.name, sr.x + pad + 144, y + 4, { size: S.small, bold: true, color: C.actionDark, maxWidth: w - 144 });
+          text(ctx, '"Twenty years! Let’s look back."', sr.x + pad + 144, y + 48, { size: S.body, bold: true, maxWidth: w - 144 });
+        }
+        y += 140;
+      }
       if (ctx) {
         text(ctx, 'Twenty years of games', cx, y, { size: S.heading, bold: true, color: C.actionDark, align: 'center' });
         const cover = rc.best?.cover;
@@ -105,6 +117,7 @@ export function createEndingScreen({ layout, assets, ending, credits = () => [],
         ctx.save();
         ctx.globalAlpha = k;
         text(ctx, g.band, cx, gy, { size: 220 * (0.7 + 0.3 * k), bold: true, align: 'center', color: BAND_COLOUR[g.band] ?? C.text });
+        if (host && drawCastFace(ctx, assets, host.face, { x: sr.x + pad, y: gy + 20, w: 150, h: 150 }, C.gold)) text(ctx, host.name, sr.x + pad + 75, gy + 196, { size: S.small, bold: true, align: 'center', maxWidth: 230 }); // Milestone 40k
         text(ctx, `${g.total} / ${g.max}`, cx, gy + 240, { size: S.heading, bold: true, align: 'center' });
         text(ctx, r.title, cx, gy + 310, { size: S.heading, bold: true, align: 'center', color: C.actionDark, maxWidth: w });
         ctx.restore();

@@ -1,16 +1,20 @@
 // A scrolling list of cards (Milestone 17: the Publishers and Contract Board screens). The screen's content comes from
 // build() every frame: { title, icon, subtitle, sections: [{ heading, empty, cards: [{ id, logo, title, lines:
-// [string | { text, color, bold }], buttons: [{ id, label, accent, disabled, onTap }], highlight }] }] }.
+// [string | { text, color, bold }], buttons: [{ id, label, accent, disabled, onTap }], highlight, face }] }] }.
+// Milestone 40k: face = a series cast face (a publisher's or sponsor's rep) in the staff portrait frame under the logo;
+// a missing face file leaves the card as it was.
 // Layout and tapping share one pass, so they never disagree. Drag scrolls.
 import { THEME } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
+import { castFace, drawCastFace } from './castArt.js';
 
 const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
 const LOGO = 130;
+const FACE = 110;
 
 // Milestone 34: colour-blind-safe symbols (a setting): a good / bad line gets ✓ / ✗ in front. And the empty-state audit:
 // a section with no cards and no `empty` text is reported to globalThis.__dwEmptyAudit (tests), so no panel is blank.
@@ -52,11 +56,13 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
         y += wrapLines(sec.empty, cw, S.body).length * S.body * 1.3 + 30;
       }
       for (const c of sec.cards) {
-        const tx = c.logo ? LOGO + 40 : 24;
+        const face = castFace(assets, c.face);
+        const sideH = (c.logo ? LOGO : 0) + (face ? (c.logo ? 16 : 0) + FACE : 0);
+        const tx = sideH ? LOGO + 40 : 24;
         const tw = cw + 16 - tx - 24;
         const lines = c.lines.map((l) => mark(typeof l === 'string' ? { text: l } : l));
         const linesH = lines.reduce((t, l) => t + wrapLines(l.text, tw, S.small, l.bold).length * S.small * 1.3 + 8, 0);
-        const bodyH = Math.max(c.logo ? LOGO + 10 : 0, 70 + linesH);
+        const bodyH = Math.max(sideH ? sideH + 10 : 0, 70 + linesH);
         const btnH = c.buttons?.length ? THEME.button.minH + 24 : 0;
         const r = { x: PAD - 8, y, w: cw + 16, h: 24 + bodyH + btnH + 16 };
         if (ctx) {
@@ -68,6 +74,7 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
           ctx.fill();
           ctx.stroke();
           if (c.logo) assets.drawContained(ctx, c.logo, { x: r.x + 20, y: r.y + 24, w: LOGO, h: LOGO });
+          if (face) drawCastFace(ctx, assets, face, { x: r.x + 20 + (LOGO - FACE) / 2, y: r.y + 24 + (c.logo ? LOGO + 16 : 0), w: FACE, h: FACE });
           text(ctx, c.title, r.x + tx, r.y + 22, { size: S.body, bold: true, maxWidth: tw });
           let ly = r.y + 80;
           for (const l of lines) ly += para(ctx, l.text, r.x + tx, ly, tw, { size: S.small, color: l.color ?? C.text, bold: l.bold }) + 8;

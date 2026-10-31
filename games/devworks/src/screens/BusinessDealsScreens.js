@@ -6,6 +6,7 @@ import { THEME } from '../../../../core/Theme.js';
 import { createCardListScreen } from '../ui/cardListScreen.js';
 import { PUBLISHERS, publisherById, DEALS, contractKindById, CONTRACTS } from '../../data/publishers.js';
 import { STATS } from '../../data/staff.js';
+import { CAST_PUBLISHER_REPS } from '../../data/cast.js'; // Milestone 40k: each publisher's rep
 
 const C = THEME.color;
 
@@ -25,6 +26,7 @@ export function createPublishersScreen({ layout, assets, topBar, publishers, dea
     return {
       id: d.id,
       logo: pub.logo,
+      face: CAST_PUBLISHER_REPS[pub.id],
       title: `${pub.name} — ${pub.style}`,
       lines,
       highlight: kind !== 'offer',
@@ -50,7 +52,7 @@ export function createPublishersScreen({ layout, assets, topBar, publishers, dea
         { heading: 'Signed deals', empty: 'None signed.', cards: publishers.active.map((d) => card(d, 'signed')) },
         {
           heading: 'The publishers',
-          cards: PUBLISHERS.map((p) => ({ id: p.id, logo: p.logo, title: p.name, lines: [p.identity, { text: p.style, color: C.textMuted }, ...(p.rank ? [{ text: `Offers from Rank ${p.rank}`, color: C.textMuted }] : [])], buttons: [] })),
+          cards: PUBLISHERS.map((p) => ({ id: p.id, logo: p.logo, face: CAST_PUBLISHER_REPS[p.id], title: p.name, lines: [p.identity, { text: p.style, color: C.textMuted }, ...(p.rank ? [{ text: `Offers from Rank ${p.rank}`, color: C.textMuted }] : [])], buttons: [] })),
         },
       ],
     }),

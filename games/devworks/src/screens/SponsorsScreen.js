@@ -5,6 +5,7 @@
 import { THEME } from '../../../../core/Theme.js';
 import { createCardListScreen } from '../ui/cardListScreen.js';
 import { SPONSORS, sponsorById, SPONSOR_BALANCE } from '../../data/sponsors.js';
+import { sponsorRepFace } from '../../data/cast.js'; // Milestone 40k: the sponsor reps
 
 const C = THEME.color;
 
@@ -27,6 +28,7 @@ export function createSponsorsScreen({ layout, assets, topBar, sponsors, dateLab
             return {
               id: d.id,
               logo: def.logo,
+              face: sponsorRepFace(def.id),
               title: `${def.name} · ${sponsors.tierName(d.id)}`,
               highlight: true,
               lines: [
@@ -48,6 +50,7 @@ export function createSponsorsScreen({ layout, assets, topBar, sponsors, dateLab
             return {
               id: o.id,
               logo: def.logo,
+              face: sponsorRepFace(def.id),
               title: `${def.name}${o.renewal ? ' (renewal)' : ''} · ${def.theme}`,
               lines: [
                 { text: def.perkText, color: C.actionDark, bold: true },
@@ -64,6 +67,7 @@ export function createSponsorsScreen({ layout, assets, topBar, sponsors, dateLab
           cards: SPONSORS.map((def) => ({
             id: `all-${def.id}`,
             logo: def.logo,
+            face: sponsorRepFace(def.id),
             title: `${def.name} · ${sponsors.tierName(def.id)}`,
             lines: [def.perkText, { text: def.obligationText, color: C.textMuted }, ...(def.later ? [{ text: `Offers once ${def.later} exists.`, color: C.bad }] : [])],
             buttons: [],

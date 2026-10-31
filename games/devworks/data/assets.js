@@ -13,6 +13,7 @@ import { FILED_COVERS } from './covers.js';
 import { PLATFORMS } from './platforms.js';
 import { TOP_ICONS } from './home.js';
 import { COMPONENTS, HARDWARE } from './hardware.js';
+import { CAST_ART } from './cast.js';
 
 const art = (folder, key) => [key, `assets/images/${folder}/${key}.png`];
 
@@ -21,6 +22,7 @@ export const ASSETS = {
   ...Object.fromEntries(STATIONS.map((s) => art('facilities', s.art))),
   ...Object.fromEntries(ROSTER.map((d) => art('staff', d.art))), // Milestone 13: everyone recruitment can find
   ...Object.fromEntries(GODS.map((d) => art('staff', d.art))), // Milestone 40g: the Works Gods (series cast, not on the 360 list)
+  ...Object.fromEntries(CAST_ART.map((k) => art('cast', k))), // Milestone 40k: the series chibi cast's faces (data/cast.js)
   ...Object.fromEntries([art('vfx', 'dev_vfx_02')]), // Milestone 13: training courses
   ...Object.fromEntries([art('ui', 'dev_ui_11')]), // Milestone 16: the Engine icon
   // Milestone 17: the publishers' logos, the Publishers / Contract Board icons.

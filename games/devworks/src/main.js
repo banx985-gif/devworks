@@ -155,7 +155,6 @@ import { createMastery, masteryLine } from './systems/mastery.js'; // Milestone 
 import { createCopycat } from './systems/copycat.js';
 import { registerItemArt, ITEM_OPTIONAL_ART, itemIcon } from './ui/itemArt.js';
 import { menuSheet } from '../../../core/ui/MenuSheet.js';
-import { HintLine } from '../../../core/ui/HintLine.js';
 import { MENU_GROUPS, MENU_TEXT, FACILITY_ACTIONS, NEXT_HINTS } from '../data/menu.js';
 import { ITEM_RARITIES, ITEM_RULES, itemTypeById, itemGroupById, ITEM_GROUPS } from '../data/items.js';
 import { STATS as STAFF_STATS, ROLES } from '../data/staff.js';
@@ -176,9 +175,11 @@ import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
 import { FakeStoreProvider } from '../../../core/FakeStoreProvider.js';
 import { validateAssets, assetSummary } from '../../../core/AssetValidator.js'; // Milestone 37
-import { ART_LIST, SHARED_ART, TEST_ART, GOD_ART, SCREEN_FILL_ART } from '../data/artList.js';
+import { ART_LIST, SHARED_ART, TEST_ART, GOD_ART, SCREEN_FILL_ART, CAST_ART } from '../data/artList.js';
 import { createRealStoreScreen } from './screens/StoreScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
+import { DevHintLine, castFace, drawCastFace, mentorBadge } from './ui/castArt.js'; // Milestone 40k: the series cast
+import { CAST_MENTOR, CAST_REVIEWERS, CAST_HOST, CAST_INVESTOR, CAST_PUBLISHER_REPS, sponsorRepFace } from '../data/cast.js';
 import { EVENT_RULES } from '../data/events.js';
 import { IRONPEAK } from '../data/hardware.js';
 import { createConsoleScreen } from './screens/ConsoleScreen.js';
@@ -469,6 +470,7 @@ const loop = new FixedStepLoop({
     sheet.render(ctx);
     if (sheet.active) veilEdges(ctx, 0.6); // Milestone 40j: core parts dim only the column — dim the sides too
     if (started && guide.active) {
+      coach.face = guideFace(); // Milestone 40k
       coach.render(ctx, guideFill(guide.current), guideTarget(guide.current.target), { block: guide.current.block, next: !!guide.current.advance.next }); // Milestone 34
       veilEdges(ctx);
     }
@@ -1338,7 +1340,7 @@ function drawBeat(ctx) {
     w: sr.w - 48,
     life: DEV_POPS.phaseBannerSec,
     accent: () => COL.good,
-    drawIcon: (c, e, r) => assets.drawContained(c, 'dev_ui_07', r),
+    drawIcon: (c, e, r) => drawCastFace(c, assets, e.face, r) || assets.drawContained(c, 'dev_ui_07', r), // Milestone 40k: a rep's face
   });
 }
 // Milestone 40b: the idea cards (a recipe slot as a grid of picture cards with an info strip).
@@ -1440,10 +1442,10 @@ bus.on('franchise:status', ({ ip, status }) => {
 // Milestone 40: the Rescue Investor (bible §3) and its recovery objective.
 bus.on('business:rescue', ({ rescue, owed }) => {
   debug.log(`rescue investor: ${owed} Credits restructured`);
-  feedback.show({ title: 'Rescue Investor', subtitle: `Your ${Math.round(owed).toLocaleString('en-GB')} Credits of debt are restructured.${rescue.fameTaken ? ` You lose ${rescue.fameTaken.toLocaleString('en-GB')} Fame.` : ''} Mega Projects wait a year. Objective: release a game reviewed ${rescue.objective.review}+ within 12 months.`, accent: COL.warning ?? COL.progress, onAck: afterFeedback });
+  feedback.show({ title: 'Rescue Investor', drawFn: (ctx, t) => drawCastMoment(ctx, t, CAST_INVESTOR, 'Your debts are in safe hands. Now make me proud.'), subtitle: `Your ${Math.round(owed).toLocaleString('en-GB')} Credits of debt are restructured.${rescue.fameTaken ? ` You lose ${rescue.fameTaken.toLocaleString('en-GB')} Fame.` : ''} Mega Projects wait a year. Objective: release a game reviewed ${rescue.objective.review}+ within 12 months.`, accent: COL.warning ?? COL.progress, onAck: afterFeedback });
 });
 bus.on('business:rescueObjective', ({ fameBack }) => {
-  feedback.show({ title: 'Recovery objective met', subtitle: `The Rescue Investor is pleased: +${fameBack.toLocaleString('en-GB')} Fame back.`, accent: COL.progress, onAck: afterFeedback });
+  feedback.show({ title: 'Recovery objective met', drawFn: (ctx, t) => drawCastMoment(ctx, t, CAST_INVESTOR, 'Splendid. I knew you had it in you.'), subtitle: `${CAST_INVESTOR.name}, your Rescue Investor, is pleased: +${fameBack.toLocaleString('en-GB')} Fame back.`, accent: COL.progress, onAck: afterFeedback });
 });
 bus.on('franchise:legendary', ({ ip }) => {
   debug.log(`legendary franchise: ${ip.name}`);
@@ -1475,13 +1477,13 @@ bus.on('combo:found', ({ combo, firstInRun, rp }) => {
 });
 // Publisher and contract banners (Milestone 17).
 bus.on('deal:signed', ({ deal }) => {
-  showBeat({ title: `Deal signed: ${publishers.publisherName(deal.publisher)}`, body: `+${deal.advance.toLocaleString('en-GB')} Credits advance · pick it on your next New Game` });
+  showBeat({ face: CAST_PUBLISHER_REPS[deal.publisher], title: `Deal signed: ${publishers.publisherName(deal.publisher)}`, body: `+${deal.advance.toLocaleString('en-GB')} Credits advance · pick it on your next New Game` });
 });
 bus.on('deal:missed', ({ deal, milestone, penalty }) => {
-  showBeat({ title: `Missed milestone: ${milestone.name}`, body: `${publishers.publisherName(deal.publisher)} charges ${penalty.toLocaleString('en-GB')} Credits` });
+  showBeat({ face: CAST_PUBLISHER_REPS[deal.publisher], title: `Missed milestone: ${milestone.name}`, body: `${publishers.publisherName(deal.publisher)} charges ${penalty.toLocaleString('en-GB')} Credits` });
 });
 bus.on('deal:lapsed', ({ deal, repaid }) => {
-  showBeat({ title: `Deal lapsed: ${publishers.publisherName(deal.publisher)}`, body: `No game started in time: ${repaid.toLocaleString('en-GB')} Credits paid back` });
+  showBeat({ face: CAST_PUBLISHER_REPS[deal.publisher], title: `Deal lapsed: ${publishers.publisherName(deal.publisher)}`, body: `No game started in time: ${repaid.toLocaleString('en-GB')} Credits paid back` });
 });
 bus.on('contract:success', ({ contract }) => {
   showBeat({ title: `Contract done for ${contract.client}`, body: `+${contract.pay.toLocaleString('en-GB')} Credits` });
@@ -1492,7 +1494,7 @@ bus.on('contract:failed', ({ contract, reason }) => {
 // Awards (Milestone 19): a win is a big moment with its trophy, and it hands out the award's extra; a place is a banner.
 bus.on('award:result', ({ award, result }) => {
   if (result.winner === 'player' || !result.playerPlace) return;
-  showBeat({ title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` });
+  showBeat({ face: CAST_HOST.face, title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` });
 });
 bus.on('award:won', ({ award, result }) => {
   if (award.extra === 'rp') research.system.addRp(award.rp, `Award: ${award.name}`, clock.totalDays);
@@ -1516,6 +1518,7 @@ bus.on('award:won', ({ award, result }) => {
       assets.drawContained(ctx, 'dev_vfx_09', { x: W / 2 - size * 0.8, y: sr.y + sr.h * 0.33 - size * 0.8, w: size * 1.6, h: size * 1.6 }); // Milestone 37: the Award Burst
       assets.drawContained(ctx, award.trophy, { x: W / 2 - size / 2, y: sr.y + sr.h * 0.33 - size / 2, w: size, h: size });
       ctx.restore();
+      drawHost(ctx, t, sr.y + sr.h * 0.33 + size * 0.15); // Milestone 40k: Max Marquee hands it over
     },
     onAck: afterFeedback,
   });
@@ -1833,6 +1836,7 @@ const endingScreen = createEndingScreen({
   ending,
   credits: endingCredits,
   ngLevel: () => ngplus.offer().level,
+  host: CAST_HOST, // Milestone 40k: Max Marquee hosts the ceremony
   // The offer: the finished run is saved here (ending included); starting NG+ never writes it again.
   onOffer: () => {
     if (ending.stage === 'ceremony') ending.setStage('offer');
@@ -1891,7 +1895,7 @@ bus.on('secret:unlocked', ({ rule }) => {
   if (rule.id === 'SEC-X-03') prestigeMoment({ title: 'Studio Singularity', subtitle: 'Both peaks in one lifetime. The true hidden ending — and the account crown, forever.', art: 'dev_event_19', badge: 'dev_vfx_12' });
 });
 // Milestone 30: a big moment with a picture (the Ghostlight reveal, C11, C12).
-function prestigeMoment({ title, subtitle, art, badge = null }) {
+function prestigeMoment({ title, subtitle, art, badge = null, host = false }) {
   feedback.show({
     title,
     subtitle,
@@ -1909,6 +1913,7 @@ function prestigeMoment({ title, subtitle, art, badge = null }) {
         assets.drawContained(ctx, badge, { x: W / 2 - p / 2, y: sr.y + sr.h * 0.27 + size / 2 - p * 0.35, w: p, h: p });
       }
       ctx.restore();
+      if (host) drawHost(ctx, t, sr.y + sr.h * 0.27 + size * 0.2); // Milestone 40k
     },
     onAck: afterFeedback,
   });
@@ -1921,7 +1926,7 @@ bus.on('award:won', ({ award: a, result }) => {
   if (a.id !== 'C11' && a.id !== 'C12') return;
   if (a.tokens) secrets.grantOnce(`award:${a.id}:Y${result.year}:${business.marketing.seed}`, () => secrets.addTokens(a.tokens));
   if (a.id === 'C12') secrets.grantOnce(`award:C12:softwareEndgame`, () => secrets.setOpened('unlocks', 'softwareEndgame'));
-  prestigeMoment({ title: `${a.name}!`, subtitle: `"${result.entrants[0].title}" wins. ${a.rewardText}. Prestige Tokens: ${secrets.prestigeTokens}.`, art: a.event, badge: a.trophy });
+  prestigeMoment({ title: `${a.name}!`, subtitle: `"${result.entrants[0].title}" wins. ${a.rewardText}. Prestige Tokens: ${secrets.prestigeTokens}.`, art: a.event, badge: a.trophy, host: true });
 });
 // Milestone 29: a Legendary / Prestige arrival — the big moment (dev_event_13 and their portrait) and a special card for 56 days.
 // Milestone 40g: a Works God says who they are ("Bolt, God of Tinkering") and gets a gold halo; Havoc has his own words
@@ -2000,10 +2005,10 @@ bus.on('acquisition:done', ({ target }) => {
 });
 // Sponsor banners (Milestone 18).
 bus.on('sponsor:signed', ({ deal }) => {
-  showBeat({ title: `Sponsor signed: ${sponsorName(deal.id)}`, body: 'A stipend every month for 6 months. See its obligation in Business → Sponsors.' });
+  showBeat({ face: sponsorRepFace(deal.id), title: `Sponsor signed: ${sponsorName(deal.id)}`, body: 'A stipend every month for 6 months. See its obligation in Business → Sponsors.' });
 });
 bus.on('sponsor:ended', ({ deal, met, bonus, tier }) => {
-  showBeat({ title: `${sponsorName(deal.id)}: deal ${met ? 'completed' : 'ended'}`, body: met ? `+${bonus.toLocaleString('en-GB')} Credits bonus · now ${tier.name}` : 'Obligation not met: no bonus this time.' });
+  showBeat({ face: sponsorRepFace(deal.id), title: `${sponsorName(deal.id)}: deal ${met ? 'completed' : 'ended'}`, body: met ? `+${bonus.toLocaleString('en-GB')} Credits bonus · now ${tier.name}` : 'Obligation not met: no bonus this time.' });
 });
 // Engine banners (Milestone 16).
 bus.on('engine:start', ({ job }) => {
@@ -2173,14 +2178,78 @@ function drawReviews(ctx, t, record) {
     ctx.textAlign = 'center';
     ctx.fillText(String(o.score), x + 110, ry + 130);
     ctx.textAlign = 'left';
+    // Milestone 40k: the outlet's critic — their face left of the text, their name under the outlet's.
+    const critic = CAST_REVIEWERS[o.id];
+    const face = drawCastFace(ctx, assets, critic?.face, { x: x + 206, y: ry + 22, w: 120, h: 120 });
+    const tx = face ? x + 344 : x + 210;
     ctx.fillStyle = COL.text;
     ctx.font = font(THEME.size.heading, true);
-    ctx.fillText(o.name, x + 210, ry + 50, w - 260);
+    ctx.fillText(o.name, tx, face ? ry + 36 : ry + 50, x + w - 50 - tx);
+    if (face) {
+      ctx.fillStyle = COL.actionDark;
+      ctx.font = font(THEME.size.small, true);
+      ctx.fillText(critic.name, tx, ry + 80, x + w - 50 - tx);
+    }
     ctx.fillStyle = COL.textMuted;
     ctx.font = font(30);
-    ctx.fillText(`"${o.line}"`, x + 210, ry + 112, w - 260);
+    ctx.fillText(`"${o.line}"`, tx, face ? ry + 128 : ry + 112, x + w - 50 - tx);
   });
   ctx.restore();
+}
+
+// Milestone 40k: a cast member's face on a big moment (core MajorFeedback draws the title and words below it): the
+// face, their name and one line, in the picture's place. Nothing when the face is missing (the moment as before).
+function drawCastMoment(ctx, t, who, line) {
+  const sr = layout.safeRect;
+  const k = Math.min(1, t / 0.35);
+  const size = 360 * (0.7 + 0.3 * k);
+  const cy = sr.y + sr.h * 0.3;
+  if (!castFace(assets, who.face)) return;
+  ctx.save();
+  ctx.globalAlpha = k;
+  castCard(ctx, { x: W / 2 - Math.min(sr.w - 80, 940) / 2, y: cy - size / 2 - 24, w: Math.min(sr.w - 80, 940), h: size + 174 });
+  if (drawCastFace(ctx, assets, who.face, { x: W / 2 - size / 2, y: cy - size / 2, w: size, h: size }, COL.gold)) {
+    ctx.fillStyle = COL.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = font(THEME.size.heading, true);
+    ctx.fillText(who.name, W / 2, cy + size / 2 + 44, sr.w - 80);
+    ctx.fillStyle = COL.actionDark;
+    ctx.font = font(THEME.size.body, true);
+    ctx.fillText(`"${line}"`, W / 2, cy + size / 2 + 100, sr.w - 80);
+  }
+  ctx.restore();
+}
+// The awards host beside the trophy: a small face with his name under it, on the left of the column.
+function drawHost(ctx, t, y) {
+  const sr = layout.safeRect;
+  const k = Math.min(1, Math.max(0, (t - 0.2) / 0.3));
+  if (k <= 0) return;
+  const s = 170;
+  const x = sr.x + 40;
+  if (!castFace(assets, CAST_HOST.face)) return;
+  ctx.save();
+  ctx.globalAlpha = k;
+  castCard(ctx, { x: x - 36, y: y - 16, w: s + 72, h: s + 72 });
+  if (drawCastFace(ctx, assets, CAST_HOST.face, { x, y, w: s, h: s }, COL.gold)) {
+    ctx.fillStyle = COL.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = font(THEME.size.small, true);
+    ctx.fillText(CAST_HOST.name, x + s / 2, y + s + 28, s + 60);
+  }
+  ctx.restore();
+}
+
+// The cream card behind a cast member on a big moment (their name reads over any studio).
+function castCard(ctx, r) {
+  ctx.fillStyle = COL.panel;
+  ctx.strokeStyle = COL.gold;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.w, r.h, 32);
+  ctx.fill();
+  ctx.stroke();
 }
 
 function drawRankBadge(ctx, t, id) {
@@ -2493,6 +2562,9 @@ const guide = new GuideSystem({
   resume: () => clock.resume(),
 });
 const coach = new CoachMark({ layout, assets, face: GUIDE_FACE });
+// Milestone 40k: the guide speaks with Uncle Ray's face (Code Fox, as before, if his picture is missing).
+const MENTOR_FACE = { key: CAST_MENTOR.face, crop: portraitCrop(CAST_MENTOR.face) };
+const guideFace = () => (castFace(assets, CAST_MENTOR.face) ? MENTOR_FACE : GUIDE_FACE);
 router.layers.unshift({
   get active() {
     return started && guide.active;
@@ -2738,7 +2810,9 @@ bus.on('item:full', () => studioEvents.note({ title: 'The Studio Store is full',
 bus.on('mastery:level', ({ element, level }) => studioEvents.note({ title: `${element.name} mastered ${'★'.repeat(level)}`, body: masteryLine(element.id, level), icon: element.art, level: 'minor', toast: true }));
 // The next-step hint line under the date (core/ui/HintLine): quiet while the guide shows a step, and off in Settings.
 const firstUnreleased = () => business.unreleased()[0] ?? null;
-const hintLine = new HintLine({
+const hintLine = new DevHintLine({
+  assets,
+  face: () => CAST_MENTOR.face, // Milestone 40k: Uncle Ray says it
   rect: () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
@@ -2773,7 +2847,7 @@ const helpWalks = {
   },
   dismiss: (id) => walks.dismiss(id),
 };
-const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: 'dev_ui_05', walkthroughs: helpWalks });
+const helpScreen = createHelpArchive({ renderer, layout, assets, router, guide: helpGuide, topics: HELP_TOPICS, text: HELP_TEXT, icon: mentorBadge(assets, CAST_MENTOR.face, 'dev_ui_05'), walkthroughs: helpWalks }); // Milestone 40k: Uncle Ray on the header
 // Milestone 40d: Settings → Guide: on / off, and Reset all walkthroughs (in a studio).
 let walksResetNote = null;
 const settingsScreen = createSettingsScreen({
@@ -2873,7 +2947,7 @@ let artCheck = null;
 function logArtCheck() {
   const manifest = Object.fromEntries(Object.entries(ASSETS).filter(([k]) => !SHARED_ART.includes(k) && !TEST_ART.includes(k)));
   const files = Object.fromEntries([...assets.images.keys()].filter((k) => manifest[k]).map((k) => [k, manifest[k]]));
-  artCheck = validateAssets({ artList: [...ART_LIST, ...GOD_ART], manifest, files }); // Milestone 40g: + the Works Gods
+  artCheck = validateAssets({ artList: [...ART_LIST, ...GOD_ART, ...CAST_ART], manifest, files }); // Milestone 40g: + the Works Gods; 40k: + the cast's faces
   debug.log(assetSummary(artCheck));
   if (!artCheck.ok) console.warn('[DEVWORKS art]', JSON.stringify({ missing: artCheck.missing, unused: artCheck.unused, unlisted: artCheck.unlisted }));
   return artCheck;
@@ -2980,13 +3054,19 @@ if (debug.enabled) {
     const blessing = def?.traits.map((t) => TRAITS[t]).find((t) => t?.signature);
     return { ok: router.currentName === 'staff' && !!blessing && /^Blessing: /.test(blessing.text), text: blessing ? `${blessing.name}: ${blessing.text}` : '' };
   };
+  // Milestone 40k: the review reveal for a made-up game (the critics' faces), without releasing one.
+  const debugReviews = () => {
+    const reviews = [['criticalPath', 'Critical Path', 71, 'Solid, if safe.'], ['joyPad', 'JoyPad Weekly', 88, 'Pure joy!'], ['playerVoice', 'PlayerVoice', 64, 'Fans want more.'], ['techPlay', 'TechPlay', 79, 'Runs like a dream.']].map(([id, name, score, line]) => ({ id, name, score, line }));
+    const record = { result: { title: 'Cast Check', cover: 'cover_01' }, release: { score: 76, reviews, platforms: [] } };
+    feedback.show({ title: 'Reviews are in!', subtitle: 'Cast Check · review score 76', accent: COL.gold, noInbox: true, drawFn: (ctx, t) => drawReviews(ctx, t, record) });
+  };
   const debugFullStudio = () => {
     world.setStage(5);
     for (const fac of FACILITIES) if (!fac.unlock?.secret) world.addStation(fac.id);
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

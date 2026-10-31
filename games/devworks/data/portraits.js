@@ -1,6 +1,8 @@
 // Portrait crops (Milestone 14): one head-and-shoulders square per staff picture, as fractions of the image
 // (x, y, w, h). Worked out from each picture's opaque pixels (the top of the figure; the head's centre), so every
 // card crops the same way. Made by a one-off script; re-run it if a picture is redrawn. Plain data only.
+import { CAST_ART, CAST_CROP } from './cast.js';
+
 export const PORTRAITS = {
   staff_art01: { x: 0.1703, y: 0, w: 0.5095, h: 0.3536 },
   staff_art02: { x: 0.0652, y: 0, w: 0.5673, h: 0.3536 },
@@ -59,6 +61,8 @@ export const PORTRAITS = {
   staff_god_zip: { x: 0.323, y: 0.03, w: 0.568, h: 0.367 },
   staff_god_kaching: { x: 0.31, y: 0.03, w: 0.476, h: 0.383 },
   staff_god_havoc: { x: 0.22, y: 0.12, w: 0.568, h: 0.367 },
+  // Milestone 40k: the series cast's faces (one crop for all: data/cast.js).
+  ...Object.fromEntries(CAST_ART.map((k) => [k, CAST_CROP])),
 };
 // The crop for an art key (the old fixed crop when a picture has none).
 export const portraitOf = (art) => PORTRAITS[art] ?? { x: 0.15, y: 0, w: 0.7, h: 0.42 };
