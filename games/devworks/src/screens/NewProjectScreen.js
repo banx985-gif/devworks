@@ -28,7 +28,7 @@ import { text } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementById, needsProblem, recipeProblems } from '../../data/elements.js';
 import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '../../data/projects.js';
 import { ROLES, STATS } from '../../data/staff.js';
-import { portraitOf } from '../../data/portraits.js'; // Milestone 14: the same head crop everywhere
+import { staffFace } from '../../data/portraits.js'; // Milestone 14: the same head crop everywhere (40n: the whole face when it's in)
 import { PROJECT_TYPES, projectTypeById } from '../../data/franchises.js';
 import { PROJECT_BALANCE, FRANCHISE_BALANCE } from '../../data/balance.js'; // Milestone 40b: what each choice costs
 import { drawStars, MASTERY_COL } from './IdeaCardsScreen.js'; // Milestone 40h: element mastery
@@ -377,7 +377,8 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         ctx.stroke();
         text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted });
         if (person) {
-          assets.drawCrop(ctx, person.art, portraitOf(person.art), { x: r.x + r.w - 130, y: r.y + 10, w: 110, h: 110 });
+          const face = staffFace(person.art);
+          assets.drawCrop(ctx, face.key, face.crop, { x: r.x + r.w - 130, y: r.y + 10, w: 110, h: 110 });
           text(ctx, person.name, r.x + 24, r.y + 58, { size: S.body, bold: true });
           const main = STATS.find((st) => st.key === ROLES[role].primaryStat);
           text(ctx, `${main.label} ${person.stats[main.key]}`, r.x + 340, r.y + 62, { size: S.body, color: C.actionDark, bold: true });

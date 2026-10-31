@@ -9,7 +9,7 @@ import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton } from '../../../../core/ui/Button.js';
 
 const C = THEME.color;
-import { portraitFit } from '../../data/portraits.js'; // Milestone 14: the same head crop as every card
+import { staffFace } from '../../data/portraits.js'; // Milestone 14: the same head crop as every card; 40n: the whole-face picture when it's in
 
 export function drawDice(ctx, cx, cy, size) {
   const s = size;
@@ -101,6 +101,9 @@ export function drawPortrait(ctx, assets, art, r, ring = null) {
     ctx.stroke();
   }
   ctx.clip();
-  if (art) assets.drawCrop(ctx, art, portraitFit(art, (r.w - 12) / (r.h - 8)), { x: r.x + 6, y: r.y + 8, w: r.w - 12, h: r.h - 8 });
+  if (art) {
+    const f = staffFace(art, (r.w - 12) / (r.h - 8));
+    assets.drawCrop(ctx, f.key, f.crop, { x: r.x + 6, y: r.y + 8, w: r.w - 12, h: r.h - 8 });
+  }
   ctx.restore();
 }

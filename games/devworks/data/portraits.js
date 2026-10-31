@@ -74,3 +74,34 @@ export function portraitFit(art, aspect = 1) {
   const x = Math.max(0, Math.min(1 - w, c.x + c.w / 2 - w / 2));
   return { x, y: c.y, w, h: c.h };
 }
+
+// Milestone 40n: whole-face pictures (Cowork, 31 Oct): a 512 × 512 head-and-shoulders per staff member and god, with
+// the whole head (hair and both sides of the face) inside, in assets/images/staff/faces/<art>_face.png. Used in every
+// square / round staff frame instead of cropping the full-body picture (which stays for the studio floor). Optional:
+// loaded quietly (main.js), and until a face is in, that frame falls back to the crop above.
+export const faceKey = (art) => `${art}_face`;
+export const STAFF_FACE_ART = Object.keys(PORTRAITS)
+  .filter((k) => k.startsWith('staff_'))
+  .map((k) => [faceKey(k), `assets/images/staff/faces/${faceKey(k)}.png`]);
+const FACE_KEYS = new Set(STAFF_FACE_ART.map(([k]) => k));
+// The face picture reshaped to a box of this width ÷ height: a narrow box keeps the middle, a wide one keeps the top
+// (the head), never stretched.
+export function faceFit(aspect = 1) {
+  return aspect <= 1 ? { x: (1 - aspect) / 2, y: 0, w: aspect, h: 1 } : { x: 0, y: 0, w: 1, h: 1 / aspect };
+}
+// Whether a face picture has loaded (main.js hands in the asset manager's check once; nothing loaded until then).
+let faceLoaded = () => false;
+export function setFaceCheck(has) {
+  faceLoaded = has;
+}
+// What a staff frame draws for an art key: { key, crop } — the face picture when it's in, else the full-body crop.
+export function staffFace(art, aspect = 1) {
+  const fk = art && faceKey(art);
+  if (fk && FACE_KEYS.has(fk) && faceLoaded(fk)) return { key: fk, crop: faceFit(aspect) };
+  return { key: art, crop: portraitFit(art, aspect) };
+}
+// The same, as a bottom-sheet button / list item's icon fields.
+export function staffIcon(art) {
+  const f = staffFace(art);
+  return { icon: f.key, iconCrop: f.crop };
+}

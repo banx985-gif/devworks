@@ -37,7 +37,7 @@ import { THEME } from '../../../../core/Theme.js';
 import { STATIONS, WORK_STATE } from '../../data/studio.js';
 import { BOTTOM_SLOTS, TOP_SHEETS } from '../../data/home.js';
 import { ROLES, STATS, TIERS, TRAITS, ROSTER, GODS, staffDefById } from '../../data/staff.js';
-import { portraitOf } from '../../data/portraits.js';
+import { staffIcon } from '../../data/portraits.js'; // Milestone 40n: the whole-face picture when it's in, else the head crop
 import { MENTORING } from '../../data/recruitment.js';
 import { SUPPORT_OPTIONS } from '../../data/support.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
@@ -452,7 +452,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
               columns: 1,
               buttons: cards.map((c) => {
                 const d = r.cardDef(c);
-                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, cost: `${d.salary.toLocaleString('en-GB')} Cr / month`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)}${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : knownBefore(d.id) ? ' · worked with you in an earlier run' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
+                return { id: `card:${c.id}`, label: `${d.name}${c.special ? ' ★' : ''}`, cost: `${d.salary.toLocaleString('en-GB')} Cr / month`, sub: `${ROLES[d.role].name} · ${TIERS[d.tier].name} · ${mainStat(d)}${c.special?.note ? ` · ${c.special.note}` : c.returning ? ' · worked here before' : knownBefore(d.id) ? ' · worked with you in an earlier run' : ''}`, ...staffIcon(d.art), accent: c.special ? C.gold : C.progress, onTap: () => open('candidate', c.id) };
               }),
             }
           : { lines: [{ text: 'Nobody new on this board. Refresh, or try another channel when it opens.', color: C.textMuted }] },
@@ -543,7 +543,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       subtitle: `${TIERS[s.tier].name} staff can mentor one person of a lower tier.`,
       art: s.art,
       accent: C.progress,
-      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}: learns faster on shared games` : o.why, cost: o.ok ? 'Free' : null, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
+      sections: [{ columns: 1, buttons: t.menteeOptions(mentorId).map((o) => ({ id: `mentee:${o.staff.id}`, label: o.staff.name, sub: o.ok ? `${ROLES[o.staff.role].name} · ${TIERS[o.staff.tier].name} · Level ${o.staff.level}: learns faster on shared games` : o.why, cost: o.ok ? 'Free' : null, ...staffIcon(o.staff.art), disabled: !o.ok, onTap: () => t.startMentoring(mentorId, o.staff.id) })) }],
     };
   });
 
@@ -558,7 +558,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       sections: Object.keys(ROLES).map((role) => ({
         title: ROLES[role].name,
         columns: 2,
-        buttons: [...ROSTER, ...GODS].filter((d) => d.role === role).map((d) => ({ id: `book:${d.id}`, label: d.name, sub: `${TIERS[d.tier].name}${w.staffSystem.get(d.id) ? ' · here' : ''}`, icon: d.art, iconCrop: portraitOf(d.art), accent: ['legendary', 'secret', 'divine'].includes(d.tier) ? C.gold : C.progress, onTap: () => open('staffPreview', d.id) })),
+        buttons: [...ROSTER, ...GODS].filter((d) => d.role === role).map((d) => ({ id: `book:${d.id}`, label: d.name, sub: `${TIERS[d.tier].name}${w.staffSystem.get(d.id) ? ' · here' : ''}`, ...staffIcon(d.art), accent: ['legendary', 'secret', 'divine'].includes(d.tier) ? C.gold : C.progress, onTap: () => open('staffPreview', d.id) })),
       })),
     };
   });
@@ -615,7 +615,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       accent: C.purple,
       sections: [
         { lines: [{ text: `${p.costPerDay} Credits a day · mostly CODE (Programmers) · tier now: ${en.tierNow()}`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
-        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
+        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `eteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code}`, ...staffIcon(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
         { columns: 1, buttons: [{ id: 'engineGo', label: `Start: ${p.name}`, sub: why ?? `${team.length} on it: ${p.line}`, cost: why ? null : `${p.costPerDay} Cr / day`, disabled: !!why, accent: C.good, onTap: () => { engineTeams.delete(kind); startEngine?.(kind, team); } }] },
       ],
     };
@@ -663,7 +663,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       accent: C.purple,
       sections: [
         { lines: [{ text: `${pv.costPerDay} Credits a day · ${pv.work} work`, color: C.actionDark }, ...(why ? [{ text: why, color: C.bad }] : [])] },
-        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `hwteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code} · PROD ${s.stats.prod ?? 0}`, icon: s.art, iconCrop: portraitOf(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
+        { title: 'Team', columns: 2, buttons: free.map((s) => ({ id: `hwteam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: `${ROLES[s.role].name} · CODE ${s.stats.code} · PROD ${s.stats.prod ?? 0}`, ...staffIcon(s.art), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => toggle(s.id) })) },
         { columns: 1, buttons: [{ id: 'hwGo', label: 'Start the prototype', sub: why ?? `${team.length} on it: build and test the design`, cost: why ? null : `${pv.costPerDay} Cr / day`, disabled: !!why, accent: C.good, onTap: () => { hwTeam.ids = null; startHardware?.(team); } }] },
       ],
     };
@@ -694,7 +694,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       accent: C.purple,
       sections: [
         ...(paceLine ? [{ lines: [paceLine] }] : []),
-        { title: 'Team', columns: 2, buttons: opts.map((o) => ({ id: `cteam:${o.staff.id}`, label: team.includes(o.staff.id) ? `✓ ${o.staff.name}` : o.staff.name, sub: o.why ?? `${stat.label} ${o.staff.stats[c.stat]}`, icon: o.staff.art, iconCrop: portraitOf(o.staff.art), disabled: !!o.why, accent: team.includes(o.staff.id) ? C.good : C.progress, onTap: () => contractTeams.set(id, team.includes(o.staff.id) ? team.filter((x) => x !== o.staff.id) : [...team, o.staff.id]) })) },
+        { title: 'Team', columns: 2, buttons: opts.map((o) => ({ id: `cteam:${o.staff.id}`, label: team.includes(o.staff.id) ? `✓ ${o.staff.name}` : o.staff.name, sub: o.why ?? `${stat.label} ${o.staff.stats[c.stat]}`, ...staffIcon(o.staff.art), disabled: !!o.why, accent: team.includes(o.staff.id) ? C.good : C.progress, onTap: () => contractTeams.set(id, team.includes(o.staff.id) ? team.filter((x) => x !== o.staff.id) : [...team, o.staff.id]) })) },
         { columns: 1, buttons: [{ id: 'contractGo', label: 'Accept the contract', sub: why ?? `${team.length} on it: pays when the work is done`, cost: why ? null : `+${c.pay.toLocaleString('en-GB')} Cr`, disabled: !!why, accent: C.good, onTap: () => { contractTeams.delete(id); acceptContract?.(id, team); } }] },
       ],
     };
@@ -746,7 +746,7 @@ export function createStudioMenus({ today = () => 0, debugSkipYear = null, decid
       art: o.icon,
       accent: C.purple,
       sections: [
-        { title: 'Team', columns: 2, buttons: staffList.map((s) => ({ id: `steam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: busy(s.id) ?? `${stat.label} ${s.stats[o.stat]}`, icon: s.art, iconCrop: portraitOf(s.art), disabled: !!busy(s.id), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => supportTeams.set(key, team.includes(s.id) ? team.filter((x) => x !== s.id) : [...team, s.id]) })) },
+        { title: 'Team', columns: 2, buttons: staffList.map((s) => ({ id: `steam:${s.id}`, label: team.includes(s.id) ? `✓ ${s.name}` : s.name, sub: busy(s.id) ?? `${stat.label} ${s.stats[o.stat]}`, ...staffIcon(s.art), disabled: !!busy(s.id), accent: team.includes(s.id) ? C.good : C.progress, onTap: () => supportTeams.set(key, team.includes(s.id) ? team.filter((x) => x !== s.id) : [...team, s.id]) })) },
         { columns: 1, buttons: [{ id: 'supportGo', label: `Start: ${o.name}`, sub: team.length ? `${team.length} on it: ${o.line}` : 'Pick at least one person', cost: team.length ? (o.instant ? 'Free' : `${o.costPerDay} Cr / day`) : null, disabled: !team.length, accent: C.good, onTap: () => { supportTeams.delete(key); startSupport?.(o.id, t.number, team, t.platform ?? null); } }] },
       ],
     };

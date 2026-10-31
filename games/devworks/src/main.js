@@ -158,7 +158,7 @@ import { menuSheet } from '../../../core/ui/MenuSheet.js';
 import { MENU_GROUPS, MENU_TEXT, FACILITY_ACTIONS, NEXT_HINTS } from '../data/menu.js';
 import { ITEM_RARITIES, ITEM_RULES, itemTypeById, itemGroupById, ITEM_GROUPS } from '../data/items.js';
 import { STATS as STAFF_STATS, ROLES } from '../data/staff.js';
-import { portraitOf as portraitCrop } from '../data/portraits.js';
+import { portraitOf as portraitCrop, staffIcon, staffFace, setFaceCheck, STAFF_FACE_ART } from '../data/portraits.js';
 import { createCreditsScreen } from './screens/CreditsScreen.js';
 import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE, SHAKE_LEVELS } from '../data/settings.js';
 import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
@@ -404,6 +404,9 @@ assets.setFallback('dev_ui_menu', (ctx, x, y, w, h) => {
 });
 for (const [k, src] of ITEM_OPTIONAL_ART) assets.loadOptional(k, src);
 for (const [k, src] of OPTIONAL_ART) assets.loadOptional(k, src); // drawn by code until the files exist
+// Milestone 40n: the staff's whole-face pictures (data/portraits.js); a frame uses the full-body crop until its face is in.
+setFaceCheck((k) => assets.has(k));
+for (const [k, src] of STAFF_FACE_ART) assets.loadOptional(k, src);
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -2731,7 +2734,7 @@ menus.register('trainWho', () => ({
   title: 'Training',
   subtitle: 'Pick someone to train (their card has Train and, for an Elite, Mentor).',
   art: 'dev_ui_02',
-  sections: [{ columns: 1, buttons: world.staffSystem.staff.map((p) => ({ id: `trainWho:${p.id}`, label: p.name, sub: training.trainingOf(p.id) ? `Training: ${training.daysLeft(p.id)} days left` : `${ROLES[p.role]?.name ?? p.role} · level ${p.level}`, icon: staffDefById(p.id)?.art, iconCrop: staffDefById(p.id) ? portraitCrop(staffDefById(p.id).art) : null, onTap: () => openMenu('train', p.id) })) }],
+  sections: [{ columns: 1, buttons: world.staffSystem.staff.map((p) => ({ id: `trainWho:${p.id}`, label: p.name, sub: training.trainingOf(p.id) ? `Training: ${training.daysLeft(p.id)} days left` : `${ROLES[p.role]?.name ?? p.role} · level ${p.level}`, ...(staffDefById(p.id) ? staffIcon(staffDefById(p.id).art) : { icon: null }), onTap: () => openMenu('train', p.id) })) }],
 }));
 // Every facility's sheet: what it does (the sheet's subtitle), its main action, and its level (series common feature §1, §3).
 const cr = (n) => (n > 0 ? `${Math.round(n).toLocaleString('en-GB')} Cr` : 'Free');
@@ -2777,7 +2780,9 @@ const itemsUi = {
   },
   portrait: (id) => {
     const d = staffDefById(id);
-    return { art: d?.art ?? null, crop: d ? portraitCrop(d.art) : null };
+    if (!d) return { art: null, crop: null };
+    const f = staffFace(d.art); // Milestone 40n: the whole face when it's in
+    return { art: f.key, crop: f.crop };
   },
   cardLines: (id) => {
     const l = items.likesOf(id);

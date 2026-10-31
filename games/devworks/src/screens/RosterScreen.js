@@ -19,7 +19,7 @@ export function staffCardView(world, w) {
   return {
     title: s.name,
     subtitle: `${ROLES[s.role].name} · Lv ${s.level} · ${TIERS[s.tier].name}`,
-    portraitKey: s.art,
+    portraitKey: s.art, // the whole figure in the card's tall frame (Milestone 40n: never cropped here, so it keeps the full body)
     xp: { value: s.xp, max: world.staffSystem.xpNeeded(s.level) },
     stats: STATS.map((st) => ({ label: st.label, value: s.stats[st.key] })),
     bars: [
