@@ -280,8 +280,8 @@ registerPlaceholders(assets); // stand-ins for art not drawn yet
 // today's look until then. The title picture sits behind the loading and title screens and drifts slowly (not with
 // Reduced motion); the scenery sits behind the studio (StudioScreen: it moves less than the room when you pan).
 const reducedMotion = () => !!settings.get('reducedMotion');
-const titleBackdrop = createBackdrop({ assets, key: 'devworks_bg_title', src: SCREEN_FILL_ART.devworks_bg_title.path, reducedMotion });
-const worldBackdrop = createBackdrop({ assets, key: 'devworks_bg_world', src: SCREEN_FILL_ART.devworks_bg_world.path, reducedMotion, drift: null });
+const titleBackdrop = createBackdrop({ assets, key: 'devworks_bg_title', src: SCREEN_FILL_ART.devworks_bg_title.web, reducedMotion });
+const worldBackdrop = createBackdrop({ assets, key: 'devworks_bg_world', src: SCREEN_FILL_ART.devworks_bg_world.web, reducedMotion, drift: null });
 titleBackdrop.load(); // asked for once, straight away (a missing file is quiet)
 worldBackdrop.load();
 const drawTitleBackdrop = (ctx) => titleBackdrop.draw(ctx, renderer.full);

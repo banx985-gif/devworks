@@ -61,8 +61,10 @@ export const GOD_ART = ['staff_god_bolt', 'staff_god_jinx', 'staff_god_zip', 'st
 // Milestone 40j (SERIES_SCREEN_FILL_AND_BACKDROPS): Aaron's three screen-fill pictures — optional, owed until filed. Not
 // in the manifest: the two backdrops load quietly the moment their file exists (core/ui/Backdrop; until then today's
 // look), and the app icon is never loaded by the game — tools/devworks-icons.mjs makes the phone icons from it.
+// Milestone 40l: all three filed (31 Oct). The game loads the backdrops' .web JPEG copies (same size, a tenth of the
+// bytes; made by tools/devworks-web-backdrops.ps1 — run it again if a picture is re-filed).
 export const SCREEN_FILL_ART = {
-  devworks_bg_title: { path: 'assets/images/brand/devworks_bg_title.png', size: [2400, 2400], what: 'start-up / main-menu background, full-bleed, no logo or text (city office district)' },
-  devworks_bg_world: { path: 'assets/images/brand/devworks_bg_world.png', size: [3000, 2000], what: 'scenery behind the studio: sky, distant city office district, soft and a little faded' },
+  devworks_bg_title: { path: 'assets/images/brand/devworks_bg_title.png', web: 'assets/images/brand/web/devworks_bg_title.jpg', size: [2400, 2400], what: 'start-up / main-menu background, full-bleed, no logo or text (city office district)' },
+  devworks_bg_world: { path: 'assets/images/brand/devworks_bg_world.png', web: 'assets/images/brand/web/devworks_bg_world.jpg', size: [3000, 2000], what: 'scenery behind the studio: sky, distant city office district, soft and a little faded' },
   devworks_app_icon: { path: 'assets/images/brand/devworks_app_icon.png', size: [1024, 1024], what: 'app icon, square, full-bleed, no clear corners, no tiny text' },
 };
