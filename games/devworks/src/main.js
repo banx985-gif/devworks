@@ -948,7 +948,8 @@ async function prepareSaves() {
   }
   slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3, 3: migrateToV4, 4: migrateToV5 }, rolling: SAVE.rolling, bus });
   // Milestone 36: ?debug=1 → the pretend store (its next ad / purchase is set on the Store screen); none otherwise.
-  if (new URLSearchParams(window.location.search).has('debug')) {
+  // Milestone 40m: the Android test app (Capacitor) uses the pretend store too — no real ads or purchases in it.
+  if (new URLSearchParams(window.location.search).has('debug') || window.Capacitor?.isNativePlatform?.()) {
     const persist = { load: () => JSON.parse(localStorage.getItem('devworks:fakeStore') ?? 'null'), save: (st) => localStorage.setItem('devworks:fakeStore', JSON.stringify(st)) };
     monetisation.setProvider(new FakeStoreProvider({ products: fakeProducts(), persist, present: (kind, id, outcome) => new Promise((res) => dialog.show({ title: kind === 'rewarded' ? 'Rewarded ad (pretend)' : 'Ad (pretend)', body: 'A real ad would play here.', dismissible: false, buttons: [{ id: 'close', label: 'Close', accent: COL.progress, onTap: () => res(outcome) }] })) }));
   }
