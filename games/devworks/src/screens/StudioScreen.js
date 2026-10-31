@@ -18,6 +18,11 @@
 // (zoomMin); name tags fade out as the view zooms far out (TAG_FADE) so a full studio stays clear; the cached floor
 // keeps at most ROOM_MAX_PX pixels (a bigger floor is a little softer at full zoom) and only the part on screen is drawn.
 //
+// Milestone 40j (SERIES_SCREEN_FILL_AND_BACKDROPS): the camera sees the whole screen (renderer.full: past the 1080 column
+// on a Fold open or a tablet), and Aaron's scenery picture (backdrop: core/ui/Backdrop, devworks_bg_world) is drawn behind
+// the room once filed — it moves less than the room when you pan (far away), and not at all with Reduced motion. Until
+// it is filed the background is as before.
+//
 // Plan space lives in the world (studioWorld); only drawing and tapping go through the IsoProjection here.
 import { THEME, font } from '../../../../core/Theme.js';
 import { IsoProjection } from '../../../../core/IsoProjection.js';
@@ -42,8 +47,9 @@ const TAG_FADE = { full: 0.85, gone: 0.6 }; // Milestone 22: tags fully shown at
 const DETAIL_STEPS = [0.6, 0.9, 1.2, 1.6]; // Milestone 22: sprite cache sizes by zoom (was always full zoom)
 const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a much bigger one cost ~20 ms a frame)
 const COVER_ASPECT = 336 / 483;
+const WORLD_PARALLAX = 0.15; // Milestone 40j: the scenery moves this much of the room's pan
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1 }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1, backdrop = null, reducedMotion = () => false }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -187,9 +193,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   function fitView() {
     const top = topBar.rect();
     const bottom = bottomBar.rect();
-    camera.viewX = 0;
+    const F = renderer.full; // (Milestone 40j: the whole screen width)
+    camera.viewX = F.x;
     camera.viewY = top.y + top.h + 8;
-    camera.setView(W, bottom.y - 8 - camera.viewY);
+    camera.setView(F.w, bottom.y - 8 - camera.viewY);
   }
   // Start looking at the middle of the working stations (the shelf sits off to the side).
   function resetView() {
@@ -344,11 +351,11 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       if (!w || !onFloor().includes(w)) return null;
       const r = workerRect(w);
       const p = camera.worldToScreen(r.x + r.w / 2, r.y + 12);
-      return p.x > 0 && p.x < W && p.y > camera.viewY && p.y < camera.viewY + camera.viewH ? p : null;
+      return p.x > camera.viewX && p.x < camera.viewX + camera.viewW && p.y > camera.viewY && p.y < camera.viewY + camera.viewH ? p : null;
     },
     onScreen(p) {
       const s = camera.worldToScreen(p.x, p.y);
-      return s.x > -60 && s.x < W + 60 && s.y > camera.viewY - 60 && s.y < camera.viewY + camera.viewH + 60;
+      return s.x > camera.viewX - 60 && s.x < camera.viewX + camera.viewW + 60 && s.y > camera.viewY - 60 && s.y < camera.viewY + camera.viewH + 60;
     },
 
     setBuildMode(on) {
@@ -504,6 +511,12 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     },
 
     render(ctx) {
+      if (backdrop?.has()) {
+        const k = reducedMotion() ? 0 : WORLD_PARALLAX * camera.zoom;
+        const shiftX = -(camera.x + camera.visibleW / 2 - worldW / 2) * k;
+        const shiftY = -(camera.y + camera.visibleH / 2 - worldH / 2) * k;
+        backdrop.draw(ctx, renderer.full, { shiftX, shiftY, focusY: 0.45, zoom: 1.15 });
+      }
       camera.apply(ctx);
       room.renderView(ctx, { x: camera.x, y: camera.y, w: camera.visibleW, h: camera.visibleH }); // only what is on screen
       drawSign(ctx);

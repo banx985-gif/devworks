@@ -55,3 +55,11 @@ export const TEST_ART = ['m0Real', 'm0Missing'];
 // Milestone 40g: the Works Gods' pictures (series cast, SERIES_WORKS_GODS.md; filed by Cowork, not on the locked 360 list:
 // Cowork swaps Aaron's DEVWORKS outfit versions in under the same names). 600 px tall.
 export const GOD_ART = ['staff_god_bolt', 'staff_god_jinx', 'staff_god_zip', 'staff_god_kaching', 'staff_god_havoc'];
+// Milestone 40j (SERIES_SCREEN_FILL_AND_BACKDROPS): Aaron's three screen-fill pictures — optional, owed until filed. Not
+// in the manifest: the two backdrops load quietly the moment their file exists (core/ui/Backdrop; until then today's
+// look), and the app icon is never loaded by the game — tools/devworks-icons.mjs makes the phone icons from it.
+export const SCREEN_FILL_ART = {
+  devworks_bg_title: { path: 'assets/images/brand/devworks_bg_title.png', size: [2400, 2400], what: 'start-up / main-menu background, full-bleed, no logo or text (city office district)' },
+  devworks_bg_world: { path: 'assets/images/brand/devworks_bg_world.png', size: [3000, 2000], what: 'scenery behind the studio: sky, distant city office district, soft and a little faded' },
+  devworks_app_icon: { path: 'assets/images/brand/devworks_app_icon.png', size: [1024, 1024], what: 'app icon, square, full-bleed, no clear corners, no tiny text' },
+};

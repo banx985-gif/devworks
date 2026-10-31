@@ -78,6 +78,7 @@ import { THEME, font, setTextScale, textScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
 import { Rng } from '../../../core/Rng.js';
 import { Renderer } from '../../../core/Renderer.js';
+import { createBackdrop } from '../../../core/ui/Backdrop.js';
 import { UiLayout } from '../../../core/UiLayout.js';
 import { Input } from '../../../core/Input.js';
 import { ScreenRouter } from '../../../core/ScreenRouter.js';
@@ -175,7 +176,7 @@ import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
 import { FakeStoreProvider } from '../../../core/FakeStoreProvider.js';
 import { validateAssets, assetSummary } from '../../../core/AssetValidator.js'; // Milestone 37
-import { ART_LIST, SHARED_ART, TEST_ART, GOD_ART } from '../data/artList.js';
+import { ART_LIST, SHARED_ART, TEST_ART, GOD_ART, SCREEN_FILL_ART } from '../data/artList.js';
 import { createRealStoreScreen } from './screens/StoreScreen.js';
 import { drawPortrait } from './ui/setupArt.js'; // Milestone 29: the arrival moment
 import { EVENT_RULES } from '../data/events.js';
@@ -255,7 +256,10 @@ const WORLD_SCREENS = ['ideas', 'artGallery', 'saves', 'projects', 'ngplus', 'st
 
 const bus = new EventBus();
 const rng = new Rng('devworks-m0');
-const renderer = new Renderer(document.getElementById('game'), { width: W, height: BASE_H, maxHeight: MAX_H, maxDpr: 2, bus });
+// Milestone 40j (SERIES_SCREEN_FILL_AND_BACKDROPS): the canvas fills the whole screen on any shape (a Fold open, a
+// tablet, a desktop: no bars). The 1080-wide layout stays a centred column; the studio's world view, the backdrops and the
+// clear colour reach the real edges (renderer.full).
+const renderer = new Renderer(document.getElementById('game'), { width: W, height: BASE_H, maxHeight: MAX_H, maxDpr: 2, bus, fill: true });
 // Milestone 39: ?insets=top,right,bottom,left (CSS px) stands in for a notch and a home bar (the safe-area checks).
 const FORCE_INSETS = (() => {
   const v = new URLSearchParams(window.location.search).get('insets');
@@ -271,6 +275,31 @@ const router = new ScreenRouter(bus, { roots: ['studio', 'test', 'title'] });
 const dialog = new Dialog({ layout, assets }); // confirm boxes (delete a slot)
 const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
 registerPlaceholders(assets); // stand-ins for art not drawn yet
+// Milestone 40j: Aaron's backdrop pictures (owed: data/artList.js SCREEN_FILL_ART) — used the moment the file is filed,
+// today's look until then. The title picture sits behind the loading and title screens and drifts slowly (not with
+// Reduced motion); the scenery sits behind the studio (StudioScreen: it moves less than the room when you pan).
+const reducedMotion = () => !!settings.get('reducedMotion');
+const titleBackdrop = createBackdrop({ assets, key: 'devworks_bg_title', src: SCREEN_FILL_ART.devworks_bg_title.path, reducedMotion });
+const worldBackdrop = createBackdrop({ assets, key: 'devworks_bg_world', src: SCREEN_FILL_ART.devworks_bg_world.path, reducedMotion, drift: null });
+titleBackdrop.load(); // asked for once, straight away (a missing file is quiet)
+worldBackdrop.load();
+const drawTitleBackdrop = (ctx) => titleBackdrop.draw(ctx, renderer.full);
+// Over the edges past the column (a Fold open, a tablet): the core sheet, dialog, guide and big moments dim only the
+// column, so the sides get the same veil. Nothing to do on a phone (no edges).
+function veilEdges(ctx, alpha = 1) {
+  const b = renderer.bleed;
+  if (!(b.left > 0 || b.right > 0 || b.top > 0 || b.bottom > 0)) return;
+  const F = renderer.full;
+  const H = renderer.height;
+  ctx.save();
+  ctx.fillStyle = COL.overlay;
+  ctx.globalAlpha = alpha;
+  if (b.left > 0) ctx.fillRect(F.x, F.y, b.left, F.h);
+  if (b.right > 0) ctx.fillRect(W, F.y, b.right, F.h);
+  if (b.top > 0) ctx.fillRect(0, F.y, W, b.top);
+  if (b.bottom > 0) ctx.fillRect(0, H, W, b.bottom);
+  ctx.restore();
+}
 
 // The calendar (bible §4) and the studio. The studio runs on every world screen, at the top bar's speed.
 const clock = new Clock({ bus, ...CALENDAR });
@@ -403,6 +432,7 @@ const loop = new FixedStepLoop({
       profile.addPlayTime(dt);
     }
     router.update(dt);
+    titleBackdrop.update(dt); // Milestone 40j: the title picture's slow drift
     dialog.update(dt);
     sheet.update(dt);
     if (started) eventFlow.update(dt); // Milestone 27
@@ -430,18 +460,25 @@ const loop = new FixedStepLoop({
   },
   render: (alpha) => {
     assets.sprites.beginFrame(); // Milestone 39: the sprite copies' per-frame budget
-    const ctx = renderer.begin(COL.bg);
+    const ctx = renderer.begin(router.currentName === 'splash' ? '#000' : COL.bg); // Milestone 40j: the edges match the screen
     warmText(ctx); // Milestone 39
+    if (router.currentName === 'title') drawTitleBackdrop(ctx); // Milestone 40j (boot draws its own)
     router.render(ctx, alpha);
     if (liveBuildOn()) liveBuild.render(ctx); // Milestone 40b: over the studio, under the sheets and big moments
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
     sheet.render(ctx);
-    if (started && guide.active) coach.render(ctx, guideFill(guide.current), guideTarget(guide.current.target), { block: guide.current.block, next: !!guide.current.advance.next }); // Milestone 34
+    if (sheet.active) veilEdges(ctx, 0.6); // Milestone 40j: core parts dim only the column — dim the sides too
+    if (started && guide.active) {
+      coach.render(ctx, guideFill(guide.current), guideTarget(guide.current.target), { block: guide.current.block, next: !!guide.current.advance.next }); // Milestone 34
+      veilEdges(ctx);
+    }
     dialog.render(ctx);
+    if (dialog.active) veilEdges(ctx);
     if (tip) drawTip(ctx);
     if (beat && !feedback.active && router.currentName === 'studio' && !studio.buildMode) drawBeat(ctx);
     if (hintLine.current) hintLine.render(ctx); // Milestone 40e: the next-step hint
     feedback.render(ctx);
+    if (feedback.active) veilEdges(ctx);
     celebrate.render(ctx, 'screen'); // confetti over the big moments
     if (onTestScreen()) drawButton(ctx, pauseButton(), loop.paused ? 'RESUME' : 'PAUSE', { selected: loop.paused });
     if (loop.paused) drawPaused(ctx);
@@ -582,8 +619,9 @@ window.addEventListener('keydown', (e) => {
 
 function drawPaused(ctx) {
   const H = renderer.height;
+  const F = renderer.full; // Milestone 40j: to the real edges
   ctx.fillStyle = COL.overlay;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(F.x, F.y, F.w, F.h);
   ctx.fillStyle = COL.chip;
   ctx.beginPath();
   ctx.roundRect(W / 2 - 300, H / 2 - 90, 600, 220, THEME.panel.radius);
@@ -1089,6 +1127,7 @@ const bootScreen = {
   },
   render(ctx) {
     const H = renderer.height;
+    drawTitleBackdrop(ctx); // Milestone 40j
     ctx.fillStyle = COL.text;
     ctx.font = font(THEME.size.major, true);
     ctx.textAlign = 'center';
@@ -1131,6 +1170,8 @@ const studio = createStudioScreen({
   workerDetail: () => (fx('reducedWorkerDetail') ? { full: 8, every: 6 } : { full: 24, every: 3 }), // Milestone 39: 24 in full detail
   levelOf: (id) => ({ level: world.levels.level(id), pending: !!world.levels.pending(id) }), // Milestone 40e
   stationDecor: (ctx, st, r) => drawSponsorBoard(ctx, st, r),
+  backdrop: worldBackdrop, // Milestone 40j
+  reducedMotion,
   shakeScale: () => SHAKE_LEVELS[settings.get('screenShake')] ?? 1,
 });
 // Milestone 40e: the sponsor logo board — active sponsors' logos on the Marketing Wall (or, before there is one, on a
