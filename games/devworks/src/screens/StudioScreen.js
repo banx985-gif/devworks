@@ -49,7 +49,7 @@ const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a muc
 const COVER_ASPECT = 336 / 483;
 const WORLD_PARALLAX = 0.15; // Milestone 40j: the scenery moves this much of the room's pan
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1, backdrop = null, reducedMotion = () => false }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1, backdrop = null, reducedMotion = () => false, walkers = null }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -94,8 +94,17 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const f = iso.toWorld(w.agent.x, w.agent.y);
     return { x: f.x, y: f.y + HH * 0.25 };
   };
+  // Milestone 40t: the walking chibi's frame for a worker now (null while their sheet isn't in: today's walker).
+  // The front rows face down-left and the back rows up-right; the other two directions are the mirror image.
+  const chibiOf = (w) => {
+    if (!walkers) return null;
+    const m = motionOf(w);
+    return walkers.frameFor(w.def.art, { state: w.agent.state, back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride });
+  };
   const workerRect = (w) => {
     const f = feetOf(w);
+    const ch = chibiOf(w);
+    if (ch) return { x: f.x - ch.dw * 0.32, y: f.y + ch.dy + ch.dh * 0.04, w: ch.dw * 0.64, h: -ch.dy - ch.dh * 0.04 }; // the figure, not the empty frame
     const h = WALKER.height;
     const wd = h * assets.aspect(w.def.art);
     return { x: f.x - wd / 2, y: f.y - h, w: wd, h };
@@ -142,7 +151,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   const motionOf = (w) => {
     let m = motion.get(w.id);
     if (!m) {
-      m = { x: w.agent.x, y: w.agent.y, stride: 0, flip: 1, shake: 0, seed: motion.size * 1.7 + 0.4 };
+      m = { x: w.agent.x, y: w.agent.y, stride: 0, flip: 1, back: false, shake: 0, seed: motion.size * 1.7 + 0.4 };
       motion.set(w.id, m);
     }
     return m;
@@ -158,6 +167,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       else m.stride += d;
       const sx = dx - dy; // plan → screen: x grows with col, shrinks with row
       if (Math.abs(sx) > 0.5) m.flip = sx > 0 ? 1 : -1;
+      const sy = dx + dy; // plan → screen: y grows with both (Milestone 40t: walking up the screen shows their back)
+      if (Math.abs(sy) > 0.5) m.back = sy < 0;
       m.x = w.agent.x;
       m.y = w.agent.y;
       if (m.shake > 0) m.shake = Math.max(0, m.shake - dt);
@@ -762,6 +773,17 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       ctx.beginPath();
       ctx.ellipse(f.x, cy, rad * 0.8, rad, 0, 0, Math.PI * 2);
       ctx.fill();
+    }
+    const ch = chibiOf(w);
+    if (ch) {
+      // Milestone 40t: the walking chibi (its own walk / work / idle frames), drawn by the feet, mirrored about them.
+      const img = assets.get(ch.key);
+      ctx.save();
+      ctx.translate(f.x + shakeX, f.y);
+      if (ch.flip) ctx.scale(-1, 1);
+      ctx.drawImage(img, ch.sx, ch.sy, ch.sw, ch.sh, ch.dx, ch.dy, ch.dw, ch.dh);
+      ctx.restore();
+      return;
     }
     drawCharacter(ctx, assets, w.def.art, f.x + shakeX, f.y, r.w, r.h, pose);
   }

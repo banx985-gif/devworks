@@ -5,6 +5,7 @@
 //                                                   cream wall, the name drawn on it (same look as the sign in the studio)
 //   drawPortrait(ctx, assets, art, r, ring)         a staff head-and-shoulders in a rounded frame
 //   diceButton(ctx, r, label, opts)                 a button with the dice beside its label
+//   drawDashedCard(ctx, r, accent)                  a cream card with a coloured dashed edge (Milestone 40p)
 import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton } from '../../../../core/ui/Button.js';
 
@@ -105,5 +106,19 @@ export function drawPortrait(ctx, assets, art, r, ring = null) {
     const f = staffFace(art, (r.w - 12) / (r.h - 8));
     assets.drawCrop(ctx, f.key, f.crop, { x: r.x + 6, y: r.y + 8, w: r.w - 12, h: r.h - 8 });
   }
+  ctx.restore();
+}
+
+// Milestone 40p: a cream card with a coloured dashed edge (the Save slots look), for the New Studio sections.
+export function drawDashedCard(ctx, r, accent, { fill = C.panel, radius = THEME.panel.radius, dash = [18, 12], line = 5 } = {}) {
+  ctx.save();
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.w, r.h, radius);
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = line;
+  ctx.setLineDash(dash);
+  ctx.stroke();
   ctx.restore();
 }

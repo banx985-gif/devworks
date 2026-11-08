@@ -18,8 +18,14 @@ const ECHO = { delay: 0.09, feedback: 0.35, mix: 0.3 };
 
 // §48 SFX: typing, marker, bug alert, breakthrough, review, sales, award, recruitment, engine build, console boot, defect
 // warning, UI, cash/RP.
+// Milestone 40r: how often the work sound may play while a game is being made (real seconds): at most one burst per
+// minGapSec, and then only by chance (chance per check, checked once a game day).
+export const WORK_SOUND = { id: 'sfx_typing', minGapSec: 20, chance: 0.25 };
+
 export const SOUNDS = {
-  sfx_typing: S('workshop', clicks([0, 0.08, 0.17, 0.24, 0.36, 0.44, 0.55, 0.63, 0.75, 0.86, 0.98, 1.07], 6000, 0.7), { gain: 0.2, loop: true, volume: 0.4 }),
+  // Milestone 40r: a short, quiet burst of four key clicks (about a quarter of a second), never a loop: the studio plays
+  // it now and then while people work (WORK_SOUND), under the music, on the Effects volume.
+  sfx_typing: S('workshop', clicks([0, 0.07, 0.15, 0.22], 5000, 0.55), { gain: 0.12, volume: 0.25 }),
   sfx_marker: S('progression', [...arp([72, 76, 79], 0.07, 0.12), hiss(0.2, 0.06, 7000, 0.2)], { gain: 0.42 }),
   sfx_bug: S('workshop', [tone(57, 0, 0.09, 'square', 1, { lp: 1500 }), tone(61, 0.1, 0.09, 'square', 1, { lp: 1500 }), hiss(0, 0.2, 2500, 0.3)], { gain: 0.34 }),
   sfx_breakthrough: S('progression', [sweep(600, 1800, 0, 0.25, 'sine'), tone(96, 0.22, 0.3, 'triangle', 0.6)], { gain: 0.44, echo: ECHO }),

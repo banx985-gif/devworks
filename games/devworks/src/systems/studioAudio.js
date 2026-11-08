@@ -7,9 +7,10 @@
 //     settings  core Settings: master / music / sfx (0–100) set the volumes
 //   trackNow() → the music id the rules pick now · update() re-checks it (each day, on a screen change)
 //   applyVolumes()
-import { MUSIC_RULES } from '../../data/audio.js';
+import { MUSIC_RULES, WORK_SOUND } from '../../data/audio.js';
 
-export function createStudioAudio({ bus, audio, clock, projects, world, ending = null, screen = () => 'studio', prestigeNow = () => false, settings = null }) {
+export function createStudioAudio({ bus, audio, clock, projects, world, ending = null, screen = () => 'studio', prestigeNow = () => false, settings = null, now = () => performance.now() / 1000, random = Math.random }) {
+  let lastWork = -Infinity; // Milestone 40r: when the last typing burst played (real seconds)
   let lastRelease = -Infinity;
   let lastConsole = -Infinity;
   const today = () => clock.totalDays;
@@ -29,9 +30,15 @@ export function createStudioAudio({ bus, audio, clock, projects, world, ending =
   function update() {
     const want = trackNow();
     if (audio.wantedMusic !== want) audio.playMusic(want);
-    // Typing at the desks while a game is being made and the clock runs.
-    if (projects.jobs.length && !clock.paused && screen() === 'studio') audio.startLoop('sfx_typing', 'typing');
-    else audio.stopLoop('typing');
+    // Milestone 40r: no more constant typing loop (it droned over the music). Stop one left over from an older build.
+    audio.stopLoop('typing');
+  }
+  // Now and then a short, quiet typing burst while a game is being made and the clock runs (checked once a game day).
+  function workSound() {
+    if (!projects.jobs.length || clock.paused || screen() !== 'studio') return false;
+    if (now() - lastWork < WORK_SOUND.minGapSec || random() >= WORK_SOUND.chance) return false;
+    lastWork = now();
+    return play(WORK_SOUND.id);
   }
   function applyVolumes() {
     if (!settings) return;
@@ -75,9 +82,12 @@ export function createStudioAudio({ bus, audio, clock, projects, world, ending =
   on('research:complete', () => play('sfx_rp'));
   on('secret:unlocked', () => play('sfx_secret'));
   on('input:tap', () => play('sfx_ui'));
-  on('clock:day', () => update());
+  on('clock:day', () => {
+    update();
+    workSound();
+  });
   on('clock:speed', () => update());
   on('screen:change', () => update());
 
-  return { trackNow, update, applyVolumes, get lastRelease() { return lastRelease; } };
+  return { trackNow, update, applyVolumes, workSound, get lastRelease() { return lastRelease; } };
 }

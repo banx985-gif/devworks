@@ -94,6 +94,8 @@ import { MajorFeedback } from '../../../core/MajorFeedback.js';
 import { VfxSystem } from '../../../core/VfxSystem.js';
 import { FloatFeed } from '../../../core/FloatFeed.js';
 import { TextPrompt } from '../../../core/ui/TextPrompt.js';
+import { watchTextPrompt } from './ui/textBoxFix.js'; // Milestone 40o
+import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking chibis
 import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
@@ -207,7 +209,7 @@ import { createStudioScreen } from './screens/StudioScreen.js';
 import { createRosterScreen } from './screens/RosterScreen.js';
 import { createStaffDetailScreen } from './screens/StaffDetailScreen.js';
 import { createIdeaCardsScreen } from './screens/IdeaCardsScreen.js'; // Milestone 40b
-import { createLiveBuildPanel } from './ui/liveBuildPanel.js'; // Milestone 40b
+import { createLiveBuildPanel, OWED_STAT_ICONS } from './ui/liveBuildPanel.js'; // Milestone 40b
 import { createRequests } from './systems/requests.js'; // Milestone 40c
 import { createRewards } from './systems/rewards.js'; // Milestone 40c
 import { drawRewardBox, OPTIONAL_ART } from './ui/rewardArt.js'; // Milestone 40c
@@ -404,6 +406,7 @@ assets.setFallback('dev_ui_menu', (ctx, x, y, w, h) => {
 });
 for (const [k, src] of ITEM_OPTIONAL_ART) assets.loadOptional(k, src);
 for (const [k, src] of OPTIONAL_ART) assets.loadOptional(k, src); // drawn by code until the files exist
+for (const [k, src] of OWED_STAT_ICONS) assets.loadOptional(k, src); // Milestone 40q: the live panel's two owed stat icons (a coloured dot until filed)
 // Milestone 40n: the staff's whole-face pictures (data/portraits.js); a frame uses the full-body crop until its face is in.
 setFaceCheck((k) => assets.has(k));
 for (const [k, src] of STAFF_FACE_ART) assets.loadOptional(k, src);
@@ -466,7 +469,7 @@ const loop = new FixedStepLoop({
     assets.sprites.beginFrame(); // Milestone 39: the sprite copies' per-frame budget
     const ctx = renderer.begin(router.currentName === 'splash' ? '#000' : COL.bg); // Milestone 40j: the edges match the screen
     warmText(ctx); // Milestone 39
-    if (router.currentName === 'title') drawTitleBackdrop(ctx); // Milestone 40j (boot draws its own)
+    if (router.currentName === 'title' || router.currentName === 'setup') drawTitleBackdrop(ctx); // Milestone 40j (boot draws its own); 40p: New Studio too
     router.render(ctx, alpha);
     if (liveBuildOn()) liveBuild.render(ctx); // Milestone 40b: over the studio, under the sheets and big moments
     if (router.currentName === 'studio') vfx.render(ctx, 'screen');
@@ -820,7 +823,8 @@ const openStation = (id) => {
 };
 const textPrompt = new TextPrompt({ renderer });
 bus.on('screen:change', () => textPrompt.close());
-bus.on('renderer:resize', () => textPrompt.close());
+// Milestone 40o: the phone keyboard (a height-only resize in the app) no longer closes the box; tapping away finishes it.
+watchTextPrompt({ textPrompt, bus });
 bus.on('screen:change', () => sheet.close());
 
 // Red attention badges (data/home.js BADGES), plus the ?debug=1 toggle that lights them all.
@@ -1152,7 +1156,10 @@ const vfx = new VfxSystem({ assets, width: W, height: renderer.height, font: THE
 const celebrate = new VfxSystem({ assets, width: W, height: renderer.height, font: THEME.family, maxTexts: 2, maxEffects: 8 });
 // The Showcase Shelf shows the released games, newest first.
 const shipped = () => projects.catalogue.list().filter((r) => r.release).reverse();
+// Milestone 40t: the people in the studio walk, sit and work as their chibis (sprite sheets, loaded per person).
+const walkers = createWalkers({ assets });
 const studio = createStudioScreen({
+  walkers,
   renderer,
   layout,
   assets,
@@ -1234,6 +1241,12 @@ const liveBuild = createLiveBuildPanel({
   projects,
   bottomBar,
   studio,
+  // Milestone 40q: at the top of the studio, under the top bar and the hint line's place (kept even when no hint shows,
+  // so the panel never jumps).
+  top: () => {
+    const t = topBar.rect();
+    return t.y + t.h + 10 + 72 + 14;
+  },
   fanExpectation: () => business.state.fanExpectation,
   reducedMotion: () => !!settings.get('reducedMotion'),
   onOpen: (id) => router.go('project', { id }),
@@ -3072,7 +3085,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, walkers, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

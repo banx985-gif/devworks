@@ -1,0 +1,412 @@
+{
+ "game": "devworks",
+ "note": "Made by Cowork 1 Nov 2026. Hair and clothes colours checked by eye against the flat art.",
+ "out_models": "chibis/staff/devworks",
+ "out_sheets": "games/devworks/assets/images/walkers",
+ "people": [
+  {
+   "id": "staff_art01",
+   "flat": "games/devworks/assets/images/staff/staff_art01.png",
+   "chibi": "chibi_13_beard_workwear",
+   "hair": "#2a2328",
+   "top": "#2a2a30",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_art02",
+   "flat": "games/devworks/assets/images/staff/staff_art02.png",
+   "chibi": "chibi_21_platinum_sporty",
+   "hair": "#3289cc",
+   "top": "#2a2a35",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_art03",
+   "flat": "games/devworks/assets/images/staff/staff_art03.png",
+   "chibi": "chibi_16_curly_coral_tee",
+   "hair": "#67331a",
+   "bottom": "#5a5a3a"
+  },
+  {
+   "id": "staff_art04",
+   "flat": "games/devworks/assets/images/staff/staff_art04.png",
+   "chibi": "chibi_13_beard_workwear",
+   "hair": "#6f3316",
+   "top": "#4d5a32",
+   "bottom": "#b09a70"
+  },
+  {
+   "id": "staff_art05",
+   "flat": "games/devworks/assets/images/staff/staff_art05.png",
+   "chibi": "chibi_16_curly_coral_tee",
+   "hair": "#763621",
+   "top": "#2a2a30",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_art06",
+   "flat": "games/devworks/assets/images/staff/staff_art06.png",
+   "chibi": "chibi_08_red_cardigan",
+   "hair": "#dc4011",
+   "bottom": "#a0a098"
+  },
+  {
+   "id": "staff_art07",
+   "flat": "games/devworks/assets/images/staff/staff_art07.png",
+   "chibi": "chibi_28_plum_suit",
+   "hair": "#5a4367",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_art08",
+   "flat": "games/devworks/assets/images/staff/staff_art08.png",
+   "chibi": "chibi_12_beach_shirt",
+   "hair": "#e2bc5c",
+   "hat": {
+    "col": "2b5fb5"
+   },
+   "top": "#2b4fa0",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_art09",
+   "flat": "games/devworks/assets/images/staff/staff_art09.png",
+   "chibi": "chibi_25_grey_pink_blazer",
+   "hair": "#efbd52",
+   "bottom": "#e8dcc0"
+  },
+  {
+   "id": "staff_art10",
+   "flat": "games/devworks/assets/images/staff/staff_art10.png",
+   "chibi": "chibi_21_platinum_sporty",
+   "hair": "#e6e4ec",
+   "top": "#e8e0f0",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn01",
+   "flat": "games/devworks/assets/images/staff/staff_dsn01.png",
+   "chibi": "chibi_05_blue_top",
+   "hair": "#f278ab",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn02",
+   "flat": "games/devworks/assets/images/staff/staff_dsn02.png",
+   "chibi": "chibi_30_teal_jumper",
+   "hair": "#844127",
+   "hat": {
+    "col": "222226",
+    "back": 1
+   },
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn03",
+   "flat": "games/devworks/assets/images/staff/staff_dsn03.png",
+   "chibi": "chibi_05_blue_top",
+   "hair": "#9828c8",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn04",
+   "flat": "games/devworks/assets/images/staff/staff_dsn04.png",
+   "chibi": "chibi_11_moustache_shorts",
+   "hair": "#2a2a2e"
+  },
+  {
+   "id": "staff_dsn05",
+   "flat": "games/devworks/assets/images/staff/staff_dsn05.png",
+   "chibi": "chibi_01_curly_yellow_jumper",
+   "hair": "#bb1d69",
+   "top": "#2a2a30",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn06",
+   "flat": "games/devworks/assets/images/staff/staff_dsn06.png",
+   "chibi": "chibi_06_red_shirt",
+   "hair": "#252428",
+   "hat": {
+    "col": "222226"
+   },
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn07",
+   "flat": "games/devworks/assets/images/staff/staff_dsn07.png",
+   "chibi": "chibi_25_grey_pink_blazer",
+   "hair": "#ee6a9c",
+   "top": "#f0e6ee",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn08",
+   "flat": "games/devworks/assets/images/staff/staff_dsn08.png",
+   "chibi": "chibi_22_teal_sports_tee",
+   "hair": "#484259",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn09",
+   "flat": "games/devworks/assets/images/staff/staff_dsn09.png",
+   "chibi": "chibi_28_plum_suit",
+   "hair": "#5b434d",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_dsn10",
+   "flat": "games/devworks/assets/images/staff/staff_dsn10.png",
+   "chibi": "chibi_04_silver_green_suit",
+   "hair": "#857986",
+   "top": "#2a2a30",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg01",
+   "flat": "games/devworks/assets/images/staff/staff_prg01.png",
+   "chibi": "chibi_02_teal_hoodie",
+   "hair": "#984018",
+   "glasses": {},
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg02",
+   "flat": "games/devworks/assets/images/staff/staff_prg02.png",
+   "chibi": "chibi_09_pink_shorts",
+   "hair": "#5d4555",
+   "glasses": {},
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg03",
+   "flat": "games/devworks/assets/images/staff/staff_prg03.png",
+   "chibi": "chibi_14_glasses_vest",
+   "hair": "#983d18",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg04",
+   "flat": "games/devworks/assets/images/staff/staff_prg04.png",
+   "chibi": "chibi_15_denim_jacket",
+   "hair": "#d0250e",
+   "glasses": {},
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg05",
+   "flat": "games/devworks/assets/images/staff/staff_prg05.png",
+   "chibi": "chibi_22_teal_sports_tee",
+   "hair": "#524760",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg06",
+   "flat": "games/devworks/assets/images/staff/staff_prg06.png",
+   "chibi": "chibi_20_athlete_blue",
+   "hair": "#704435",
+   "hat": {
+    "col": "222226",
+    "back": 1,
+    "drop": 0.4,
+    "fit": 1.08
+   },
+   "top": "#4d5a32",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg07",
+   "flat": "games/devworks/assets/images/staff/staff_prg07.png",
+   "chibi": "chibi_23_ponytail_purple_sports",
+   "hair": "#b82ed4",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg08",
+   "flat": "games/devworks/assets/images/staff/staff_prg08.png",
+   "chibi": "chibi_17_green_hoodie",
+   "hair": "#f5a74d",
+   "glasses": {},
+   "top": "#2b4fa0",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_prg09",
+   "flat": "games/devworks/assets/images/staff/staff_prg09.png",
+   "chibi": "chibi_04_silver_green_suit",
+   "hair": "#a59eb1",
+   "glasses": {},
+   "top": "#eaeaf0"
+  },
+  {
+   "id": "staff_prg10",
+   "flat": "games/devworks/assets/images/staff/staff_prg10.png",
+   "chibi": "chibi_21_platinum_sporty",
+   "hair": "#c7bbc5",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_pro01",
+   "flat": "games/devworks/assets/images/staff/staff_pro01.png",
+   "chibi": "chibi_25_grey_pink_blazer",
+   "hair": "#f5c45e",
+   "top": "#1e1e22",
+   "bottom": "#c8a878"
+  },
+  {
+   "id": "staff_pro02",
+   "flat": "games/devworks/assets/images/staff/staff_pro02.png",
+   "chibi": "chibi_20_athlete_blue",
+   "hair": "#4c3233"
+  },
+  {
+   "id": "staff_pro03",
+   "flat": "games/devworks/assets/images/staff/staff_pro03.png",
+   "chibi": "chibi_27_bob_green_shirt",
+   "hair": "#763618",
+   "bottom": "#c8b08a"
+  },
+  {
+   "id": "staff_pro04",
+   "flat": "games/devworks/assets/images/staff/staff_pro04.png",
+   "chibi": "chibi_07_moustache_polo",
+   "hair": "#643322",
+   "glasses": {},
+   "top": "#2f3a2a",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_pro05",
+   "flat": "games/devworks/assets/images/staff/staff_pro05.png",
+   "chibi": "chibi_08_red_cardigan",
+   "hair": "#d34304",
+   "bottom": "#c8b08a"
+  },
+  {
+   "id": "staff_pro06",
+   "flat": "games/devworks/assets/images/staff/staff_pro06.png",
+   "chibi": "chibi_29_navy_suit",
+   "hair": "#493b40",
+   "bottom": "#1f2a4a"
+  },
+  {
+   "id": "staff_pro07",
+   "flat": "games/devworks/assets/images/staff/staff_pro07.png",
+   "chibi": "chibi_15_denim_jacket",
+   "hair": "#dd3510",
+   "glasses": {},
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_pro08",
+   "flat": "games/devworks/assets/images/staff/staff_pro08.png",
+   "chibi": "chibi_14_glasses_vest",
+   "hair": "#8f4724",
+   "top": "#1f2a4a",
+   "bottom": "#1f2a4a"
+  },
+  {
+   "id": "staff_pro09",
+   "flat": "games/devworks/assets/images/staff/staff_pro09.png",
+   "chibi": "chibi_25_grey_pink_blazer",
+   "hair": "#f2cf7e",
+   "top": "#1e1e22",
+   "bottom": "#e8dcc0"
+  },
+  {
+   "id": "staff_pro10",
+   "flat": "games/devworks/assets/images/staff/staff_pro10.png",
+   "chibi": "chibi_06_red_shirt",
+   "hair": "#2b2522",
+   "hat": {
+    "col": "222226"
+   },
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_wrt01",
+   "flat": "games/devworks/assets/images/staff/staff_wrt01.png",
+   "chibi": "chibi_30_teal_jumper",
+   "hair": "#6f402c",
+   "glasses": {},
+   "bottom": "#8a6a4a"
+  },
+  {
+   "id": "staff_wrt02",
+   "flat": "games/devworks/assets/images/staff/staff_wrt02.png",
+   "chibi": "chibi_09_pink_shorts",
+   "hair": "#2b2326"
+  },
+  {
+   "id": "staff_wrt03",
+   "flat": "games/devworks/assets/images/staff/staff_wrt03.png",
+   "chibi": "chibi_28_plum_suit",
+   "hair": "#5e3a30",
+   "glasses": {},
+   "top": "#efe4d0",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_wrt04",
+   "flat": "games/devworks/assets/images/staff/staff_wrt04.png",
+   "chibi": "chibi_02_teal_hoodie",
+   "hair": "#753c1f",
+   "glasses": {},
+   "top": "#27365e",
+   "bottom": "#a89870"
+  },
+  {
+   "id": "staff_wrt05",
+   "flat": "games/devworks/assets/images/staff/staff_wrt05.png",
+   "chibi": "chibi_15_denim_jacket",
+   "hair": "#cd2209"
+  },
+  {
+   "id": "staff_wrt06",
+   "flat": "games/devworks/assets/images/staff/staff_wrt06.png",
+   "chibi": "chibi_12_beach_shirt",
+   "hair": "#ee9d39",
+   "top": "#f0c030",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_wrt07",
+   "flat": "games/devworks/assets/images/staff/staff_wrt07.png",
+   "chibi": "chibi_25_grey_pink_blazer",
+   "hair": "#f5d595",
+   "glasses": {},
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_wrt08",
+   "flat": "games/devworks/assets/images/staff/staff_wrt08.png",
+   "chibi": "chibi_07_moustache_polo",
+   "hair": "#673a24",
+   "bottom": "#2a2a2a"
+  },
+  {
+   "id": "staff_wrt09",
+   "flat": "games/devworks/assets/images/staff/staff_wrt09.png",
+   "chibi": "chibi_05_blue_top",
+   "hair": "#8810c5",
+   "top": "#1e1e22",
+   "bottom": "#1e1e22"
+  },
+  {
+   "id": "staff_wrt10",
+   "flat": "games/devworks/assets/images/staff/staff_wrt10.png",
+   "chibi": "chibi_05_blue_top",
+   "hair": "#8e26b7",
+   "top": "#2a1f3a",
+   "bottom": "#1e1e22"
+  }
+ ]
+}

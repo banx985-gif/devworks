@@ -10,7 +10,7 @@ import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { card, text, para } from '../../../../core/ui/Kit.js';
 import { ROLES, TRAITS, startStaffById } from '../../data/staff.js';
 import { FOUNDERS, STUDIO_COLOURS, STUDIO_NAMES, DIRECTOR_NAMES, NAME_MAX, founderById, colourById } from '../../data/setup.js';
-import { drawDice, diceButton, drawSign, drawPortrait } from '../ui/setupArt.js';
+import { drawDice, diceButton, drawSign, drawPortrait, drawDashedCard } from '../ui/setupArt.js';
 
 const C = THEME.color;
 const S = THEME.size;
@@ -54,11 +54,27 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
 
   // One pass over the scrolling content (content coordinates). Draws when ctx is given, returns the action under
   // `tap`, and records every tappable rect by id in `rects`.
+  // Milestone 40p: each section (names, colour + sign, founder) sits on its own cream card with a coloured dashed edge,
+  // over the title picture. The cards' sizes come from the last layout pass (pass(null) runs first every frame).
+  let sections = {};
   function pass(ctx, tap, rects = null) {
     const w = panelRect().w;
     const cw = w - PAD * 2;
     let y = PAD;
     let hit = null;
+    const laid = {};
+    let secTop = 0;
+    const beginSection = (id, accent) => {
+      y += 8;
+      secTop = y;
+      if (ctx && sections[id]) drawDashedCard(ctx, sections[id], accent);
+      y += 26;
+    };
+    const endSection = (id) => {
+      y += 6;
+      laid[id] = { x: PAD - 20, y: secTop, w: cw + 40, h: y - secTop };
+      y += 30;
+    };
     const box = (r, fn, id) => {
       if (rects && id) rects[id] = r;
       if (tap && !hit && hitRect(tap, r)) hit = fn;
@@ -97,13 +113,16 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       box(rnd, random[id], `${id}Random`);
       y += 110 + 20;
     };
+    beginSection('names', C.action);
     field('studio', 'Studio name', setup.studio, 'Tap to name your studio', NAME_MAX.studio);
     y += 16;
     field('director', 'Studio Director (you)', setup.director, 'Tap to type your name', NAME_MAX.director);
     if (ctx) text(ctx, `Studio Director ${setup.director.trim() || '…'} — ${setup.studio.trim() || '…'}`, PAD, y, { size: S.body, color: C.actionDark, bold: true, maxWidth: cw });
-    y += 50 + 30;
+    y += 50;
+    endSection('names');
 
     // Colour: six swatches + Random, then the sign preview.
+    beginSection('colour', colourById(setup.colour).hex);
     heading('Studio colour', 'tints your studio sign');
     const n = STUDIO_COLOURS.length + 1;
     const sw = Math.min(120, (cw - (n - 1) * 16) / n);
@@ -130,9 +149,11 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
     box(rr, random.colour, 'colourRandom');
     y += sw + 24;
     if (ctx) drawSign(ctx, { x: PAD, y, w: cw, h: 220 }, setup.studio.trim(), colourById(setup.colour).hex);
-    y += 220 + 40;
+    y += 220;
+    endSection('colour');
 
     // Founder: five cards.
+    beginSection('founder', C.purple);
     heading('Founding Developer', 'one of five · perk lasts the whole run');
     for (const f of FOUNDERS) {
       const d = startStaffById(f.id);
@@ -144,6 +165,12 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       const r = { x: PAD, y, w: cw, h };
       if (ctx) {
         card(ctx, r, on ? 'selected' : 'normal');
+        if (on) {
+          ctx.fillStyle = colourById(setup.colour).hex; // Milestone 40p: the Save slots' colour stripe
+          ctx.beginPath();
+          ctx.roundRect(r.x + 4, r.y + 22, 10, r.h - 44, 5);
+          ctx.fill();
+        }
         drawPortrait(ctx, assets, d.art, { x: r.x + 20, y: r.y + 20, w: 200, h: 200 }, on ? C.good : null);
         const tx = r.x + 250;
         let ty = r.y + 24;
@@ -161,6 +188,9 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       box(r, () => (setup.founder = f.id), `founder:${f.id}`);
       y += h + 20;
     }
+    y -= 20;
+    endSection('founder');
+    if (!ctx) sections = laid;
     return { height: y + PAD, hit };
   }
 
@@ -289,16 +319,14 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       const hr = headerRect();
       const sr = layout.safeRect;
       drawButton(ctx, hr, '‹ Back', { accent: C.progress });
+      // Milestone 40p: a cream plate behind the title so it reads over the picture.
+      const tcx = sr.x + sr.w / 2 + 60;
+      const tw = Math.min(560, sr.x + sr.w - 24 - (hr.x + hr.w + 24));
+      drawDashedCard(ctx, { x: tcx - tw / 2, y: hr.y - 4, w: tw, h: hr.h + 8 }, C.action, { dash: [], line: 4 });
       text(ctx, ngPlus ? `New Game+ ${ngPlus}` : 'New Studio', sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 - 20, { size: S.title, bold: true, align: 'center', baseline: 'middle' });
       text(ctx, `Save slot ${slot + 1}`, sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 + 34, { size: S.small, color: C.textMuted, align: 'center', baseline: 'middle' });
-      const r = panelRect();
-      ctx.fillStyle = C.panel;
-      ctx.strokeStyle = C.outline;
-      ctx.lineWidth = THEME.panel.line;
-      ctx.beginPath();
-      ctx.roundRect(r.x, r.y, r.w, r.h, THEME.panel.radius);
-      ctx.fill();
-      ctx.stroke();
+      // Milestone 40p: no plain panel any more — the sections are cards over the title picture.
+      scroll.contentHeight = pass(null, null).height;
       scroll.begin(ctx);
       scroll.contentHeight = pass(ctx, null).height;
       scroll.end(ctx);

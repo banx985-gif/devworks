@@ -11,6 +11,11 @@
 // Milestone 40c: a game made for a request shows its target (a bar with the target marker, the points, the days
 // left) and the panel turns green once it is passed; reward drops (gift boxes, chests) sit on the panel's top edge —
 // or in a small tray above the bottom bar when no game is being made — and a tap opens one.
+// Milestone 40q: given top(), the panel sits at the top of the studio (under the top bar and hint line) as a cream card
+// with a coloured dashed edge; each stat box has its icon (STAT_TILES.icon: art the game already has; the two still
+// owed are drawn as a coloured dot until filed) and pops as it counts up; a small stat icon floats UP from the worker
+// into its box (a bug icon into the bug counter); the milestone bar is bigger with numbered markers; banners show
+// under the panel and the reward drops wait in the tray above the bottom bar.
 import { THEME, font } from '../../../../core/Theme.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
@@ -19,17 +24,26 @@ import { PROJECT_BALANCE } from '../../data/balance.js';
 import { elementById } from '../../data/elements.js';
 import { reviewGame } from '../systems/reviews.js';
 import { drawRewardBox } from './rewardArt.js';
+import { drawDashedCard } from './setupArt.js'; // Milestone 40q
 
 const C = THEME.color;
 const S = THEME.size;
+// Milestone 40q: each stat's icon (controller, paintbrush, book, music note, light bulb, sparkle, puzzle piece) and its
+// colour (the box's edge, and the dot drawn while an owed icon isn't filed).
 export const STAT_TILES = [
-  { key: 'gameplay', short: 'Gameplay' },
-  { key: 'graphics', short: 'Graphics' },
-  { key: 'story', short: 'Story' },
-  { key: 'audio', short: 'Audio' },
-  { key: 'innovation', short: 'Innov.' },
-  { key: 'polish', short: 'Polish' },
-  { key: 'audienceFit', short: 'Fit' },
+  { key: 'gameplay', short: 'Gameplay', icon: 'dev_ui_01', color: '#2F7FD0' },
+  { key: 'graphics', short: 'Graphics', icon: 'element_adr05', color: '#C8402F' },
+  { key: 'story', short: 'Story', icon: 'dev_vfx_05', color: '#7650C4' },
+  { key: 'audio', short: 'Audio', icon: 'dev_ui_stat_audio', color: '#1E9E8F' },
+  { key: 'innovation', short: 'Innov.', icon: 'dev_vfx_02', color: '#D99A00' },
+  { key: 'polish', short: 'Polish', icon: 'dev_ui_stat_polish', color: '#E0609A' },
+  { key: 'audienceFit', short: 'Fit', icon: 'element_gen08', color: '#2E8B57' },
+];
+export const BUG_ICON = 'dev_ui_06'; // the bug in a magnifying glass
+// Icons not drawn yet (Milestone 40q): loaded quietly from assets/images/ui/ (main.js); a coloured dot until then.
+export const OWED_STAT_ICONS = [
+  ['dev_ui_stat_audio', 'assets/images/ui/dev_ui_stat_audio.png'],
+  ['dev_ui_stat_polish', 'assets/images/ui/dev_ui_stat_polish.png'],
 ];
 // The five milestone markers: where each phase ends along the whole game (by its share of the work).
 export const MARKERS = (() => {
@@ -38,10 +52,11 @@ export const MARKERS = (() => {
 })();
 export const starsFor = (score) => Math.max(1, Math.min(5, Math.round(score / 20)));
 
-export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar, studio, fanExpectation = () => 10, reducedMotion = () => false, onOpen = () => {}, random = Math.random, requests = null, rewards = null, onOpenDrop = () => {} }) {
+export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar, studio, top = null, fanExpectation = () => 10, reducedMotion = () => false, onOpen = () => {}, random = Math.random, requests = null, rewards = null, onOpenDrop = () => {} }) {
   const state = { collapsed: false, lane: 0 };
   const shown = new Map(); // job id → { outputs (counting), bugs, target outputs }
   const pluses = []; // { key, n, t }
+  const pops = {}; // Milestone 40q: stat key → seconds since an icon hit its box
   const flies = []; // { x0, y0, key, n, t }
   const bubbles = []; // { id, line, t }
   let banner = null; // { title, big, t }
@@ -56,7 +71,9 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
   const rect = () => {
     const sr = layout.safeRect;
     const b = bottomBar.rect();
-    const h = state.collapsed ? 104 : 392;
+    // Milestone 40q: up top it is only as tall as it needs (the request row adds its line).
+    const h = state.collapsed ? 104 : top ? (job() && requests?.viewFor?.(job()) ? 412 : 356) : 392;
+    if (top) return { x: sr.x + 16, y: top(), w: sr.w - 32, h }; // Milestone 40q: at the top of the studio
     return { x: sr.x + 16, y: b.y - 14 - h, w: sr.w - 32, h };
   };
   const toggleRect = () => {
@@ -70,17 +87,18 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
   const drops = () => rewards?.drops ?? [];
   const dropRect = (i) => {
     const sr = layout.safeRect;
-    const top = visible() ? rect().y - 92 : bottomBar.rect().y - 106;
-    return { x: sr.x + sr.w - 24 - (i + 1) * 92, y: top, w: 84, h: 84 };
+    const ty = visible() && !top ? rect().y - 92 : bottomBar.rect().y - 106; // Milestone 40q: the tray when the panel is up top
+    return { x: sr.x + sr.w - 24 - (i + 1) * 92, y: ty, w: 84, h: 84 };
   };
   const tileRect = (i) => {
     const r = rect();
     const w = (r.w - 32 - 6 * 10) / 7;
-    return { x: r.x + 16 + i * (w + 10), y: r.y + 112, w, h: 132 };
+    return top ? { x: r.x + 16 + i * (w + 10), y: r.y + 106, w, h: 170 } : { x: r.x + 16 + i * (w + 10), y: r.y + 112, w, h: 132 };
   };
   const barRect = () => {
     const r = rect();
-    return state.collapsed ? { x: r.x + 24, y: r.y + r.h - 34, w: r.w - 48 - 300, h: 18 } : { x: r.x + 24, y: r.y + 290, w: r.w - 48 - 200, h: 26 };
+    if (state.collapsed) return { x: r.x + 24, y: r.y + r.h - 34, w: r.w - 48 - 300, h: 18 };
+    return top ? { x: r.x + 30, y: r.y + 302, w: r.w - 60 - 200, h: 32 } : { x: r.x + 24, y: r.y + 290, w: r.w - 48 - 200, h: 26 };
   };
 
   function say(kind, member = null) {
@@ -90,7 +108,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     const ids = member ? [member] : [...j.slots].sort(() => random() - 0.5);
     for (const id of ids) {
       const at = studio.headOnScreen(id);
-      if (!at || at.y > rect().y - 80) continue; // never over the panel
+      if (!at || overPanel(at)) continue; // never over the panel
       if (bubbles.some((b) => b.id === id)) continue;
       if (bubbles.length >= L.maxBubbles) bubbles.shift();
       const lines = BANTER[kind];
@@ -100,6 +118,11 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       return true;
     }
     return false;
+  }
+  // A bubble over this head would cover the panel (it spans 130 above the head down to the head).
+  function overPanel(at) {
+    const r = rect();
+    return at.y > r.y - 80 && at.y - 130 < r.y + r.h;
   }
   function showBanner(title, big = false) {
     banner = { title, big, t: 0 };
@@ -146,10 +169,12 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     for (const f of flies) f.t += dt;
     for (let i = flies.length - 1; i >= 0; i--) {
       if (flies[i].t >= L.flySec) {
-        pluses.push({ key: flies[i].key, n: flies[i].n, t: 0 });
+        if (flies[i].key !== 'bugs') pluses.push({ key: flies[i].key, n: flies[i].n, t: 0 });
+        pops[flies[i].key] = 0;
         flies.splice(i, 1);
       }
     }
+    for (const k of Object.keys(pops)) if ((pops[k] += dt) > 0.4) delete pops[k];
     const j = job();
     if (!j) return;
     const v = projects.view(j);
@@ -168,6 +193,10 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       s.target[key] = v.outputs[key] ?? 0;
       const d = s.target[key] - s.outputs[key];
       s.outputs[key] = Math.abs(d) < 0.5 ? s.target[key] : s.outputs[key] + d * Math.min(1, dt * 6);
+    }
+    if (top && v.bugs > s.bugs && !reducedMotion() && studio && flies.length < L.maxFlies) {
+      const from = j.slots.map((id) => studio.headOnScreen(id)).find(Boolean);
+      if (from) flies.push({ x0: from.x, y0: from.y, key: 'bugs', n: v.bugs - s.bugs, t: 0 }); // Milestone 40q: a bug floats up to the counter
     }
     s.bugs = v.bugs;
     if (!s.nearly && v.totalFrac >= L.nearlyAt) {
@@ -212,9 +241,98 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       void i;
     });
   }
-  function drawBugs(ctx, x, y, n, size) {
-    assets.drawContained(ctx, 'dev_vfx_01', { x, y: y - size / 2, w: size, h: size });
+  function drawBugs(ctx, x, y, n, size, pop = null) {
+    const k = pop == null ? 1 : 1 + 0.25 * Math.sin(Math.PI * Math.min(1, pop / 0.4));
+    const sz = size * k;
+    assets.drawContained(ctx, top ? BUG_ICON : 'dev_vfx_01', { x: x + (size - sz) / 2, y: y - sz / 2, w: sz, h: sz });
     text(ctx, String(n), x + size + 8, y, { size: S.heading, bold: true, baseline: 'middle', color: n ? C.bad : C.good });
+  }
+  // Milestone 40q: where the bug counter's icon sits (the bug flies there).
+  const bugRect = () => {
+    const br = barRect();
+    return { x: br.x + br.w + 40, y: br.y + br.h / 2 - 26, w: 52, h: 52 };
+  };
+  // A stat's icon: the art when it's in, else a coloured dot with the stat's first letter (owed art).
+  function drawStatIcon(ctx, t, r) {
+    if (assets.has?.(t.icon)) return void assets.drawContained(ctx, t.icon, r);
+    const rad = Math.min(r.w, r.h) * 0.42;
+    ctx.fillStyle = t.color;
+    ctx.strokeStyle = C.outline;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(r.x + r.w / 2, r.y + r.h / 2, rad, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    text(ctx, t.short[0], r.x + r.w / 2, r.y + r.h / 2 + 1, { size: Math.round(rad * 1.1), bold: true, align: 'center', baseline: 'middle', color: '#FFFFFF' });
+  }
+  // A stat box (Milestone 40q): white, the stat's colour on the edge, its icon, the number big and bold, the name; it
+  // pops when an icon lands in it.
+  function drawTile(ctx, t, tr, value) {
+    const pop = pops[t.key];
+    const k = pop == null ? 1 : 1 + 0.12 * Math.sin(Math.PI * Math.min(1, pop / 0.4));
+    ctx.save();
+    ctx.translate(tr.x + tr.w / 2, tr.y + tr.h / 2);
+    ctx.scale(k, k);
+    ctx.translate(-(tr.x + tr.w / 2), -(tr.y + tr.h / 2));
+    ctx.fillStyle = pop == null ? '#FFFFFF' : '#FFF6D8';
+    ctx.strokeStyle = t.color;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.roundRect(tr.x, tr.y, tr.w, tr.h, 20);
+    ctx.fill();
+    ctx.stroke();
+    const is = Math.min(56, tr.w - 24);
+    drawStatIcon(ctx, t, { x: tr.x + tr.w / 2 - is / 2, y: tr.y + 10, w: is, h: is });
+    text(ctx, String(Math.round(value)), tr.x + tr.w / 2, tr.y + 14 + is + 4, { size: S.title, bold: true, align: 'center', color: C.text, maxWidth: tr.w - 8 });
+    text(ctx, t.short, tr.x + tr.w / 2, tr.y + tr.h - 12, { size: S.small, bold: true, align: 'center', baseline: 'bottom', color: C.textMuted, maxWidth: tr.w - 8 });
+    ctx.restore();
+  }
+  // The milestone bar (Milestone 40q): a deeper track, the fill in the action colour with a light top band, and the
+  // five markers as numbered discs (green with ✓ once passed).
+  function drawBigBar(ctx, br, frac) {
+    ctx.fillStyle = C.track;
+    ctx.strokeStyle = 'rgba(58, 42, 30, 0.35)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(br.x, br.y, br.w, br.h, br.h / 2);
+    ctx.fill();
+    ctx.stroke();
+    const fw = Math.max(br.h, br.w * Math.min(1, frac));
+    ctx.fillStyle = C.action;
+    ctx.beginPath();
+    ctx.roundRect(br.x, br.y, fw, br.h, br.h / 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.beginPath();
+    ctx.roundRect(br.x + 6, br.y + 4, Math.max(0, fw - 12), br.h * 0.3, br.h * 0.15);
+    ctx.fill();
+    MARKERS.forEach((m, i) => {
+      const done = frac >= m - 1e-6;
+      const mx = Math.min(br.x + br.w * Math.min(1, m), br.x + br.w - br.h / 2);
+      const rad = br.h * 0.72;
+      ctx.fillStyle = done ? C.good : '#FFFFFF';
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(mx, br.y + br.h / 2, rad, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      text(ctx, done ? '✓' : String(i + 1), mx, br.y + br.h / 2 + 1, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: done ? '#FFFFFF' : C.text });
+    });
+  }
+  // A stat icon floating UP from the worker into its box (Milestone 40q): it eases in with a little sideways sway,
+  // grows as it leaves and shrinks into the box.
+  function drawFlyingIcon(ctx, f) {
+    const isBug = f.key === 'bugs';
+    const t = isBug ? { icon: BUG_ICON, color: C.bad, short: 'Bugs' } : STAT_TILES.find((x) => x.key === f.key);
+    const i = STAT_TILES.indexOf(t);
+    const tr = state.collapsed ? barRect() : isBug ? bugRect() : tileRect(i);
+    const k = Math.min(1, f.t / L.flySec);
+    const e = k * k * (3 - 2 * k);
+    const x = f.x0 + (tr.x + tr.w / 2 - f.x0) * e + Math.sin(Math.PI * k * 2) * 18 * (1 - k);
+    const y = f.y0 + (tr.y + tr.h / 2 - f.y0) * e;
+    const size = 64 * (k < 0.2 ? 0.6 + 2 * k : 1 - 0.35 * Math.max(0, (k - 0.7) / 0.3));
+    drawStatIcon(ctx, t, { x: x - size / 2, y: y - size / 2, w: size, h: size });
   }
 
   let dropT = 0;
@@ -246,13 +364,18 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     const score = predicted(v);
     const rq = requests?.viewFor?.(j) ?? null;
     ctx.save();
-    ctx.fillStyle = rq?.passed ? 'rgba(226, 246, 220, 0.97)' : 'rgba(255, 249, 236, 0.97)';
-    ctx.strokeStyle = C.outline;
-    ctx.lineWidth = THEME.panel.line;
-    ctx.beginPath();
-    ctx.roundRect(r.x, r.y, r.w, r.h, THEME.panel.radius);
-    ctx.fill();
-    ctx.stroke();
+    if (top) {
+      // Milestone 40q: a cream card with a coloured dashed edge (green once a request's target is passed).
+      drawDashedCard(ctx, r, rq?.passed ? C.good : C.action, { fill: rq?.passed ? '#E2F6DC' : C.panel }); // solid: the studio's own labels must not show through
+    } else {
+      ctx.fillStyle = rq?.passed ? 'rgba(226, 246, 220, 0.97)' : 'rgba(255, 249, 236, 0.97)';
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = THEME.panel.line;
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, THEME.panel.radius);
+      ctx.fill();
+      ctx.stroke();
+    }
     const genre = elementById(v.recipe?.genre);
     if (state.collapsed) {
       if (genre) assets.drawContained(ctx, genre.art, { x: r.x + 18, y: r.y + 12, w: 56, h: 56 });
@@ -271,7 +394,8 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
         drawButton(ctx, lr.prev, '‹', { accent: C.progress, font: font(S.heading, true) });
         drawButton(ctx, lr.next, '›', { accent: C.progress, font: font(S.heading, true) });
       }
-      STAT_TILES.forEach((t, i) => {
+      if (top) STAT_TILES.forEach((t, i) => drawTile(ctx, t, tileRect(i), s.outputs[t.key] ?? 0));
+      else STAT_TILES.forEach((t, i) => {
         const tr = tileRect(i);
         ctx.fillStyle = '#FFFFFF';
         ctx.strokeStyle = 'rgba(58, 42, 30, 0.25)';
@@ -283,12 +407,13 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
         text(ctx, t.short, tr.x + tr.w / 2, tr.y + 12, { size: S.small, bold: true, align: 'center', color: C.textMuted, maxWidth: tr.w - 8 });
         text(ctx, String(Math.round(s.outputs[t.key] ?? 0)), tr.x + tr.w / 2, tr.y + 54, { size: S.title, bold: true, align: 'center', color: C.text, maxWidth: tr.w - 8 });
       });
-      drawBar(ctx, barRect(), v.totalFrac);
+      if (top) drawBigBar(ctx, barRect(), v.totalFrac);
+      else drawBar(ctx, barRect(), v.totalFrac);
       const br = barRect();
-      drawBugs(ctx, br.x + br.w + 40, br.y + br.h / 2, s.bugs, 52);
+      drawBugs(ctx, br.x + br.w + 40, br.y + br.h / 2, s.bugs, 52, pops.bugs);
       if (rq) {
         // The request: its target as a marker on a points bar, the points now, the days left.
-        const y = r.y + 336;
+        const y = r.y + (top ? 354 : 336);
         const max = Math.max(rq.target * 1.3, rq.points);
         const bw = r.w * 0.38;
         const bx = r.x + 24;
@@ -319,6 +444,10 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     }
     // Points flying from a worker to their stat.
     for (const f of flies) {
+      if (top) {
+        drawFlyingIcon(ctx, f);
+        continue;
+      }
       const i = STAT_TILES.findIndex((t) => t.key === f.key);
       const tr = state.collapsed ? barRect() : tileRect(i);
       const k = Math.min(1, f.t / L.flySec);
@@ -336,7 +465,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
     // Speech bubbles over the team.
     for (const b of bubbles) {
       const at = studio?.headOnScreen(b.id);
-      if (!at || at.y > r.y - 80) continue;
+      if (!at || overPanel(at)) continue;
       const a = Math.min(1, b.t / 0.2, (L.bubbleSec - b.t) / 0.3);
       ctx.globalAlpha = Math.max(0, a);
       ctx.font = font(S.small, true);
@@ -366,7 +495,7 @@ export function createLiveBuildPanel({ bus, layout, assets, projects, bottomBar,
       ctx.font = font(size, true);
       const w = ctx.measureText(banner.title).width + 64;
       const bx = r.x + r.w / 2 - w / 2;
-      const by = r.y - (banner.big ? 150 : 110);
+      const by = top ? r.y + r.h + 24 : r.y - (banner.big ? 150 : 110); // Milestone 40q: under the panel when it is up top
       ctx.translate(r.x + r.w / 2, by + 40);
       ctx.scale(0.7 + 0.3 * pop, 0.7 + 0.3 * pop);
       ctx.translate(-(r.x + r.w / 2), -(by + 40));
