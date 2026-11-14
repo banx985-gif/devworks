@@ -24,6 +24,7 @@
 //   r.cover                               → share of the picture's opaque pixels each rule took (checks)
 // Lightness: an area's middle tone lands on the new colour; lighter and darker paint stay lighter and darker (less so
 // for a very light or very dark colour, so a white kit still shows its folds and a black kit its highlights).
+import { SMOOTH_ART, smoothContext } from './SmoothArt.js';
 
 export function createRecolor(img, rules, { maxSize = 0 } = {}) {
   if (typeof document === 'undefined' || !img) return null;
@@ -36,6 +37,7 @@ export function createRecolor(img, rules, { maxSize = 0 } = {}) {
   base.width = w;
   base.height = h;
   const g = base.getContext('2d', { willReadFrequently: true });
+  if (SMOOTH_ART.on) smoothContext(g); // a game that opted in (core/SmoothArt): the shrink to maxSize stays smooth
   g.drawImage(img, 0, 0, w, h);
   let src;
   try {

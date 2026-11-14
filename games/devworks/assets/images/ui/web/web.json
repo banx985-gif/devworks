@@ -1,0 +1,16 @@
+{
+ "note": "Made by tools/devworks-web-icons.mjs (Milestone 40u) from ui/<name>.png. Do not edit.",
+ "size": 128,
+ "icons": {
+  "dev_ui_stat_audio": {
+   "w": 128,
+   "h": 128,
+   "source": "d83018db1eba9f0a4ca2f8a205e0f03295c88e81"
+  },
+  "dev_ui_stat_polish": {
+   "w": 128,
+   "h": 128,
+   "source": "0facbc2076917012f8b4e29cea9f3ef7d1e38b8d"
+  }
+ }
+}

@@ -209,7 +209,7 @@ import { createStudioScreen } from './screens/StudioScreen.js';
 import { createRosterScreen } from './screens/RosterScreen.js';
 import { createStaffDetailScreen } from './screens/StaffDetailScreen.js';
 import { createIdeaCardsScreen } from './screens/IdeaCardsScreen.js'; // Milestone 40b
-import { createLiveBuildPanel, OWED_STAT_ICONS } from './ui/liveBuildPanel.js'; // Milestone 40b
+import { createLiveBuildPanel, STAT_ICON_ART } from './ui/liveBuildPanel.js'; // Milestone 40b
 import { createRequests } from './systems/requests.js'; // Milestone 40c
 import { createRewards } from './systems/rewards.js'; // Milestone 40c
 import { drawRewardBox, OPTIONAL_ART } from './ui/rewardArt.js'; // Milestone 40c
@@ -406,7 +406,7 @@ assets.setFallback('dev_ui_menu', (ctx, x, y, w, h) => {
 });
 for (const [k, src] of ITEM_OPTIONAL_ART) assets.loadOptional(k, src);
 for (const [k, src] of OPTIONAL_ART) assets.loadOptional(k, src); // drawn by code until the files exist
-for (const [k, src] of OWED_STAT_ICONS) assets.loadOptional(k, src); // Milestone 40q: the live panel's two owed stat icons (a coloured dot until filed)
+for (const [k, src] of STAT_ICON_ART) assets.loadOptional(k, src); // Milestone 40q/40u: the live panel's music note and sparkle (phone copies; a coloured dot if missing)
 // Milestone 40n: the staff's whole-face pictures (data/portraits.js); a frame uses the full-body crop until its face is in.
 setFaceCheck((k) => assets.has(k));
 for (const [k, src] of STAFF_FACE_ART) assets.loadOptional(k, src);

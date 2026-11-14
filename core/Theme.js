@@ -52,7 +52,7 @@ export const THEME = {
 // use lineH() so rows grow with the text.
 let scale = 1;
 export function setTextScale(s) {
-  scale = Math.max(1, Math.min(1.5, Number(s) || 1));
+  scale = Math.max(1, Math.min(2, Number(s) || 1)); // up to 2× (BOTWORKS M38: Larger is 1.8 on the Fold cover screen); other games use ≤ 1.3
 }
 export function textScale() {
   return scale;

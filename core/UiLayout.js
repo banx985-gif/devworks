@@ -1,5 +1,9 @@
 // Reads the device safe area (notch, home bar) from CSS env() and converts it to logical canvas units.
 // Uses a hidden probe element whose padding is set to env(safe-area-inset-*).
+// In an Android app (Capacitor 8 SystemBars, insetsHandling "css") the real system-bar sizes also arrive as the CSS
+// variables --safe-area-inset-* on <html> (older Android WebViews report env() as 0): the bigger of the two is used.
+// The insets are re-read by themselves when either changes (the bars appear / hide, the Fold is opened) — no window
+// resize is needed — and onChange(fn) is told (BOTWORKS Milestone 37).
 export class UiLayout {
   // forceInsets: { top, right, bottom, left } CSS px to use instead of the device's (a debug stand-in for a notch and
   // home bar, so the safe-area pass can be checked on any screen — Milestone 21).
@@ -10,7 +14,37 @@ export class UiLayout {
     this.cssInsets = { top: 0, right: 0, bottom: 0, left: 0 }; // CSS pixels, whole viewport
     this.insets = { top: 0, right: 0, bottom: 0, left: 0 }; // logical units, from canvas edges
     this.safeRect = { x: 0, y: 0, w: renderer.width, h: renderer.height };
+    this.listeners = [];
     this.refresh();
+    this.watch();
+  }
+
+  // Called (with this layout) whenever the insets change on their own.
+  onChange(fn) {
+    this.listeners.push(fn);
+    return this;
+  }
+
+  // Re-read the insets when the probe's padding (env) or the <html> style (the app's variables) changes.
+  watch() {
+    if (typeof window === 'undefined' || this.forceInsets) return;
+    const again = () => {
+      const before = JSON.stringify(this.cssInsets);
+      this.refresh();
+      if (JSON.stringify(this.cssInsets) !== before) for (const fn of this.listeners) fn(this);
+    };
+    try {
+      if (window.ResizeObserver) new ResizeObserver(again).observe(this.probe, { box: 'border-box' });
+      if (window.MutationObserver) new MutationObserver(again).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    } catch {
+      /* an old browser: resizes still refresh */
+    }
+  }
+
+  // The app's injected inset variable (CSS px), 0 when absent.
+  static cssVar(side) {
+    if (typeof document === 'undefined') return 0;
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(`--safe-area-inset-${side}`)) || 0;
   }
 
   static createProbe() {
@@ -39,10 +73,10 @@ export class UiLayout {
     this.cssInsets = this.forceInsets
       ? { top: 0, right: 0, bottom: 0, left: 0, ...this.forceInsets }
       : {
-          top: parseFloat(cs.paddingTop) || 0,
-          right: parseFloat(cs.paddingRight) || 0,
-          bottom: parseFloat(cs.paddingBottom) || 0,
-          left: parseFloat(cs.paddingLeft) || 0,
+          top: Math.max(parseFloat(cs.paddingTop) || 0, UiLayout.cssVar('top')),
+          right: Math.max(parseFloat(cs.paddingRight) || 0, UiLayout.cssVar('right')),
+          bottom: Math.max(parseFloat(cs.paddingBottom) || 0, UiLayout.cssVar('bottom')),
+          left: Math.max(parseFloat(cs.paddingLeft) || 0, UiLayout.cssVar('left')),
         };
 
     // The canvas may be letterboxed away from the notch; only the part of an inset

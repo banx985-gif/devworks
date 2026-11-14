@@ -12,8 +12,8 @@
 // left) and the panel turns green once it is passed; reward drops (gift boxes, chests) sit on the panel's top edge —
 // or in a small tray above the bottom bar when no game is being made — and a tap opens one.
 // Milestone 40q: given top(), the panel sits at the top of the studio (under the top bar and hint line) as a cream card
-// with a coloured dashed edge; each stat box has its icon (STAT_TILES.icon: art the game already has; the two still
-// owed are drawn as a coloured dot until filed) and pops as it counts up; a small stat icon floats UP from the worker
+// with a coloured dashed edge; each stat box has its icon (STAT_TILES.icon: art the game already has, plus the music
+// note and sparkle filed for it — STAT_ICON_ART) and pops as it counts up; a small stat icon floats UP from the worker
 // into its box (a bug icon into the bug counter); the milestone bar is bigger with numbered markers; banners show
 // under the panel and the reward drops wait in the tray above the bottom bar.
 import { THEME, font } from '../../../../core/Theme.js';
@@ -40,10 +40,11 @@ export const STAT_TILES = [
   { key: 'audienceFit', short: 'Fit', icon: 'element_gen08', color: '#2E8B57' },
 ];
 export const BUG_ICON = 'dev_ui_06'; // the bug in a magnifying glass
-// Icons not drawn yet (Milestone 40q): loaded quietly from assets/images/ui/ (main.js); a coloured dot until then.
-export const OWED_STAT_ICONS = [
-  ['dev_ui_stat_audio', 'assets/images/ui/dev_ui_stat_audio.png'],
-  ['dev_ui_stat_polish', 'assets/images/ui/dev_ui_stat_polish.png'],
+// The music note and sparkle (owed in Milestone 40q, filed 14 Nov; Milestone 40u): loaded quietly (main.js) from their
+// 128 px phone copies in assets/images/ui/web/ (tools/devworks-web-icons.mjs, Lanczos); a coloured dot if one fails.
+export const STAT_ICON_ART = [
+  ['dev_ui_stat_audio', 'assets/images/ui/web/dev_ui_stat_audio.png'],
+  ['dev_ui_stat_polish', 'assets/images/ui/web/dev_ui_stat_polish.png'],
 ];
 // The five milestone markers: where each phase ends along the whole game (by its share of the work).
 export const MARKERS = (() => {

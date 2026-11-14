@@ -1,6 +1,6 @@
 {
  "game": "devworks",
- "note": "Made by Cowork 1 Nov 2026. Hair and clothes colours checked by eye against the flat art.",
+ "note": "Made by Cowork 1 Nov 2026. Hair and clothes colours checked by eye against the flat art. 14 Nov: 10 staff switched to the exact-character chibis Aaron made (#35-#65); 'exact' means use the model as it is.",
  "out_models": "chibis/staff/devworks",
  "out_sheets": "games/devworks/assets/images/walkers",
  "people": [
@@ -30,33 +30,26 @@
   {
    "id": "staff_art04",
    "flat": "games/devworks/assets/images/staff/staff_art04.png",
-   "chibi": "chibi_13_beard_workwear",
-   "hair": "#6f3316",
-   "top": "#4d5a32",
-   "bottom": "#b09a70"
+   "chibi": "chibi_40_dev_studio_artist",
+   "exact": true
   },
   {
    "id": "staff_art05",
    "flat": "games/devworks/assets/images/staff/staff_art05.png",
-   "chibi": "chibi_16_curly_coral_tee",
-   "hair": "#763621",
-   "top": "#2a2a30",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_35_concept_artist",
+   "exact": true
   },
   {
    "id": "staff_art06",
    "flat": "games/devworks/assets/images/staff/staff_art06.png",
-   "chibi": "chibi_08_red_cardigan",
-   "hair": "#dc4011",
-   "bottom": "#a0a098"
+   "chibi": "chibi_64_studio_painter",
+   "exact": true
   },
   {
    "id": "staff_art07",
    "flat": "games/devworks/assets/images/staff/staff_art07.png",
-   "chibi": "chibi_28_plum_suit",
-   "hair": "#5a4367",
-   "top": "#1e1e22",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_36_gothic_illustrator",
+   "exact": true
   },
   {
    "id": "staff_art08",
@@ -106,10 +99,8 @@
   {
    "id": "staff_dsn03",
    "flat": "games/devworks/assets/images/staff/staff_dsn03.png",
-   "chibi": "chibi_05_blue_top",
-   "hair": "#9828c8",
-   "top": "#1e1e22",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_61_digital_artist",
+   "exact": true
   },
   {
    "id": "staff_dsn04",
@@ -146,10 +137,8 @@
   {
    "id": "staff_dsn08",
    "flat": "games/devworks/assets/images/staff/staff_dsn08.png",
-   "chibi": "chibi_22_teal_sports_tee",
-   "hair": "#484259",
-   "top": "#1e1e22",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_65_concept_designer",
+   "exact": true
   },
   {
    "id": "staff_dsn09",
@@ -162,10 +151,8 @@
   {
    "id": "staff_dsn10",
    "flat": "games/devworks/assets/images/staff/staff_dsn10.png",
-   "chibi": "chibi_04_silver_green_suit",
-   "hair": "#857986",
-   "top": "#2a2a30",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_63_street_artist",
+   "exact": true
   },
   {
    "id": "staff_prg01",
@@ -239,10 +226,8 @@
   {
    "id": "staff_prg09",
    "flat": "games/devworks/assets/images/staff/staff_prg09.png",
-   "chibi": "chibi_04_silver_green_suit",
-   "hair": "#a59eb1",
-   "glasses": {},
-   "top": "#eaeaf0"
+   "chibi": "chibi_37_programmer",
+   "exact": true
   },
   {
    "id": "staff_prg10",
@@ -395,18 +380,14 @@
   {
    "id": "staff_wrt09",
    "flat": "games/devworks/assets/images/staff/staff_wrt09.png",
-   "chibi": "chibi_05_blue_top",
-   "hair": "#8810c5",
-   "top": "#1e1e22",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_61_digital_artist",
+   "exact": true
   },
   {
    "id": "staff_wrt10",
    "flat": "games/devworks/assets/images/staff/staff_wrt10.png",
-   "chibi": "chibi_05_blue_top",
-   "hair": "#8e26b7",
-   "top": "#2a1f3a",
-   "bottom": "#1e1e22"
+   "chibi": "chibi_61_digital_artist",
+   "exact": true
   }
  ]
 }

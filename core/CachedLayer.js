@@ -4,6 +4,7 @@
 //   draw(g) paints in logical units inside a width×height box.
 // GOALWORKS Milestone 12b: a canvas loss (core/CanvasLoss) marks it dirty, so it is drawn again instead of staying blank.
 import { onCanvasLoss, watchCanvas } from './CanvasLoss.js';
+import { SMOOTH_ART, smoothContext } from './SmoothArt.js';
 
 export class CachedLayer {
   constructor({ width, height, draw }) {
@@ -50,6 +51,7 @@ export class CachedLayer {
     c.width = Math.max(1, Math.round(this.width * ps));
     c.height = Math.max(1, Math.round(this.height * ps));
     const g = c.getContext('2d');
+    if (SMOOTH_ART.on) smoothContext(g); // a game that opted in (core/SmoothArt): resizing reset it
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, c.width, c.height);
     g.setTransform(c.width / this.width, 0, 0, c.height / this.height, 0, 0);
