@@ -100,6 +100,9 @@ import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans a
 import { NativeBridge } from '../../../core/NativeBridge.js'; // Milestone 41a: the phone app's features
 import { setupNativeApp } from './app/nativeApp.js'; // Milestone 41a: real AdMob (test ids) + Google Play Billing in the app
 import { APP_TEXT, PRIVACY_URL } from '../data/app.js'; // Milestone 41a
+import { LocalNotify, planNotifications } from '../../../core/LocalNotify.js'; // Milestone 41b: notifications with switches
+import { PUSH_KINDS, PUSH_TEXT, PUSH_RULES } from '../data/pushNotes.js'; // Milestone 41b
+import { wantedNotes, PUSH_SETTING, PUSH_DEFAULTS } from './app/pushNotes.js'; // Milestone 41b
 import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
@@ -242,7 +245,7 @@ import { registerPlaceholders } from './ui/placeholders.js';
 const COL = THEME.color;
 
 // Milestone 34: Settings / Accessibility (device settings, bible §51). What each one does: data/settings.js.
-const settings = new Settings({ key: SETTINGS_KEY, defaults: SETTINGS_DEFAULTS });
+const settings = new Settings({ key: SETTINGS_KEY, defaults: { ...SETTINGS_DEFAULTS, ...PUSH_DEFAULTS } }); // Milestone 41b: + the notification switches
 const bridge = new NativeBridge(); // Milestone 41a: isNative only inside the Android app
 let nativeApp = null; // Milestone 41a: the real ads / store (set when the save storage is ready)
 let consentAsked = false;
@@ -2952,6 +2955,7 @@ const settingsScreen = createSettingsScreen({
           },
         ]
       : []),
+    pushSection(), // Milestone 41b
     {
       heading: 'About',
       cards: [
@@ -2973,6 +2977,115 @@ function showLegal() {
     buttons: [page, ...ads, { id: 'ok', label: 'Close', accent: COL.progress }],
   });
 }
+// --- Milestone 41b: notifications with on/off switches (core/LocalNotify, data/pushNotes.js; BOTWORKS M38 pattern) ---
+// Leaving the game (app to the background, tab hidden) schedules a fresh set from what is next in the studio; coming
+// back cancels them all. The clock stops while the game is closed, so every line is about what is next, never about
+// something finished while away. Never asked at first launch: Uncle Ray asks after the first release reviewed 70+ or
+// the first award (and once more after an award if the answer was "Not now"); only "Yes please" asks the phone.
+const notifier = new LocalNotify({ bridge, kinds: PUSH_KINDS.map((k) => k.id), channel: PUSH_TEXT.channel, icon: bridge.isNative ? null : 'assets/branding/pwa/icon-192.png' });
+let notifyPermission = 'unsupported';
+const refreshNotifyPermission = () => notifier.permission().then((x) => (notifyPermission = x)).catch(() => {});
+refreshNotifyPermission();
+const pushOn = (kind) => !!settings.get(PUSH_SETTING.master) && !!settings.get(PUSH_SETTING.kind(kind));
+// What is next in the studio now (the awards you can enter held this month or next; the month for the show season).
+function pushView() {
+  if (!started) return { started: false };
+  const m = clock.month;
+  const soon = awards.visible().filter((a) => (a.month === m || a.month === (m % 12) + 1) && !awards.lockWhy(a) && !a.finale).map((a) => a.name);
+  return { started: true, month: m, awardsSoon: soon };
+}
+async function scheduleNotes() {
+  if (!settings.get(PUSH_SETTING.master) || !started) return notifier.cancelAll();
+  const list = await notifier.schedule(planNotifications(wantedNotes(pushView(), { slot: slotIndex ?? 0 }), { enabled: pushOn }));
+  debug.log(`notifications: ${list.length} scheduled (${list.map((n) => n.kind).join(', ') || 'none'})`);
+  return list;
+}
+const leftGame = () => scheduleNotes().catch(() => {});
+function backInGame() {
+  notifier.cancelAll().catch(() => {});
+  refreshNotifyPermission();
+}
+document.addEventListener('visibilitychange', () => (document.visibilityState === 'hidden' ? leftGame() : backInGame()));
+bridge.onAppState((active) => (active ? backInGame() : leftGame()));
+settings.onChange((id, v) => {
+  if (id === PUSH_SETTING.master && !v) notifier.cancelAll().catch(() => {});
+  else if (typeof id === 'string' && id.startsWith('notify_') && !v) notifier.cancel(id.slice('notify_'.length)).catch(() => {});
+});
+// A tapped notification opens its screen (after loading the studio's own save slot from the title screen).
+let notifyOpenWaiting = null;
+function openFromNotification(info) {
+  const want = info?.open;
+  if (!want?.screen) return;
+  const free = !dialog.active && !feedback.active && !sheet.active;
+  if (!slots || !free || !['title', 'studio'].includes(router.currentName)) {
+    notifyOpenWaiting = info;
+    return;
+  }
+  notifyOpenWaiting = null;
+  const go = () => want.screen !== 'studio' && router.currentName === 'studio' && router.go(want.screen);
+  if (started && slotIndex === (want.slot ?? 0)) return go();
+  if (!started) return playSlot(want.slot ?? 0).then(go);
+}
+notifier.onOpen(openFromNotification);
+{
+  const q = new URLSearchParams(window.location.search);
+  if (q.get('open')) notifyOpenWaiting = { open: { screen: q.get('open'), slot: Number(q.get('slot')) || 0 } }; // the web worker opened a new page
+}
+// Uncle Ray's friendly question, then the phone's own (only on "Yes please").
+let notifyAskWaiting = null; // 'first' | 'again'
+bus.on('game:released', ({ record }) => {
+  if ((record?.release?.score ?? 0) >= PUSH_RULES.askReview && (settings.get('notifyAsked') ?? 0) === 0) notifyAskWaiting = 'first';
+});
+bus.on('award:won', () => {
+  const asked = settings.get('notifyAsked') ?? 0;
+  if (asked === 0) notifyAskWaiting = 'first';
+  else if (asked === 1) notifyAskWaiting = 'again';
+});
+async function askNotify(which) {
+  notifyAskWaiting = null;
+  const perm = await notifier.permission();
+  if (perm !== 'prompt') return settings.set('notifyAsked', 2); // already allowed, blocked, or no notifications here
+  dialog.show({
+    title: PUSH_TEXT.askTitle,
+    body: which === 'again' ? PUSH_TEXT.askAgainBody : PUSH_TEXT.askBody,
+    art: CAST_MENTOR.face,
+    buttons: [
+      {
+        id: 'yes',
+        label: PUSH_TEXT.yes,
+        accent: COL.good,
+        onTap: () => {
+          settings.set('notifyAsked', 2);
+          settings.set(PUSH_SETTING.master, true);
+          notifier.request().then(refreshNotifyPermission);
+        },
+      },
+      { id: 'later', label: PUSH_TEXT.notNow, accent: COL.progress, onTap: () => settings.set('notifyAsked', which === 'again' ? 2 : 1) },
+    ],
+  });
+}
+setInterval(() => {
+  const free = router.currentName === 'studio' && !dialog.active && !feedback.active && !sheet.active && !(started && guide.active) && !projects.decision;
+  if (notifyOpenWaiting && (router.currentName === 'title' || free)) openFromNotification(notifyOpenWaiting);
+  else if (notifyAskWaiting && free) askNotify(notifyAskWaiting);
+}, 700);
+// Settings → Notifications: the main switch, one per kind (each Off / On), and a plain line when the phone says no.
+function pushSection() {
+  const master = !!settings.get(PUSH_SETTING.master);
+  const status = notifyPermission === 'denied' ? (bridge.isNative ? PUSH_TEXT.blocked : PUSH_TEXT.blockedWeb) : notifyPermission === 'unsupported' ? PUSH_TEXT.unsupported : null;
+  const row = (id, title, note, off = false) => ({
+    id,
+    title,
+    lines: [{ text: note, color: COL.textMuted }],
+    buttons: [false, true].map((v) => ({ id: String(v), label: `${!!settings.get(id) === v ? '✓ ' : ''}${v ? 'On' : 'Off'}`, accent: off ? COL.textMuted : !!settings.get(id) === v ? COL.good : COL.progress, onTap: () => settings.set(id, v) })),
+  });
+  return {
+    heading: PUSH_TEXT.section,
+    cards: [row(PUSH_SETTING.master, PUSH_TEXT.master, status ? `${PUSH_TEXT.masterNote} ${status}` : PUSH_TEXT.masterNote), ...PUSH_KINDS.map((k) => row(PUSH_SETTING.kind(k.id), k.label, master ? k.note : `${k.note} (the main switch is off)`, !master))],
+  };
+}
+window.__dwNotify = { notifier, scheduleNotes, backInGame, leftGame, open: openFromNotification, ask: askNotify, pushView, get waiting() { return { ask: notifyAskWaiting, open: notifyOpenWaiting }; } };
+
 const creditsScreen = createCreditsScreen({ layout, assets, renderer, onBack: () => router.back() });
 const storeScreen = createRealStoreScreen({ layout, assets, monetisation, business, hasRun: () => started, debugProvider: () => (monetisation.provider instanceof FakeStoreProvider ? monetisation.provider : null), onBack: () => router.back() }); // Milestone 36
 const projectBoard = createProjectBoardScreen({ layout, assets, topBar: subTopBar, projects, business, lanes, onOpen: (id) => router.go('project', { id }), onRelease: (n) => openMenu('release', n), onNew: () => router.go('newProject') });
