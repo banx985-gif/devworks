@@ -180,7 +180,7 @@ import { createStudioAudio } from './systems/studioAudio.js';
 import { createSettingsScreen, createStoreScreen } from './screens/SettingsScreen.js';
 import { createProjectBoardScreen } from './screens/ProjectBoardScreen.js';
 import { setCardSymbols } from './ui/cardListScreen.js';
-import { serializeRun, loadRun, newRun, migrateToV3, migrateToV4, migrateToV5, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35 (40g: v4, 40h: v5)
+import { serializeRun, loadRun, newRun, migrateToV3, migrateToV4, migrateToV5, migrateToV6, quarantineSlot, createBoundarySaver } from './systems/runSave.js'; // Milestone 35 (40g: v4, 40h: v5)
 import { createAccountFile } from './systems/accountFile.js';
 import { createSaveInspector } from './screens/SaveInspectorScreen.js';
 import { createMonetisation, fakeProducts } from './systems/monetisation.js'; // Milestone 36
@@ -344,6 +344,13 @@ engines = createEngines({ bus, clock, world, business, projects, research, studi
 const sponsors = createSponsors({ bus, clock, world, business, needs: (n) => (n === 'hardwareLab' ? !!world.stationById('F28') : n === 'botworksEvents') }); // Milestone 18 (Milestone 27: IronPeak and BOTWORKS)
 world.addEffectSource((key) => sponsors.effect(key));
 world.addEffectSource(rosterEffect(world.staffSystem)); // Milestone 40g: a god's studio-wide blessing (Kaching)
+// Milestone 41d: Aaron's Studio Founder — while he is on the roster, everyone's XP gain counts his studio.xpGainPct (+20%).
+{
+  const st = world.staffSystem;
+  const own = st.traitEffect.bind(st);
+  const studioFx = rosterEffect(st);
+  st.traitEffect = (s, key) => own(s, key) + (key === 'xpGainPct' ? studioFx('xpGainPct') : 0);
+}
 // Milestone 19: the rivals and the awards (after the business: the season's sales are in by the month end).
 // Milestone 30: Ghostlight (R08), once SEC-RIVAL-01 has enabled it: its yearly plan is the player's best-reviewed genre and
 // theme of the released games in the years before (never a game still being made) and that best review.
@@ -969,7 +976,7 @@ async function prepareSaves() {
   } catch (err) {
     console.error('[DEVWORKS] account file unreadable', err);
   }
-  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3, 3: migrateToV4, 4: migrateToV5 }, rolling: SAVE.rolling, bus });
+  slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3, 3: migrateToV4, 4: migrateToV5, 5: migrateToV6 }, rolling: SAVE.rolling, bus });
   // Milestone 36: ?debug=1 → the pretend store (its next ad / purchase is set on the Store screen); none otherwise.
   // Milestone 41a: the Android app uses the real providers (AdMob with Google's TEST ids until data/app.js AD_IDS is
   // switched, Google Play Billing) — studio server standard §3; the pretend store is web + ?debug=1 only.
@@ -2029,8 +2036,8 @@ bus.on('secret:arrival', ({ staffId, special = null }) => {
   recruitment.specialArrival(staffId, `${word} arrival: ${def.divine ? 'a god has noticed your studio' : 'a secret brought them here'}`);
   const roleName = def.role === 'PRG' ? 'Programmer' : def.role === 'DSN' ? 'Designer' : def.role === 'ART' ? 'Artist' : def.role === 'WRT' ? 'Writer' : 'Producer';
   feedback.show({
-    title: special?.title ?? (def.divine ? `${def.name}, ${def.title}, wants to join!` : `${def.name} wants to join!`),
-    subtitle: special?.text ?? `A ${word} ${roleName} is on the Recruitment board for 56 days.`,
+    title: special?.title ?? def.arrivalText?.title ?? (def.divine ? `${def.name}, ${def.title}, wants to join!` : `${def.name} wants to join!`),
+    subtitle: special?.text ?? def.arrivalText?.text ?? `A ${word} ${roleName} is on the Recruitment board for 56 days.`,
     accent: COL.gold,
     onShow: () => celebrate.confetti('screen', W / 2, renderer.height * 0.72, { count: 40, speed: 900, spreadX: 120 }),
     drawFn: (ctx, t) => {

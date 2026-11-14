@@ -57,6 +57,8 @@ export const PORTRAITS = {
   // Milestone 40g: the Works Gods (600 px tall stand-ins; worked out by eye from each picture, same head-and-shoulders
   // square). Havoc's head sits lower (his horn and sparks are above it).
   staff_god_bolt: { x: 0.176, y: 0.02, w: 0.541, h: 0.383 },
+  // Milestone 41d: Aaron (507 × 932, rendered from his 3D model): his curls and shoulders in the square.
+  staff_legend_aaron: { x: 0.08, y: 0.02, w: 0.84, h: 0.457 },
   staff_god_jinx: { x: 0.199, y: 0.02, w: 0.547, h: 0.367 },
   staff_god_zip: { x: 0.323, y: 0.03, w: 0.568, h: 0.367 },
   staff_god_kaching: { x: 0.31, y: 0.03, w: 0.476, h: 0.383 },

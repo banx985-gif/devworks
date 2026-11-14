@@ -356,6 +356,9 @@ export function createGameProjects({ engineFor = () => null, recipeBonus = () =>
         // Milestone 11: facilities add points (and the Art Render Farm makes Graphics stronger).
         const large = ['large', 'blockbuster', 'mega'].includes(d.scope);
         for (const k of Object.keys(outputs)) outputs[k] = Math.round(clamp(outputs[k] * (1 + fx(`outputPct.${k}`) / 100) + fx(`output.${k}`) + (large ? fx(`outputLarge.${k}`) : 0), 0, 100));
+        // Milestone 41d: Aaron's Studio Founder — +5% to every output of a game he is on the core team of.
+        const teamPct = staff.groupEffect(team, 'teamOutputPct');
+        if (teamPct) for (const k of Object.keys(outputs)) outputs[k] = Math.round(clamp(outputs[k] * (1 + teamPct / 100), 0, 100));
         if (d.polishCap != null) outputs.polish = Math.min(outputs.polish, d.polishCap);
         const T = FRANCHISE_BALANCE.types[d.type] ?? FRANCHISE_BALANCE.types.original;
         if (d.sourceOutputs && T.floor) {

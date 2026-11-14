@@ -58,6 +58,8 @@ export const TEST_ART = ['m0Real', 'm0Missing'];
 // locked list). The fans' faces wait there for the walking version (CAST_FANS_LATER: filed, not loaded yet).
 export { CAST_ART, CAST_FANS_LATER } from './cast.js';
 export const GOD_ART = ['staff_god_bolt', 'staff_god_jinx', 'staff_god_zip', 'staff_god_kaching', 'staff_god_havoc'];
+// Milestone 41d: Aaron's card picture (filed by Cowork 14 Nov, rendered from his 3D model; not on the locked list).
+export const LEGEND_ART = ['staff_legend_aaron'];
 // Milestone 40j (SERIES_SCREEN_FILL_AND_BACKDROPS): Aaron's three screen-fill pictures — optional, owed until filed. Not
 // in the manifest: the two backdrops load quietly the moment their file exists (core/ui/Backdrop; until then today's
 // look), and the app icon is never loaded by the game — tools/devworks-icons.mjs makes the phone icons from it.

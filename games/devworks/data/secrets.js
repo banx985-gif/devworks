@@ -186,8 +186,8 @@ export const GOD_RULES = { kachingCredits: 300000000, havocBugs: 5 };
 // The 'family / casual' genres for SEC-HW-04 (bible §32 audience groups: kids / casual / all-ages).
 export const FAMILY_GENRES = ['GEN01', 'GEN04', 'GEN05', 'GEN08', 'GEN09'];
 export const STANDARD_ROYALTY = 15; // the launch plan's standard royalty (data/consoles.js royaltySteps[2])
-export const SECRET_GROUPS = ['Legendary + Prestige Staff', 'Secret Game Combinations', 'Secret Technologies', 'Hardware Secrets', 'Facility / Studio Secrets', 'Awards / Rival Secrets', 'Behaviour Secrets', 'New Game+ Secrets', 'Cross-Universe / Ultimate', 'Divine'];
-const [G_STAFF, G_COMBO, G_TECH, G_HW, G_FAC, G_AWARD, G_BEH, G_NGP, G_X, G_GOD] = SECRET_GROUPS;
+export const SECRET_GROUPS = ['Legendary + Prestige Staff', 'Secret Game Combinations', 'Secret Technologies', 'Hardware Secrets', 'Facility / Studio Secrets', 'Awards / Rival Secrets', 'Behaviour Secrets', 'New Game+ Secrets', 'Cross-Universe / Ultimate', 'Divine', 'Founder'];
+const [G_STAFF, G_COMBO, G_TECH, G_HW, G_FAC, G_AWARD, G_BEH, G_NGP, G_X, G_GOD, G_FOUNDER] = SECRET_GROUPS;
 const THREE_D = ['ADR03', 'ADR04', 'ADR06'];
 const ADV_TECH = ['TEC04', 'TEC06', 'TEC07', 'TEC08'];
 
@@ -260,4 +260,14 @@ export const SECRETS = [
   S('SEC-GOD-5', 'Divine Writer — Havoc, God of Chaos', G_GOD, 'Havoc arrives (Glorious Chaos)', [n('godsWorkedWith', 'gte', 4, 'All four other gods worked with (any run)', 'Staff', 'fixed'), games([w('bugs', 'gte', GOD_RULES.havocBugs, 'fixed'), w('score', 'gte', 85)], 1, `A glorious mess: a game with ${GOD_RULES.havocBugs}+ bugs that still scores 85+`)], [R.arrival('GOD5')], clue('A purple spark flickered on every screen at once. Then everyone’s save files said “hi”.', 'Chaos only comes to a studio the other four gods have visited, and only for a gloriously messy hit.', `NG+2: all four gods worked with (account), then a game with ${GOD_RULES.havocBugs}+ bugs that still scores 85+.`), { ngPlusMin: 2 }),
 ];
 export const secretById = (id) => SECRETS.find((s) => s.id === id) ?? null;
+// Milestone 41d: Aaron, the founder of Banx Games — the top Legendary (not one of the bible's 50; group "Founder").
+// All five Prestige staff hired at least once (account), a game in the Hall of Fame and Studio Rank S. Same window as
+// the Prestige staff. Never bought.
+SECRETS.push(
+  S('SEC-STAFF-L6', 'The Founder — Aaron of Banx Games', G_FOUNDER, 'Aaron arrives (Studio Founder)', [n('prestigeWorkedWith', 'gte', 5, 'All five Prestige staff hired at least once (any run)', 'Staff', 'fixed'), n('hallOfFame.games', 'gte', 1, 'A game in the Hall of Fame', 'Hall of Fame'), rank('S')], [R.arrival('LEG1')], [
+    { text: 'Word is the people who made this whole world sometimes drop by a great studio…', minMet: 1 },
+    { text: 'Legendary staff and a Hall of Fame hit. Then maybe the boss himself.', minMet: 'allButOne' },
+  ]),
+);
+export const FOUNDER_SECRET_IDS = ['SEC-STAFF-L6'];
 export const GOD_SECRET_IDS = SECRETS.filter((x) => x.group === 'Divine').map((x) => x.id);

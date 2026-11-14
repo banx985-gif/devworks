@@ -36,7 +36,7 @@ import { SecretEngine, FactRegistry } from '../../../../core/SecretEngine.js';
 import { UnlockRunner } from '../../../../core/UnlockActions.js';
 import { AccountRecords } from '../../../../core/AccountRecords.js';
 import { COUNTERS as K, SECRET_REWARD_CURRENCIES, SECRET_RECIPES, FAMILY_GENRES } from '../../data/secrets.js';
-import { staffDefById, PRESTIGE_TIERS } from '../../data/staff.js';
+import { staffDefById, PRESTIGE_TIERS, PRESTIGE_FIVE, isFounderLegend } from '../../data/staff.js';
 import { platformById } from '../../data/platforms.js';
 import { RESEARCH } from '../../data/research.js';
 
@@ -245,9 +245,11 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     .define('rivalUpsets', () => rivalUpsets())
     .define('ghostlightDefeats', () => ghostlightDefeats())
     .define('researchPrototypes', () => counters.researchPrototypes)
-    .define('secretsEver', () => engine.rules.filter((r) => r.group !== 'Divine' && engine.everUnlocked(r.id)).length) // Milestone 40g: the bible's 50
+    .define('secretsEver', () => engine.rules.filter((r) => r.group !== 'Divine' && r.group !== 'Founder' && engine.everUnlocked(r.id)).length) // Milestone 40g: the bible's 50 (41d: not the Founder either)
     .define('sponsorDealsDone', () => (sponsors()?.history ?? []).filter((h) => h.met).length) // Milestone 40g
     .define('godsWorkedWith', () => Object.keys(acct().godsWorked ?? {}).length) // Milestone 40g (account)
+    .define('prestigeWorkedWith', () => PRESTIGE_FIVE.filter((id) => acct().prestigeWorked?.[id] != null).length) // Milestone 41d (account)
+    .define('founderWorkedWith', () => Object.keys(acct().founderWorked ?? {}).length) // Milestone 41d (account)
     .define('secretsRun', () => Object.keys(engine.run.unlocked).length)
     .define('secretTechsEver', () => everCount(rulesIn('SEC-TECH-')))
     .define('secretCombosEver', () => everCount(rulesIn('SEC-COMBO-')))
@@ -354,6 +356,15 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
     if (PRESTIGE_TIERS.includes(tierOf(s.id)) && !counters.legendaryHired.includes(s.id)) counters.legendaryHired.push(s.id);
     if (tierOf(s.id) === 'divine' && acct().godsWorked?.[s.id] == null) {
       add('godsWorked', s.id, today()); // Milestone 40g: the account's gods worked with (Havoc, Pantheon)
+      persistAccount();
+    }
+    // Milestone 41d: the Prestige five (Aaron's secret) and Aaron himself (Meet the Maker), account-wide.
+    if (PRESTIGE_FIVE.includes(s.id) && acct().prestigeWorked?.[s.id] == null) {
+      add('prestigeWorked', s.id, today());
+      persistAccount();
+    }
+    if (isFounderLegend(s.id) && acct().founderWorked?.[s.id] == null) {
+      add('founderWorked', s.id, today());
       persistAccount();
     }
     notify('hired', { id: s.id });
@@ -534,6 +545,11 @@ export function createSecrets({ bus, clock, world, business, projects, rules = [
         }
       }
       if (!counters.starters.length) counters.starters = Object.entries(counters.hired).filter(([, d]) => d === 0).map(([id]) => id).sort();
+      // Milestone 41d: a run from before 41d that hired Prestige staff (or Aaron) counts them on the account now.
+      let caught = false;
+      for (const id of PRESTIGE_FIVE) if (counters.hired[id] != null && acct().prestigeWorked?.[id] == null) caught = !!add('prestigeWorked', id, counters.hired[id]) || true;
+      for (const id of Object.keys(counters.hired)) if (isFounderLegend(id) && acct().founderWorked?.[id] == null) caught = !!add('founderWorked', id, counters.hired[id]) || true;
+      if (caught) persistAccount();
     },
     serializeAccount: () => ({ ...engine.serializeAccount(), records: records.serialize() }),
     loadAccount(data) {

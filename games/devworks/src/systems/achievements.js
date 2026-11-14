@@ -178,6 +178,7 @@ export function createAchievements({ bus, clock, world, business, projects, secr
   bus.on('sponsor:ended', () => ach.notify('sponsor'));
   bus.on('support:done', () => ach.notify('support'));
   bus.on('franchise:legendary', () => ach.notify('franchise'));
+  bus.on('staff:hired', () => ach.notify('staffHired')); // Milestone 41d: Meet the Maker, the moment Aaron joins
 
   return {
     system: ach,

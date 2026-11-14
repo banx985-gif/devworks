@@ -221,6 +221,16 @@ export function migrateToV4(record) {
 // so far (src/systems/mastery.js); no late-twist copy yet; VIP's run state (the queued research topic, the monthly
 // refresh) is dropped with VIP. An old account with VIP becomes a Supporter Pack owner when the account loads
 // (src/systems/monetisation.js loadAccount). Everything else is carried over untouched.
+// Save version 5 → 6 (Milestone 41d, Aaron the founder): the run keeps its secrets' hire record as it was; a run from
+// before has never met him, so nothing else changes. The account's prestigeWorked / founderWorked bags start empty and
+// fill as people are hired (an older account that hired Prestige staff before 41d is caught up when they are next hired
+// in a run, and from the run's own hire record when it loads: src/systems/secrets.js).
+export function migrateToV6(record) {
+  const data = { ...record.data };
+  if (data.secrets?.counters) data.secrets = { ...data.secrets, counters: { ...data.secrets.counters, legendaryHired: data.secrets.counters.legendaryHired ?? [] } };
+  return { ...record, data };
+}
+
 export function migrateToV5(record) {
   const data = { ...record.data };
   data.mastery ??= null;

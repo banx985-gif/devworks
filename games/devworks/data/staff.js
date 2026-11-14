@@ -83,6 +83,9 @@ export const TRAITS = {
   storyLegend: { name: 'Story Legend', signature: true, text: 'Signature: +8 Story on games they work on.', effects: { outputBonus: { story: 8 } } },
   studioLegend: { name: 'Studio Legend', signature: true, text: 'Signature: loses 25% less Energy and +4 Polish on games they work on.', effects: { energyLossPct: -25, outputBonus: { polish: 4 } } },
   impossibleBuild: { name: 'Impossible Build', signature: true, text: 'Signature: +35% bug fixing and +6 Innovation on games they work on.', effects: { bugFixPct: 35, outputBonus: { innovation: 6 } } },
+  // Milestone 41d: Aaron's signature. studio.xpGainPct counts for everyone on the roster (src/systems/studioWorld.js);
+  // teamOutputPct: +5% to every output of a game he is on the core team of (src/systems/gameProject.js).
+  studioFounder: { name: 'Studio Founder', signature: true, text: 'Signature: while he is on the roster, everyone gains XP 20% faster, and games he is on the core team of get +5% to every output.', effects: { studio: { xpGainPct: 20 }, teamOutputPct: 5 } },
   perfectLoop: { name: 'Perfect Loop', signature: true, text: 'Signature: +10 Gameplay and +4 Polish on games they work on.', effects: { outputBonus: { gameplay: 10, polish: 4 } } },
   dreamRender: { name: 'Dream Render', signature: true, text: 'Signature: +10 Graphics and +4 Innovation on games they work on.', effects: { outputBonus: { graphics: 10, innovation: 4 } } },
   impossibleEnding: { name: 'Impossible Ending', signature: true, text: 'Signature: +10 Story and +4 Audience Fit on games they work on.', effects: { outputBonus: { story: 10, audienceFit: 4 } } },
@@ -260,6 +263,22 @@ export const GODS = [
   god('GOD4', 'Kaching', 'God of Fortune', 'PRO', [455, 465, 445, 455, 566], ['budgetHawk', 'marketingRead', 'publisherSense', 'goldenTouch'], 'staff_god_kaching', 'SEC-GOD-4'),
   { ...god('GOD5', 'Havoc', 'God of Chaos', 'WRT', [450, 460, 470, 548, 460], ['comedyBeat', 'worldBuilder', 'questWeaver', 'gloriousChaos'], 'staff_god_havoc', 'SEC-GOD-5'), arriveAfterEvent: { title: 'Something’s glitching in the studio…', text: 'The coffee machine is printing purple sparks. Havoc, God of Chaos, is on the Recruitment board for 56 days.' } },
 ];
+// Milestone 41d (CLAUDE.md 4 Nov; card M41_LAUNCH_READY part M41d): Aaron, the founder of Banx Games (series chibi #71,
+// SERIES_CHIBI_CAST.md), the best of the Secret tier — a 6th top person beside the five Prestige staff (never replacing
+// any of them), below the Works Gods. Brought only by his own secret SEC-STAFF-L6 (group "Founder", not one of the
+// bible's 50). Designer; the best starting stats of the tier (main stat 525, total 2,364: the Prestige five are
+// 2,270–2,305); salary as the Secret tier. Pictures filed by Cowork (14 Nov): staff_legend_aaron (card), its _face and
+// its walking sheet.
+export const LEGENDS = [
+  {
+    ...person('LEG1', 'Aaron', 'DSN', 'secret', 24, [472, 525, 458, 457, 452], 5700, ['goodFeel', 'studioFounder'], { secret: 'SEC-STAFF-L6' }),
+    art: 'staff_legend_aaron',
+    title: 'Founder of Banx Games',
+    founderLegend: true,
+    arrivalText: { title: 'Aaron, the founder of Banx Games, drops by!', text: "The founder of Banx Games drops by to see what you've built. He's on the Recruitment board for 56 days." },
+  },
+];
+export const isFounderLegend = (id) => LEGENDS.some((d) => d.id === id);
 export const GOD_SECRETS = GODS.map((d) => d.eligibility.secret);
 export const isGod = (id) => GODS.some((d) => d.id === id);
 
@@ -267,10 +286,12 @@ export const isGod = (id) => GODS.some((d) => d.id === id);
 export const PRESTIGE_TIERS = ['legendary', 'secret', 'divine'];
 // The SEC-STAFF secrets (bible §41) the gated rows may name.
 export const STAFF_SECRETS = ['L1', 'L2', 'L3', 'L4', 'L5', 'S1', 'S2', 'S3', 'S4', 'S5'].map((k) => `SEC-STAFF-${k}`);
+// Milestone 41d: the five Prestige staff (SEC-STAFF-S1–S5) — all hired at least once (account) is part of Aaron's secret.
+export const PRESTIGE_FIVE = ['PRG10', 'DSN10', 'ART10', 'WRT10', 'PRO10'];
 // Everyone the game knows (start staff first). The five founders are Standard recruits too when not picked.
 export const ROSTER = [...START_STAFF.map((d) => ({ ...d, eligibility: { start: true } })), ...RECRUITS];
 // Milestone 40g: the bible's 50 and the five gods.
-export const ALL_PEOPLE = [...ROSTER, ...GODS];
+export const ALL_PEOPLE = [...ROSTER, ...GODS, ...LEGENDS]; // Milestone 41d: + Aaron
 export const staffDefById = (id) => ALL_PEOPLE.find((d) => d.id === id) ?? null;
 
 // The Milestone 2–5 starting team (Alex, Mina, Tess): the default layout, and the team of every save from before 5b.
@@ -330,6 +351,7 @@ export const STAFF_LIKES = {
   WRT10: { loves: ['books', 'inspiration'], dislike: null },
   PRO10: { loves: ['snacks'], dislike: 'toys' },
   GOD1: { loves: ['gear', 'trophies'], dislike: null },
+  LEG1: { loves: ['gear', 'toys'], dislike: null }, // Milestone 41d: Aaron (games and gadgets)
   GOD2: { loves: ['toys', 'inspiration'], dislike: null },
   GOD3: { loves: ['snacks', 'gear'], dislike: 'books' },
   GOD4: { loves: ['trophies', 'snacks'], dislike: null },

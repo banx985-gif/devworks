@@ -8,7 +8,7 @@
 //     SEC-STAFF secret, and nobody else gated by one; the five start staff and Start Candidates are Standard
 //   - Milestone 40g: the five Works Gods (GODS, outside the 50): Divine, one per role, each gated by their own SEC-GOD
 //     secret, a portrait crop and a real signature (blessing)
-import { ROSTER, ROLES, TIERS, TRAITS, STAT_KEYS, PRESTIGE_TIERS, STAFF_SECRETS, START_STAFF, GODS, GOD_SECRETS } from '../../data/staff.js';
+import { ROSTER, ROLES, TIERS, TRAITS, STAT_KEYS, PRESTIGE_TIERS, STAFF_SECRETS, START_STAFF, GODS, GOD_SECRETS, LEGENDS } from '../../data/staff.js';
 import { RECRUIT } from '../../data/recruitment.js';
 import { FACILITIES } from '../../data/facilities.js';
 import { FAME } from '../../data/balance.js';
@@ -26,7 +26,7 @@ export function checkStaff(v) {
   for (const [id, t] of Object.entries(TRAITS)) {
     v.check(typeof t.name === 'string' && typeof t.text === 'string' && t.text.length > 0, `trait ${id}: no name or text`);
     v.check(t.effects && Object.keys(t.effects).length > 0, `trait ${id}: no effect`);
-    v.check([...ROSTER, ...GODS].some((p) => p.traits.includes(id)), `trait ${id}: nobody has it`);
+    v.check([...ROSTER, ...GODS, ...LEGENDS].some((p) => p.traits.includes(id)), `trait ${id}: nobody has it`);
   }
   for (const p of ROSTER) {
     const o = `staff ${p.id}`;
@@ -68,4 +68,13 @@ export function checkStaff(v) {
     v.check(p.traits.filter((t) => TRAITS[t]?.signature).length === 1, `${o}: exactly one blessing`);
   }
   v.check(new Set(GOD_SECRETS).size === GODS.length, 'gods: each SEC-GOD secret brings exactly one god');
+  // Milestone 41d: Aaron, the founder — Secret tier (outside the 50), gated only by SEC-STAFF-L6, one signature.
+  v.staffRoster('legends', LEGENDS, { roles: ROLES, tiers: TIERS, traits: TRAITS, statKeys: STAT_KEYS, artPath: (p) => `assets/images/staff/${p.art}.png` });
+  for (const p of LEGENDS) {
+    const o = `legend ${p.id}`;
+    v.check(p.tier === 'secret', `${o}: tier ${p.tier}`);
+    v.check(!!PORTRAITS[p.art], `${o}: no portrait crop`);
+    v.check(p.eligibility?.secret === 'SEC-STAFF-L6' && Object.keys(p.eligibility).length === 1, `${o}: must be gated by SEC-STAFF-L6`);
+    v.check(p.traits.filter((t) => TRAITS[t]?.signature).length === 1, `${o}: exactly one signature`);
+  }
 }
