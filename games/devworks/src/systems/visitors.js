@@ -48,7 +48,6 @@ export function createVisitors({ world, has = () => true, want = () => {}, rando
     const r = V.reasons[reason] ?? V.reasons.fan;
     pending.push({ reason, review, until: today() + r.waitDays });
     if (pending.length > 3) pending.shift(); // a burst of events: the latest few are enough
-    for (const s of FAN_SHEETS) want(s); // load the sheets now, so they are in when the fans step in
     log.visits.push({ reason, review, day: today() });
     if (log.visits.length > 40) log.visits.shift();
   }
@@ -169,13 +168,18 @@ export function createVisitors({ world, has = () => true, want = () => {}, rando
     if (!arriving.length && pending.length && fans().length === 0) {
       const p = pending[0];
       const n = visitorGroupSize({ reason: p.reason, review: p.review, fame: fame(), low });
-      const looks = FAN_SHEETS.filter(has);
-      // The sheets load when the visit is asked for: wait for enough of them (a few seconds at most; a missing sheet
-      // just means that look stays home).
+      // Milestone 41f (phone memory): the group's looks are picked first and only their sheets load; wait for them (a
+      // few seconds at most; a missing sheet just means that look stays home).
+      if (!p.looks) {
+        const pool = [...FAN_SHEETS];
+        p.looks = [];
+        for (let i = 0; i < n && pool.length; i++) p.looks.push(pool.splice(Math.floor(random() * pool.length), 1)[0]);
+      }
+      for (const look of p.looks) want(look);
       p.waited = (p.waited ?? 0) + dt;
-      if (looks.length >= n || p.waited > V.sheetWaitSec) {
+      if (p.looks.every(has) || p.waited > V.sheetWaitSec) {
         pending.shift();
-        for (let i = 0; i < n && looks.length; i++) arriving.push(looks.splice(Math.floor(random() * looks.length), 1)[0]);
+        arriving.push(...p.looks.filter(has));
         gap = 0;
       }
     }

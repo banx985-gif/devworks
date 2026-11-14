@@ -96,10 +96,11 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   };
   // Milestone 40t: the walking chibi's frame for a worker now (null while their sheet isn't in: today's walker).
   // The front rows face down-left and the back rows up-right; the other two directions are the mirror image.
-  const chibiOf = (w) => {
+  // Milestone 41f: peek = layout and hit tests only (no load); drawing a person on screen loads their sheet.
+  const chibiOf = (w, peek = true) => {
     if (!walkers) return null;
     const m = motionOf(w);
-    return walkers.frameFor(w.def.art, { state: w.agent.state, back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride });
+    return walkers.frameFor(w.def.art, { state: w.agent.state, back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride, peek });
   };
   const workerRect = (w) => {
     const f = feetOf(w);
@@ -110,10 +111,10 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     return { x: f.x - wd / 2, y: f.y - h, w: wd, h };
   };
   // Milestone 40v: a visitor (fan or Uncle Ray) is drawn only as their chibi (null while the sheet isn't in: not drawn).
-  const visitorFrame = (v) => {
+  const visitorFrame = (v, peek = true) => {
     if (!walkers) return null;
     const m = motionOf(v);
-    return walkers.frameFor(v.sheet, { state: visitors.animOf(v), back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride });
+    return walkers.frameFor(v.sheet, { state: visitors.animOf(v), back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride, peek });
   };
   const visitorRect = (v) => {
     const f = feetOf(v);
@@ -821,7 +822,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       ctx.ellipse(f.x, cy, rad * 0.8, rad, 0, 0, Math.PI * 2);
       ctx.fill();
     }
-    const ch = chibiOf(w);
+    const ch = chibiOf(w, false); // Milestone 41f: drawn on screen → its sheet loads
     if (ch) {
       // Milestone 40t: the walking chibi (its own walk / work / idle frames), drawn by the feet, mirrored about them.
       const img = assets.get(ch.key);
@@ -837,7 +838,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
 
   // Milestone 40v: a visitor — their chibi only (walk / cheer / idle frames), drawn by the feet like the staff.
   function drawVisitor(ctx, v) {
-    const ch = visitorFrame(v);
+    const ch = visitorFrame(v, false);
     if (!ch) return;
     const f = feetOf(v);
     ctx.save();

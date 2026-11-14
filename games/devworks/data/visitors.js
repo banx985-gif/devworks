@@ -58,11 +58,11 @@ export const VISITORS = {
 // the last list. Plain, light humour.
 export const FAN_LINES = {
   great: ['I played {game} all weekend. My plants are fine. Mostly.', '{game}! I told my nan about it. She wants a copy.', 'I named my goldfish after {game}. He seems pleased.', 'Ten out of ten. I would have given it eleven but the form stopped at ten.', 'Can I touch the desk where {game} was made? Just once?'],
-  good: ['{game} was really fun. I only got stuck twice!', 'My friends and I argue about {game} at lunch. In a good way.', 'I came for {game}, I stayed for the snacks you have not offered me.', 'The music in {game} is stuck in my head. Thanks. I think.'],
+  good: ['{game} was really fun. I only got stuck twice!', 'My friends and I argue about {game} at lunch. In a good way.', 'I came for {game}, I stayed for the snacks you have not offered me.', 'The music in {game} is stuck in my head. Thanks. I think.', 'I bought {game} twice. One for me, one for my dog.', 'My boss caught me playing {game}. Now he plays it too.'],
   mixed: ['{game} was... interesting! I liked the menu.', 'I believe in you. {game} had a lot of heart.', 'My cat enjoyed watching me play {game}. That counts.', 'Next one will be great, I can feel it.'],
-  none: ['So this is where the magic happens!', 'Hi! Big fan. Of games. And of this studio, probably.', 'Is it true you have a bean bag? I have heard rumours.'],
+  none: ['So this is where the magic happens!', 'Hi! Big fan. Of games. And of this studio, probably.', 'Is it true you have a bean bag? I have heard rumours.', 'I brought my own controller. Just in case.', 'Can I watch someone type? Very important research.'],
 };
 export const FAN_REVIEW_BANDS = { great: 80, good: 60 }; // review score ≥ great → great lines, ≥ good → good, else mixed
 
 // Uncle Ray's line on the awards day (the guide speaks for itself while he stands by the door).
-export const MENTOR_AWARDS_LINES = ['Awards day! Win or lose, keep making things.', 'I put on my good polo for awards day.', 'Trophies are nice. Players are better.'];
+export const MENTOR_AWARDS_LINES = ['Awards day! Win or lose, keep making things.', 'I put on my good polo for awards day.', 'Trophies are nice. Players are better.', 'I polished my shoes. And the trophy shelf, just in case.', 'Breathe in, breathe out, smile for the cameras.', 'Max Marquee owes me a fiver from last year.'];

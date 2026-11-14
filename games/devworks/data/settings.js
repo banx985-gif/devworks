@@ -22,7 +22,7 @@ export const SETTINGS = [
   { id: 'musicMuted', label: 'Music mute', group: 'Sound', options: [{ id: false, label: 'Playing' }, { id: true, label: 'Muted' }] },
   { id: 'sfx', label: 'Sound effects volume', group: 'Sound', options: lvl([0, 25, 50, 75, 100]) },
   { id: 'sfxMuted', label: 'Sound effects mute', group: 'Sound', options: [{ id: false, label: 'Playing' }, { id: true, label: 'Muted' }] },
-  { id: 'fpsMode', label: 'Graphics', group: 'Graphics and performance', options: [{ id: 'auto', label: 'Auto' }, { id: 'high', label: 'High' }, { id: 'low', label: 'Low' }], line: 'Auto: 60 FPS, a steady 30 if the phone struggles. High: always 60 with every effect. Low: 30 FPS, fewer effects, simpler workers.' },
+  { id: 'fpsMode', label: 'Graphics', group: 'Graphics and performance', options: [{ id: 'auto', label: 'Auto' }, { id: 'high', label: 'High' }, { id: 'low', label: 'Low' }], line: 'Auto: 60 FPS, a steady 30 if the phone struggles. High: always 60 with every effect. Low: 30 FPS, fewer effects, simpler workers, smaller pictures (pictures from the next start).' },
   { id: 'reducedFlashes', label: 'Reduced flashes', group: 'Graphics and performance', options: onOff, line: 'No confetti or bright bursts.' },
   { id: 'screenShake', label: 'Screen shake', group: 'Graphics and performance', options: [{ id: 'off', label: 'Off' }, { id: 'low', label: 'Low' }, { id: 'normal', label: 'Normal' }], line: 'The little shakes (a bug found, a big launch) — never needed to follow the game.' },
   { id: 'reducedMotion', label: 'Reduced motion', group: 'Graphics and performance', options: onOff, line: 'No launch rocket; sheets appear without sliding.' },

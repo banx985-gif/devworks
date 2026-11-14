@@ -98,7 +98,7 @@ import { watchTextPrompt } from './ui/textBoxFix.js'; // Milestone 40o
 import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking chibis
 import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans and Uncle Ray walk in
 import { enableSmoothArt, smoothContext } from '../../../core/SmoothArt.js'; // Milestone 41c: smooth art, no jaggy look
-import { PHONE_ART } from '../data/phoneArt.js'; // Milestone 41c: Lanczos phone copies (tools/devworks-phone-art.mjs)
+import { PHONE_ART, PHONE_ART_LO } from '../data/phoneArt.js'; // Milestone 41c: Lanczos phone copies (tools/devworks-phone-art.mjs)
 import { NativeBridge } from '../../../core/NativeBridge.js'; // Milestone 41a: the phone app's features
 import { setupNativeApp } from './app/nativeApp.js'; // Milestone 41a: real AdMob (test ids) + Google Play Billing in the app
 import { APP_TEXT, PRIVACY_URL } from '../data/app.js'; // Milestone 41a
@@ -323,7 +323,10 @@ enableSmoothArt(); // Milestone 41c (8 Nov smooth-art rule): high-quality filter
 }
 const assets = new AssetManager({ bus });
 // Milestone 41c: each picture loads its phone copy (about 2x the biggest size shown, Lanczos) and falls back to the original.
-assets.resolve = (src) => (PHONE_ART[src] ? [PHONE_ART[src], src] : [src]);
+// Milestone 41f (phone memory): on Graphics Low — or Auto on a phone with 4 GB or less — the half-size Low set first
+// (decided at start-up: every picture loads once, so a change of Graphics applies from the next start).
+const lowPictures = settings.get('fpsMode') === 'low' || (settings.get('fpsMode') === 'auto' && (navigator.deviceMemory ?? 8) <= 4);
+assets.resolve = (src) => [...(lowPictures && PHONE_ART_LO[src] ? [PHONE_ART_LO[src]] : []), ...(PHONE_ART[src] ? [PHONE_ART[src]] : []), src];
 const router = new ScreenRouter(bus, { roots: ['studio', 'test', 'title'] });
 const dialog = new Dialog({ layout, assets }); // confirm boxes (delete a slot)
 const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
@@ -1228,7 +1231,11 @@ const celebrate = new VfxSystem({ assets, width: W, height: renderer.height, fon
 // The Showcase Shelf shows the released games, newest first.
 const shipped = () => projects.catalogue.list().filter((r) => r.release).reverse();
 // Milestone 40t: the people in the studio walk, sit and work as their chibis (sprite sheets, loaded per person).
-const walkers = createWalkers({ assets });
+// Milestone 41f (phone memory): Graphics Low — or Auto on a phone with 4 GB of memory or less — uses the smaller walker
+// copies (walkers/lo/); sheets nobody has drawn for a while are let go (checked every 5 seconds).
+const lowArt = () => settings.get('fpsMode') === 'low' || (settings.get('fpsMode') === 'auto' && (navigator.deviceMemory ?? 8) <= 4);
+const walkers = createWalkers({ assets, low: lowArt });
+setInterval(() => walkers.release(), 5000);
 // Milestone 40v: fans walk in on launch days, conventions and fan events; Uncle Ray when the guide speaks and on the
 // year's awards day. Cosmetic only (Math.random, never the studio's seeded random; nothing saved).
 const visitors = createVisitors({
@@ -1594,9 +1601,13 @@ bus.on('contract:failed', ({ contract, reason }) => {
   showBeat({ title: `Contract ${reason === 'cancelled' ? 'dropped' : 'missed'}: ${contract.client}`, body: 'No pay.' });
 });
 // Awards (Milestone 19): a win is a big moment with its trophy, and it hands out the award's extra; a place is a banner.
+// Milestone 41f: Max Marquee's quips for a place (Awards Night humour; never mean about the player).
+const HOST_QUIPS = ['Max says: so close he could taste the confetti.', 'Max says: next year, bring a bigger shelf.', 'Max says: the judges argued for hours. Well, minutes.', 'Max says: you were robbed! Probably. Allegedly.', 'Max says: keep that speech warm for next year.', 'Max says: a top spot is still a spot on the top.'];
 bus.on('award:result', ({ award, result }) => {
   if (result.winner === 'player' || !result.playerPlace) return;
-  showBeat({ face: CAST_HOST.face, title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}"` });
+  // Milestone 41f: Max Marquee's quip under the result (light; the place and the winner stay first).
+  const quip = HOST_QUIPS[(result.playerPlace + result.year) % HOST_QUIPS.length];
+  showBeat({ face: CAST_HOST.face, title: `${award.name}: #${result.playerPlace}`, body: `${result.entrants[0].name} won with "${result.entrants[0].title}". ${quip}` });
 });
 bus.on('award:won', ({ award, result }) => {
   if (award.extra === 'rp') research.system.addRp(award.rp, `Award: ${award.name}`, clock.totalDays);
@@ -1867,6 +1878,17 @@ const govMode = () => ({ low: 'low', high: 'high' })[settings.get('fpsMode')] ??
 const governor = new FrameGovernor({ mode: govMode(), bus, capFps: true }); // 60 / 30 by time, on any refresh rate
 loop.governor = governor;
 const lowMode = () => governor.state === 'half';
+// Milestone 41f (battery): when nothing moves — the clock paused or no studio running, a screen or sheet just sitting
+// there, no finger on the screen for 1.5 s, no big moment or effect playing — the picture is drawn 20 times a second
+// instead of 60 / 30. Any touch brings full speed back at once. (In the background the loop already stops.)
+let lastInputAt = performance.now();
+for (const ev of ['input:down', 'input:up', 'input:drag', 'input:dragstart', 'input:wheel']) bus.on(ev, () => (lastInputAt = performance.now()));
+const idleScreen = () => performance.now() - lastInputAt > 1500 && !feedback.active && !dialog.active && !(celebrate.active ?? false) && !(vfx.count ?? 0) && (!started || clock.paused || router.currentName !== 'studio') && !textPrompt.active;
+const IDLE_FPS = 20;
+{
+  const baseFps = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(governor), 'targetFps').get;
+  Object.defineProperty(governor, 'targetFps', { get: () => (idleScreen() ? Math.min(IDLE_FPS, baseFps.call(governor)) : baseFps.call(governor)) });
+}
 function fx(k) {
   return !!settings.get(k) || (lowMode() && (k === 'lowVfx' || k === 'reducedWorkerDetail'));
 }
