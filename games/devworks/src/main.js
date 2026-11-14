@@ -97,6 +97,8 @@ import { TextPrompt } from '../../../core/ui/TextPrompt.js';
 import { watchTextPrompt } from './ui/textBoxFix.js'; // Milestone 40o
 import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking chibis
 import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans and Uncle Ray walk in
+import { enableSmoothArt, smoothContext } from '../../../core/SmoothArt.js'; // Milestone 41c: smooth art, no jaggy look
+import { PHONE_ART } from '../data/phoneArt.js'; // Milestone 41c: Lanczos phone copies (tools/devworks-phone-art.mjs)
 import { NativeBridge } from '../../../core/NativeBridge.js'; // Milestone 41a: the phone app's features
 import { setupNativeApp } from './app/nativeApp.js'; // Milestone 41a: real AdMob (test ids) + Google Play Billing in the app
 import { APP_TEXT, PRIVACY_URL } from '../data/app.js'; // Milestone 41a
@@ -283,7 +285,10 @@ const FORCE_INSETS = (() => {
 const layout = new UiLayout(renderer, { forceInsets: FORCE_INSETS });
 bus.on('renderer:resize', () => layout.refresh());
 const input = new Input(renderer, bus);
+enableSmoothArt(); // Milestone 41c (8 Nov smooth-art rule): high-quality filtering in core/CachedLayer and core/ArtRecolor too
 const assets = new AssetManager({ bus });
+// Milestone 41c: each picture loads its phone copy (about 2x the biggest size shown, Lanczos) and falls back to the original.
+assets.resolve = (src) => (PHONE_ART[src] ? [PHONE_ART[src], src] : [src]);
 const router = new ScreenRouter(bus, { roots: ['studio', 'test', 'title'] });
 const dialog = new Dialog({ layout, assets }); // confirm boxes (delete a slot)
 const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
@@ -478,7 +483,7 @@ const loop = new FixedStepLoop({
   },
   render: (alpha) => {
     assets.sprites.beginFrame(); // Milestone 39: the sprite copies' per-frame budget
-    const ctx = renderer.begin(router.currentName === 'splash' ? '#000' : COL.bg); // Milestone 40j: the edges match the screen
+    const ctx = smoothContext(renderer.begin(router.currentName === 'splash' ? '#000' : COL.bg)); // Milestone 40j: the edges match the screen; 41c: smooth filtering every frame (a resize resets it)
     warmText(ctx); // Milestone 39
     if (router.currentName === 'title' || router.currentName === 'setup') drawTitleBackdrop(ctx); // Milestone 40j (boot draws its own); 40p: New Studio too
     router.render(ctx, alpha);
