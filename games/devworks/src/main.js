@@ -74,7 +74,7 @@
 // effects and Reduced worker detail on), the 24 nearest workers in full detail, a capped sprite cache pruned as you go,
 // the floor's cache released when you leave the studio, ?insets=t,r,b,l to check safe areas, and the debug line.
 // Add ?debug=1 for the FPS/state overlay and the badge toggle, ?screen=test for the Milestone 0 scaling/tap test screen.
-import { THEME, font, setTextScale, textScale } from '../../../core/Theme.js';
+import { THEME, font, lineH, setTextScale, textScale } from '../../../core/Theme.js';
 import { EventBus } from '../../../core/EventBus.js';
 import { Rng } from '../../../core/Rng.js';
 import { Renderer } from '../../../core/Renderer.js';
@@ -171,7 +171,7 @@ import { ITEM_RARITIES, ITEM_RULES, itemTypeById, itemGroupById, ITEM_GROUPS } f
 import { STATS as STAFF_STATS, ROLES } from '../data/staff.js';
 import { portraitOf as portraitCrop, staffIcon, staffFace, setFaceCheck, STAFF_FACE_ART } from '../data/portraits.js';
 import { createCreditsScreen } from './screens/CreditsScreen.js';
-import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE, SHAKE_LEVELS } from '../data/settings.js';
+import { SETTINGS_DEFAULTS, SETTINGS_KEY, TEXT_SPEED, TEXT_SCALE, TEXT_AUTO, SHAKE_LEVELS } from '../data/settings.js';
 import { AudioManager } from '../../../core/AudioManager.js'; // Milestone 38
 import { Haptics } from '../../../core/Haptics.js';
 import { FrameGovernor } from '../../../core/FrameGovernor.js'; // Milestone 39
@@ -257,8 +257,25 @@ function applySettings() {
   THEME.button.minH = settings.get('largerTargets') ? Math.round(BASE_MIN_H * 1.2) : BASE_MIN_H;
   setCardSymbols(settings.get('colourBlindSymbols'));
 }
+// Milestone 41e (BOTWORKS M38): until the player picks a text size, the Fold's cover screen (very narrow) gets Larger and
+// anything wider Normal. Picking one in Settings keeps it from then on.
+let autoText = false;
+function autoTextSize() {
+  if (settings.get('textSizeChosen')) return;
+  const cssW = document.documentElement.clientWidth || window.innerWidth;
+  const want = cssW < TEXT_AUTO.narrowCss ? TEXT_AUTO.narrow : TEXT_AUTO.wide;
+  if (settings.get('textSize') === want) return;
+  autoText = true;
+  settings.set('textSize', want);
+  autoText = false;
+}
+autoTextSize();
+window.addEventListener('resize', autoTextSize);
 applySettings();
-settings.onChange(() => applySettings());
+settings.onChange((id) => {
+  if (id === 'textSize' && !autoText) settings.set('textSizeChosen', true);
+  applySettings();
+});
 const textTime = () => TEXT_SPEED[settings.get('textSpeed')] ?? 1;
 
 const W = 1080;
@@ -286,6 +303,24 @@ const layout = new UiLayout(renderer, { forceInsets: FORCE_INSETS });
 bus.on('renderer:resize', () => layout.refresh());
 const input = new Input(renderer, bus);
 enableSmoothArt(); // Milestone 41c (8 Nov smooth-art rule): high-quality filtering in core/CachedLayer and core/ArtRecolor too
+// Milestone 41e (bigger text on the Fold's cover screen): a line too wide for its space is shrunk evenly (same shape,
+// a little smaller) instead of being squeezed sideways by the canvas, so words stay readable at every text size. A
+// squeeze under 10% is left to the canvas (it can't be seen). This page only: core and the other games are unchanged.
+{
+  const P = CanvasRenderingContext2D.prototype;
+  const fill = P.fillText;
+  P.fillText = function fillTextFitted(t, x, y, maxWidth) {
+    if (maxWidth == null) return fill.call(this, t, x, y);
+    const w = this.measureText(String(t)).width;
+    if (!(w > maxWidth * 1.1) || maxWidth <= 0) return fill.call(this, t, x, y, maxWidth);
+    const k = maxWidth / w;
+    this.save();
+    this.translate(x, y);
+    this.scale(k, k);
+    fill.call(this, t, 0, 0);
+    this.restore();
+  };
+}
 const assets = new AssetManager({ bus });
 // Milestone 41c: each picture loads its phone copy (about 2x the biggest size shown, Lanczos) and falls back to the original.
 assets.resolve = (src) => (PHONE_ART[src] ? [PHONE_ART[src], src] : [src]);
@@ -2226,6 +2261,8 @@ function drawTip(ctx) {
   ctx.restore();
 }
 
+// Milestone 41e: the verdict line on the reviews card (plain, light; by the average score).
+const reviewVerdict = (score) => (score >= 90 ? 'A masterpiece. Clear some shelf space.' : score >= 80 ? 'A hit! The critics are smiling.' : score >= 70 ? 'Solid work: players will have fun.' : score >= 55 ? 'Mixed, but it has its fans.' : score >= 40 ? 'Rough around the edges.' : 'Ouch. Next one will be better.');
 // The review reveal card: cover, then each outlet pops in with its stars, score and line; the average last.
 function drawReviews(ctx, t, record) {
   const g = record.result;
@@ -2235,7 +2272,9 @@ function drawReviews(ctx, t, record) {
   const x = sr.x + (sr.w - w) / 2;
   const y = sr.y + 40;
   const rowH = 190;
-  const h = 250 + r.reviews.length * rowH + 30;
+  // Milestone 41e: the header grows with the text size (title, score, verdict, key line).
+  const headH = Math.max(270, 80 + lineH(THEME.size.title, 0.5) + lineH(THEME.size.heading, 1.1) + lineH(THEME.size.small, 0.75) + lineH(THEME.size.small, 1.15) * 1.6 + 16);
+  const h = headH + r.reviews.length * rowH + 30;
   ctx.save();
   ctx.globalAlpha = Math.min(1, t / 0.25);
   ctx.fillStyle = COL.panel;
@@ -2254,12 +2293,27 @@ function drawReviews(ctx, t, record) {
   const allIn = t >= REVEAL.first + REVEAL.each * r.reviews.length;
   ctx.fillStyle = allIn ? COL.actionDark : COL.textMuted;
   ctx.font = font(allIn ? THEME.size.heading : THEME.size.body, true);
-  ctx.fillText(allIn ? `Review score: ${r.score}` : 'The reviews are coming in…', x + 196, y + 170, w - 230);
+  // Milestone 41e: the header's lines are placed by their real heights at the chosen text size.
+  const scoreY = y + 80 + lineH(THEME.size.title, 0.5) + lineH(THEME.size.heading, 0.6);
+  ctx.fillText(allIn ? `Review score: ${r.score}` : 'The reviews are coming in…', x + 196, scoreY, w - 230);
+  // Milestone 41e: a one-line verdict and the key line under the score, so the card reads at a glance on a small screen.
+  if (allIn) {
+    const vy = scoreY + lineH(THEME.size.heading, 0.5) + lineH(THEME.size.small, 0.75);
+    ctx.fillStyle = COL.text;
+    ctx.font = font(THEME.size.small, true);
+    ctx.fillText(reviewVerdict(r.score), x + 196, vy, w - 230);
+    const key = [r.fanExpectation > 0 ? `Fans expected ${Math.round(r.fanExpectation)}` : null, r.hype > 0 ? `Hype ${Math.round(r.hype)}` : null, r.score >= 90 ? 'Hall of Fame contender' : null].filter(Boolean).join(' · ');
+    if (key) {
+      ctx.fillStyle = COL.textMuted;
+      ctx.font = font(THEME.size.small);
+      ctx.fillText(key, x + 196, vy + lineH(THEME.size.small, 1.15), w - 230);
+    }
+  }
   ctx.globalAlpha = 1;
   r.reviews.forEach((o, i) => {
     const t0 = t - (REVEAL.first + REVEAL.each * i);
     if (t0 < 0) return;
-    const ry = y + 250 + i * rowH;
+    const ry = y + headH + i * rowH;
     const pop = Math.min(1, t0 / 0.25);
     ctx.globalAlpha = pop;
     ctx.fillStyle = COL.panelAlt;

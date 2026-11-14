@@ -27,7 +27,7 @@ export const SETTINGS = [
   { id: 'screenShake', label: 'Screen shake', group: 'Graphics and performance', options: [{ id: 'off', label: 'Off' }, { id: 'low', label: 'Low' }, { id: 'normal', label: 'Normal' }], line: 'The little shakes (a bug found, a big launch) — never needed to follow the game.' },
   { id: 'reducedMotion', label: 'Reduced motion', group: 'Graphics and performance', options: onOff, line: 'No launch rocket; sheets appear without sliding.' },
   { id: 'haptics', label: 'Vibration', group: 'Comfort', options: onOff, line: 'A buzz on the big moments. Phones only.' },
-  { id: 'textSize', label: 'Text size', group: 'Comfort', options: [{ id: 'normal', label: 'Normal' }, { id: 'large', label: 'Large' }, { id: 'larger', label: 'Larger' }], line: 'Large: every text 15% bigger; Larger: 30%.' },
+  { id: 'textSize', label: 'Text size', group: 'Comfort', options: [{ id: 'normal', label: 'Normal' }, { id: 'large', label: 'Large' }, { id: 'larger', label: 'Larger' }], line: 'Large: every text 15% bigger; Larger: 50% (picked for you on a very narrow screen until you choose).' },
   { id: 'showMenu', label: 'Show Menu button', group: 'Menu and hints', options: onOff, line: 'Off: tap the art to get around (Settings stays in Business and the title screen).' },
   { id: 'showHints', label: 'Show next-step hints', group: 'Menu and hints', options: onOff, line: 'A line under the date saying what to do next; tap it to go there.' },
   // DEVWORKS's own extras (after the series list).
@@ -43,8 +43,11 @@ export const SETTINGS = [
   { id: 'colourBlindSymbols', label: 'Colour-blind-safe symbols', group: 'More options', tail: true, options: onOff, line: '✓ ✗ ! next to good, bad and risky lines.' },
   { id: 'statsMode', label: 'Stats', group: 'More options', tail: true, options: [{ id: 'simple', label: 'Simple' }, { id: 'advanced', label: 'Advanced' }] },
 ];
-export const SETTINGS_DEFAULTS = { muted: false, musicMuted: false, sfxMuted: false, screenShake: 'normal', showMenu: true, showHints: true, fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, showVisitors: true, colourBlindSymbols: false, statsMode: 'simple' };
+export const SETTINGS_DEFAULTS = { muted: false, musicMuted: false, sfxMuted: false, screenShake: 'normal', showMenu: true, showHints: true, fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, textSizeChosen: false, showVisitors: true, colourBlindSymbols: false, statsMode: 'simple' };
 export const SHAKE_LEVELS = { off: 0, low: 0.5, normal: 1 }; // Milestone 40e: shake strength for each choice
 export const TEXT_SPEED = { fast: 0.7, normal: 1, slow: 1.6 }; // banner time multiplier
-export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.3 }; // Milestone 38: three UI-scale steps
+export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.5 }; // Milestone 38: three UI-scale steps; Milestone 41e: Larger 1.3 → 1.5 (the Fold cover screen)
+// Milestone 41e: until the player picks a text size, a very narrow screen (the Fold's cover screen, ~320 CSS px wide) gets
+// Larger and any other Normal — folding or unfolding the phone switches between them (BOTWORKS M38's rule).
+export const TEXT_AUTO = { narrowCss: 360, narrow: 'larger', wide: 'normal' };
 export const SETTINGS_KEY = 'devworks:settings';

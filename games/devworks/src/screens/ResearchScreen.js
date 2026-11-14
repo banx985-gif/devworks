@@ -2,7 +2,7 @@
 // progress and Stop, then the six branches as tabs; each topic shows its tier and RP, its state (Done / Researching /
 // Open / Locked), what it needs or what it opens (elements, facilities), and Start when it can start. ?debug=1 adds
 // "finish this branch". Drag scrolls.
-import { THEME } from '../../../../core/Theme.js';
+import { THEME, font, lineH } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text, tabRects, drawTabs, tabAt } from '../../../../core/ui/Kit.js';
@@ -15,6 +15,14 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
 const ROW_H = 230;
+// Milestone 41e: a topic row's lines are placed by the real line heights at the chosen text size, so bigger text never
+// overlaps (the row grows instead): name, tier line, then the opens / needs line; the Start button sits bottom right.
+const rowLines = () => {
+  const l1 = 20;
+  const l2 = l1 + lineH(S.heading, 1.1) + 6;
+  const l3 = l2 + lineH(S.small, 1.2) + 10;
+  return { l1, l2, l3, h: Math.max(ROW_H, l3 + lineH(S.small, 1.2) + 30, 130 + 20 + l2) };
+};
 const STATE = { done: ['Done', C.good], active: ['Researching', C.progress], available: ['Open', C.action], locked: ['Locked', C.textMuted] };
 
 // Milestone 15: "Discoveries" (top right) opens the Discovery Archive.
@@ -82,9 +90,10 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
     const b = BRANCHES.find((x) => x.id === branch);
     text(ctx, `${b.name}: ${b.line}`, PAD, y, { size: S.body, bold: true, maxWidth: cw });
     y += 60;
+    const RL = rowLines();
     for (const n of RESEARCH.filter((r) => r.branch === branch)) {
       const st = research.status(n.id);
-      const r = { x: PAD - 8, y, w: cw + 16, h: ROW_H };
+      const r = { x: PAD - 8, y, w: cw + 16, h: RL.h };
       ctx.fillStyle = st === 'locked' ? C.panelDim : st === 'done' ? C.panelGood : C.panelAlt;
       ctx.strokeStyle = st === 'active' ? C.progress : C.line;
       ctx.lineWidth = st === 'active' ? 5 : 3;
@@ -94,25 +103,25 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
       ctx.stroke();
       const bx = { x: r.x + r.w - 220, y: r.y + r.h - 130, w: 200, h: 110 };
       const tw = r.w - 48;
-      text(ctx, n.name, r.x + 24, r.y + 20, { size: S.heading, bold: true, maxWidth: tw - 230 });
+      text(ctx, n.name, r.x + 24, r.y + RL.l1, { size: S.heading, bold: true, maxWidth: tw - 230 });
       const [label, colour] = STATE[st];
-      ctx.font = `bold ${S.small}px ${THEME.family}`;
+      ctx.font = font(S.small, true); // Milestone 41e: measured at the chosen text size (the chip fits its label)
       const chipW = ctx.measureText(label).width + 36;
       ctx.fillStyle = colour;
       ctx.beginPath();
       ctx.roundRect(r.x + r.w - 20 - chipW, r.y + 22, chipW, 48, 24);
       ctx.fill();
       text(ctx, label, r.x + r.w - 20 - chipW / 2, r.y + 46, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: C.textOnDark });
-      text(ctx, `Tier ${n.tier} · ${n.rp} RP`, r.x + 24, r.y + 80, { size: S.small, bold: true, color: C.actionDark, maxWidth: tw });
+      text(ctx, `Tier ${n.tier} · ${n.rp} RP`, r.x + 24, r.y + RL.l2, { size: S.small, bold: true, color: C.actionDark, maxWidth: tw });
       const why = st === 'locked' ? research.why(n.id) : null;
-      text(ctx, why ?? opensLine(n.id), r.x + 24, r.y + 126, { size: S.small, color: why ? C.bad : C.textMuted, maxWidth: st === 'available' ? tw - 230 : tw });
+      text(ctx, why ?? opensLine(n.id), r.x + 24, r.y + RL.l3, { size: S.small, color: why ? C.bad : C.textMuted, maxWidth: st === 'available' ? tw - 230 : tw });
       if (st === 'available') {
         const can = !research.why(n.id);
         // (Milestone 40h: VIP's "Queue next" is gone with VIP — one topic at a time.)
         drawButton(ctx, bx, can ? 'Start' : `${n.rp} RP`, { disabled: !can || !!research.active });
         hits.rows.push({ id: n.id, button: bx, ok: can && !research.active });
       }
-      y += ROW_H + 16;
+      y += RL.h + 16;
     }
     if (debugFinish) {
       hits.debug = { x: PAD, y: y + 10, w: cw, h: 110 };

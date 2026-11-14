@@ -24,7 +24,7 @@
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
-import { text } from '../../../../core/ui/Kit.js';
+import { text, para } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementById, needsProblem, recipeProblems } from '../../data/elements.js';
 import { SCOPES, AUDIO_PACKAGES, BUDGET_FOCUS, LEAD_ROLES, TITLE_WORDS } from '../../data/projects.js';
 import { ROLES, STATS } from '../../data/staff.js';
@@ -155,12 +155,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     PROJECT_TYPES.forEach((t, i) => chip(grid0(i), t.name, setup.type === t.id, () => setType(t.id), { id: `type:${t.id}`, locked: !!typeWhy(t), cost: pctCost(Math.round(((FRANCHISE_BALANCE.types[t.id]?.costMult ?? 1) - 1) * 100)) }));
     y += Math.ceil(PROJECT_TYPES.length / 3) * 130 + 10;
     const whyLine = PROJECT_TYPES.filter((t) => typeWhy(t)).map((t) => `${t.name}: ${typeWhy(t).toLowerCase()}`).join(' · ');
-    if (ctx) text(ctx, ptype().line, PAD, y, { size: S.small, color: C.text, maxWidth: cw });
-    y += 48;
-    if (whyLine) {
-      if (ctx) text(ctx, whyLine, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
-      y += 48;
-    }
+    // Milestone 41e: both lines wrap (they were squeezed onto one line at bigger text sizes).
+    y += para(ctx, ptype().line, PAD, y, cw, { size: S.small, color: C.text }) + 14;
+    if (whyLine) y += para(ctx, whyLine, PAD, y, cw, { size: S.small, color: C.textMuted }) + 14;
     y += 16;
     const row = (label, sub, on, onTap, id) => {
       const r = { x: PAD, y, w: cw, h: 120 };

@@ -2,7 +2,7 @@
 // Rename to change it), status (New → Known → Popular → Major → Iconic → Legendary; Legendary shows the Franchise
 // Crown), genre, games, copies and review average, the fanbase and fatigue meters, and its games' covers in release
 // order. Drag scrolls.
-import { THEME } from '../../../../core/Theme.js';
+import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
@@ -76,7 +76,7 @@ export function createFranchiseArchiveScreen({ layout, assets, business, project
       text(ctx, ip.name, nx, r.y + 24, { size: S.heading, bold: true, maxWidth: r.w - 260 - (nx - r.x) });
       drawButton(ctx, renameRect(r), 'Rename', { accent: C.progress });
       // Status chip and the facts.
-      ctx.font = `bold ${S.small}px ${THEME.family}`;
+      ctx.font = font(S.small, true); // Milestone 41e: measured at the chosen text size (the chip fits its label)
       const chipW = ctx.measureText(st.status.name).width + 36;
       ctx.fillStyle = STATUS_COLOUR[st.status.id] ?? C.progress;
       ctx.beginPath();

@@ -1,7 +1,7 @@
 // Platform Market (Milestone 8), from Business → Platform Market: all 12 platforms (bible §17) — picture, name and
 // holder, audience, dev-friendliness, era, install base today with a bar, and status (Upcoming / Growing / Peak /
 // Declining / Dead). The platforms you can release on now come first. Drag scrolls. Read-only.
-import { THEME } from '../../../../core/Theme.js';
+import { THEME, font, lineH } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { text } from '../../../../core/ui/Kit.js';
 import { PLATFORM_BALANCE } from '../../data/balance.js';
@@ -32,9 +32,16 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
     text(ctx, 'Platform Market', PAD, PAD, { size: S.title, bold: true });
     const out = list.filter((x) => ['Growing', 'Peak', 'Declining'].includes(x.status)).length;
     text(ctx, `Year ${clock.year} · ${out} platform${out === 1 ? '' : 's'} out now`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw });
+    // Milestone 41e: the row's lines by the real line heights at the chosen text size (the row grows with bigger text).
+    const L1 = 20;
+    const L2 = L1 + lineH(S.heading, 1.1) + 4;
+    const L3 = L2 + lineH(S.small, 1.2) + 4;
+    const L4 = L3 + lineH(S.small, 1.2) + 8;
+    const LB = L4 + lineH(S.body, 1.15) + 6;
+    const RH = Math.max(ROW_H, LB + 18 + 22);
     list.forEach((x, k) => {
       const p = x.platform;
-      const r = { x: PAD - 8, y: HEAD_H + k * (ROW_H + 16), w: cw + 16, h: ROW_H };
+      const r = { x: PAD - 8, y: HEAD_H + k * (RH + 16), w: cw + 16, h: RH };
       const dim = x.status === 'Upcoming' || x.status === 'Dead';
       ctx.fillStyle = dim ? C.panelDim : C.panelAlt;
       ctx.strokeStyle = C.line;
@@ -49,20 +56,20 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
       ctx.restore();
       const tx = r.x + 206;
       const tw = r.x + r.w - 20 - tx;
-      text(ctx, p.name, tx, r.y + 20, { size: S.heading, bold: true, maxWidth: tw - 200 });
+      text(ctx, p.name, tx, r.y + L1, { size: S.heading, bold: true, maxWidth: tw - 200 });
       // Status chip, top right.
-      ctx.font = `bold ${S.small}px ${THEME.family}`;
+      ctx.font = font(S.small, true); // Milestone 41e: measured at the chosen text size (the chip fits its label)
       const chipW = ctx.measureText(x.status).width + 36;
       ctx.fillStyle = statusColour(x.status);
       ctx.beginPath();
       ctx.roundRect(r.x + r.w - 20 - chipW, r.y + 20, chipW, 48, 24);
       ctx.fill();
       text(ctx, x.status, r.x + r.w - 20 - chipW / 2, r.y + 44, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: C.textOnDark });
-      text(ctx, `${p.holder} · ${era(p)}`, tx, r.y + 78, { size: S.small, color: C.textMuted, maxWidth: tw });
-      text(ctx, `${p.audienceLabel} · Dev-friendliness ${p.friendliness}`, tx, r.y + 120, { size: S.small, color: C.text, maxWidth: tw });
+      text(ctx, `${p.holder} · ${era(p)}`, tx, r.y + L2, { size: S.small, color: C.textMuted, maxWidth: tw });
+      text(ctx, `${p.audienceLabel} · Dev-friendliness ${p.friendliness}`, tx, r.y + L3, { size: S.small, color: C.text, maxWidth: tw });
       // Install base: number and a bar against the biggest a platform can get.
-      text(ctx, x.status === 'Upcoming' ? 'Not out yet' : `${x.base.toLocaleString('en-GB')} players`, tx, r.y + 166, { size: S.body, bold: true, color: dim ? C.textMuted : C.actionDark, maxWidth: tw });
-      const bar = { x: tx, y: r.y + 210, w: tw, h: 18 };
+      text(ctx, x.status === 'Upcoming' ? 'Not out yet' : `${x.base.toLocaleString('en-GB')} players`, tx, r.y + L4, { size: S.body, bold: true, color: dim ? C.textMuted : C.actionDark, maxWidth: tw });
+      const bar = { x: tx, y: r.y + LB, w: tw, h: 18 };
       ctx.fillStyle = C.track;
       ctx.beginPath();
       ctx.roundRect(bar.x, bar.y, bar.w, bar.h, 9);
@@ -74,7 +81,7 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
         ctx.fill();
       }
     });
-    return HEAD_H + list.length * (ROW_H + 16) + PAD;
+    return HEAD_H + list.length * (Math.max(ROW_H, 20 + lineH(S.heading, 1.1) + 4 + lineH(S.small, 1.2) + 4 + lineH(S.small, 1.2) + 8 + lineH(S.body, 1.15) + 6 + 40) + 16) + PAD; // Milestone 41e: the same row height as drawn
   }
 
   return {

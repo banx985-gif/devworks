@@ -4,7 +4,9 @@
 // Milestone 40k: face = a series cast face (a publisher's or sponsor's rep) in the staff portrait frame under the logo;
 // a missing face file leaves the card as it was.
 // Layout and tapping share one pass, so they never disagree. Drag scrolls.
-import { THEME } from '../../../../core/Theme.js';
+// Milestone 41e (bigger text, the Fold's cover screen): every gap is measured from the real line heights at the chosen
+// text size (core Theme lineH), and a card's buttons go one per row when their labels don't fit side by side.
+import { THEME, lineH, font } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
@@ -15,6 +17,13 @@ const S = THEME.size;
 const PAD = 32;
 const LOGO = 130;
 const FACE = 110;
+let measureCtx = null;
+const labelW = (label) => {
+  measureCtx ??= globalThis.document?.createElement('canvas').getContext('2d');
+  if (!measureCtx) return 0;
+  measureCtx.font = font(THEME.size.button, true);
+  return Math.max(...String(label).split('\n').map((l) => measureCtx.measureText(l).width));
+};
 
 // Milestone 34: colour-blind-safe symbols (a setting): a good / bad line gets ✓ / ✗ in front. And the empty-state audit:
 // a section with no cards and no `empty` text is reported to globalThis.__dwEmptyAudit (tests), so no panel is blank.
@@ -40,20 +49,20 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
     let y = PAD;
     if (m.icon && ctx) assets.drawContained(ctx, m.icon, { x: PAD, y: y - 6, w: 90, h: 90 });
     if (ctx) text(ctx, m.title, PAD + (m.icon ? 110 : 0), y, { size: S.title, bold: true, maxWidth: cw - 110 });
-    y += 100;
+    y += Math.max(100, lineH(S.title, 1.15) + 24);
     if (m.subtitle) {
       if (ctx) para(ctx, m.subtitle, PAD, y, cw, { color: C.textMuted });
-      y += wrapLines(m.subtitle, cw, S.body).length * S.body * 1.3 + 24;
+      y += wrapLines(m.subtitle, cw, S.body).length * lineH(S.body) + 24;
     }
     for (const sec of m.sections) {
       if (sec.heading) {
         if (ctx) text(ctx, sec.heading, PAD, y, { size: S.heading, bold: true, maxWidth: cw });
-        y += 70;
+        y += Math.max(70, lineH(S.heading, 1.15) + 18);
       }
       if (!sec.cards.length && !sec.empty && globalThis.__dwEmptyAudit) globalThis.__dwEmptyAudit.push(`${m.title}: ${sec.heading ?? '(no heading)'}`);
       if (!sec.cards.length && sec.empty) {
         if (ctx) para(ctx, sec.empty, PAD, y, cw, { color: C.textMuted });
-        y += wrapLines(sec.empty, cw, S.body).length * S.body * 1.3 + 30;
+        y += wrapLines(sec.empty, cw, S.body).length * lineH(S.body) + 30;
       }
       for (const c of sec.cards) {
         const face = castFace(assets, c.face);
@@ -61,9 +70,15 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
         const tx = sideH ? LOGO + 40 : 24;
         const tw = cw + 16 - tx - 24;
         const lines = c.lines.map((l) => mark(typeof l === 'string' ? { text: l } : l));
-        const linesH = lines.reduce((t, l) => t + wrapLines(l.text, tw, S.small, l.bold).length * S.small * 1.3 + 8, 0);
-        const bodyH = Math.max(sideH ? sideH + 10 : 0, 70 + linesH);
-        const btnH = c.buttons?.length ? THEME.button.minH + 24 : 0;
+        const linesH = lines.reduce((t, l) => t + wrapLines(l.text, tw, S.small, l.bold).length * lineH(S.small) + 8, 0);
+        const titleLines = wrapLines(c.title, tw, S.body, true);
+        const titleH = Math.max(58, titleLines.length * lineH(S.body, 1.15) + 22);
+        const bodyH = Math.max(sideH ? sideH + 10 : 0, titleH + 12 + linesH);
+        // Buttons side by side while every label fits its share of the width; otherwise one per row (Milestone 41e).
+        const nB = c.buttons?.length ?? 0;
+        const share = nB ? (cw + 16 - 40 - (nB - 1) * 16) / nB : 0;
+        const stack = nB > 1 && c.buttons.some((b) => labelW(b.label) > share - 28);
+        const btnH = nB ? (stack ? nB * (THEME.button.minH + 14) - 14 : THEME.button.minH) + 24 : 0;
         const r = { x: PAD - 8, y, w: cw + 16, h: 24 + bodyH + btnH + 16 };
         if (ctx) {
           ctx.fillStyle = c.highlight ? C.panelInfo : C.sheet;
@@ -75,15 +90,15 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
           ctx.stroke();
           if (c.logo) assets.drawContained(ctx, c.logo, { x: r.x + 20, y: r.y + 24, w: LOGO, h: LOGO });
           if (face) drawCastFace(ctx, assets, face, { x: r.x + 20 + (LOGO - FACE) / 2, y: r.y + 24 + (c.logo ? LOGO + 16 : 0), w: FACE, h: FACE });
-          text(ctx, c.title, r.x + tx, r.y + 22, { size: S.body, bold: true, maxWidth: tw });
-          let ly = r.y + 80;
+          titleLines.forEach((l, i) => text(ctx, l, r.x + tx, r.y + 22 + i * lineH(S.body, 1.15), { size: S.body, bold: true, maxWidth: tw }));
+          let ly = r.y + 22 + titleH;
           for (const l of lines) ly += para(ctx, l.text, r.x + tx, ly, tw, { size: S.small, color: l.color ?? C.text, bold: l.bold }) + 8;
         }
         if (c.buttons?.length) {
           const n = c.buttons.length;
-          const bw = (r.w - 40 - (n - 1) * 16) / n;
+          const bw = stack ? r.w - 40 : (r.w - 40 - (n - 1) * 16) / n;
           c.buttons.forEach((b, i) => {
-            const br = { x: r.x + 20 + i * (bw + 16), y: r.y + 24 + bodyH, w: bw, h: THEME.button.minH };
+            const br = stack ? { x: r.x + 20, y: r.y + 24 + bodyH + i * (THEME.button.minH + 14), w: bw, h: THEME.button.minH } : { x: r.x + 20 + i * (bw + 16), y: r.y + 24 + bodyH, w: bw, h: THEME.button.minH };
             if (ctx) drawButton(ctx, br, b.label, { accent: b.accent ?? C.progress, disabled: b.disabled });
             hits.push({ id: `${c.id}:${b.id}`, r: br, b });
           });

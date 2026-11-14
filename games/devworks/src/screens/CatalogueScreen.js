@@ -60,7 +60,7 @@ export function createCatalogueScreen({ dateLabel = (d) => `day ${d}`, layout, a
       text(ctx, g.title, tx, r.y + 24, { size: S.heading, bold: true, maxWidth: tw });
       const status = business.statusOf(rec);
       const chip = { Selling: C.good, 'Long tail': C.progress, 'Not released': C.warn, Certifying: C.purple, 'Early Access': C.purple }[status];
-      ctx.font = `bold ${S.small}px ${THEME.family}`;
+      ctx.font = font(S.small, true); // Milestone 41e: measured at the chosen text size (the chip fits its label)
       const chipW = ctx.measureText(status).width + 36;
       ctx.fillStyle = chip;
       ctx.beginPath();
