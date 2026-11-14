@@ -21,7 +21,7 @@
 // Milestone 21: "Localisation" Off / On (needs PRO3 research or a Localisation Suite): more work and cost, more sales
 // abroad; a Global publisher deal localises it for free.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
-import { THEME, font } from '../../../../core/Theme.js';
+import { THEME, font, lineH, textScale } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text, para } from '../../../../core/ui/Kit.js';
@@ -38,17 +38,24 @@ const C = THEME.color;
 const S = THEME.size;
 const PAD = 32;
 const TITLE_MAX = 28;
+// Milestone 41i (Larger = 1.8× on the Fold cover): at big text the screen goes one item per row — headings with their
+// note under them, two choices to a row (taller, the cost under the name), one recipe slot per row, team rows on three
+// lines, the long "why" lines behind "More", Start on two lines. Normal and Large are laid out exactly as before.
+const BIG_TEXT = 1.6;
 const HARD_MIN = 2; // a game needs at least two leads; below a scope's usual team it is just slower (spec §9)
 
 export function createNewProjectScreen({ layout, assets, world, topBar, openPicker, textPrompt, onStart, scopeOpen = () => true, scopeReason = () => null, estimate = null, dateLabel = (d) => `day ${d}`, today = () => 0, costPerDay = () => 0, franchises = null, unavailable = () => null, hints = () => [], onFindRole = null, laneWhy = () => null, comboHints = () => [], combosIn = () => [], engineChoices = () => [], engineEffects = () => null, deals = () => [], dealWhy = () => null, ipWhy = () => null, audioCost = () => 0, localisationWhy = () => 'Needs Localisation research (PRO3) or a Localisation Suite', localisationLine = () => '', cameFrom = () => null, requestById = () => null, describeRequest = () => '', mastery = () => null }) {
   let setup = null;
+  let moreOpen = false; // Milestone 41i: the project types' "why locked" lines (big text)
+  const isBig = () => textScale() >= BIG_TEXT;
+  const startH = () => (isBig() ? Math.max(THEME.button.minH + 20, lineH(S.button, 1.1) + lineH(S.small, 1.2) + 28) : THEME.button.minH + 20);
   const panelRect = () => {
     const t = topBar.rect();
     const sr = layout.safeRect;
     const y = t.y + t.h + 16;
     return { x: sr.x + 16, y, w: sr.w - 32, h: startRect().y - 16 - y };
   };
-  const startRect = () => layout.anchor('bottom', layout.safeRect.w - 64, THEME.button.minH + 20, 24);
+  const startRect = () => layout.anchor('bottom', layout.safeRect.w - 64, startH(), 24);
   const scroll = new ScrollPanel({ getRect: panelRect });
 
   const scope = () => SCOPES.find((s) => s.id === setup.scope);
@@ -124,11 +131,38 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     const cw = w - PAD * 2;
     let y = PAD;
     let hit = null;
+    const big = isBig();
+    // Milestone 41i: chip size and columns (big text: 2 to a row, tall enough for the name and the cost).
+    const CH = big ? Math.max(110, lineH(S.body, 1.15) + lineH(S.small, 1.15) + 28) : 110;
+    const CG = CH + 20;
+    const cols = (n) => (big ? Math.min(n, 2) : n);
+    const cell = (i, n) => {
+      const k = cols(n);
+      const cwid = (cw - 20 * (k - 1)) / k;
+      return { x: PAD + (i % k) * (cwid + 20), y: y + Math.floor(i / k) * CG, w: cwid, h: CH };
+    };
+    const rowsOf = (count, n) => Math.ceil(count / cols(n));
+    const line = (t, color, size = S.small, bold = false) => {
+      // A note under a choice: one squeezed line before; at big text it wraps.
+      if (big) y += para(ctx, t, PAD, y, cw, { size, color, bold }) + 16;
+      else {
+        if (ctx) text(ctx, t, PAD, y, { size, color, bold, maxWidth: cw });
+        y += 70;
+      }
+    };
     const box = (r, onTap, id) => {
       if (rects && id) rects[id] = r;
       if (tap && !hit && hitRect(tap, r)) hit = onTap;
     };
     const heading = (label, sub = null) => {
+      if (big) {
+        // The heading, then its note on its own line under it.
+        if (ctx) text(ctx, label, PAD, y, { size: S.heading, bold: true, maxWidth: cw });
+        y += lineH(S.heading, 1.2);
+        if (sub) y += para(ctx, sub, PAD, y, cw, { size: S.small, color: C.textMuted, maxLines: 2 }) + 6;
+        y += 12;
+        return;
+      }
       if (ctx) {
         text(ctx, label, PAD, y, { size: S.heading, bold: true });
         if (sub) text(ctx, sub, PAD + cw, y + 8, { size: S.small, color: C.textMuted, align: 'right' });
@@ -141,8 +175,10 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         // Milestone 40b: the choice and what it costs, on two lines.
         drawButton(ctx, r, '', { selected: on, accent: opts.accent ?? C.progress, locked: opts.locked });
         const fg = on ? C.textOnSelected ?? '#FFF8EC' : opts.locked ? C.textFaint : C.textOnAction;
-        text(ctx, on ? `✓ ${label}` : label, r.x + r.w / 2, r.y + r.h * 0.34, { size: S.body, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
-        text(ctx, opts.cost, r.x + r.w / 2, r.y + r.h * 0.7, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+        const ly = big ? r.y + 12 + lineH(S.body, 1.15) / 2 : r.y + r.h * 0.34;
+        const cy = big ? r.y + 12 + lineH(S.body, 1.15) + lineH(S.small, 1.15) / 2 : r.y + r.h * 0.7;
+        text(ctx, on ? `✓ ${label}` : label, r.x + r.w / 2, ly, { size: S.body, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+        text(ctx, opts.cost, r.x + r.w / 2, cy, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
       } else if (ctx) drawButton(ctx, r, on ? `✓ ${label}` : label, { selected: on, accent: opts.accent ?? C.progress, font: font(S.body, true), locked: opts.locked });
       if (!opts.locked) box(r, onTap, opts.id);
     };
@@ -150,17 +186,46 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
 
     // Project type (Milestone 10).
     const third0 = (cw - 40) / 3;
-    const grid0 = (i) => ({ x: PAD + (i % 3) * (third0 + 20), y: y + Math.floor(i / 3) * 130, w: third0, h: 110 });
-    heading('Project type', ptype().name);
+    const grid0 = (i) => (big ? cell(i, 3) : { x: PAD + (i % 3) * (third0 + 20), y: y + Math.floor(i / 3) * 130, w: third0, h: 110 });
+    heading('Project type', big ? null : ptype().name);
     PROJECT_TYPES.forEach((t, i) => chip(grid0(i), t.name, setup.type === t.id, () => setType(t.id), { id: `type:${t.id}`, locked: !!typeWhy(t), cost: pctCost(Math.round(((FRANCHISE_BALANCE.types[t.id]?.costMult ?? 1) - 1) * 100)) }));
-    y += Math.ceil(PROJECT_TYPES.length / 3) * 130 + 10;
+    y += big ? rowsOf(PROJECT_TYPES.length, 3) * CG + 10 : Math.ceil(PROJECT_TYPES.length / 3) * 130 + 10;
     const whyLine = PROJECT_TYPES.filter((t) => typeWhy(t)).map((t) => `${t.name}: ${typeWhy(t).toLowerCase()}`).join(' · ');
     // Milestone 41e: both lines wrap (they were squeezed onto one line at bigger text sizes).
     y += para(ctx, ptype().line, PAD, y, cw, { size: S.small, color: C.text }) + 14;
-    if (whyLine) y += para(ctx, whyLine, PAD, y, cw, { size: S.small, color: C.textMuted }) + 14;
+    if (whyLine && big) {
+      // Milestone 41i: why the others are locked, behind "More".
+      if (moreOpen) y += para(ctx, whyLine, PAD, y, cw, { size: S.small, color: C.textMuted }) + 14;
+      const mr = { x: PAD, y, w: Math.min(cw, 420), h: Math.max(84, lineH(S.small, 1.9)) };
+      if (ctx) {
+        ctx.fillStyle = C.panelInfo;
+        ctx.beginPath();
+        ctx.roundRect(mr.x, mr.y, mr.w, mr.h, 18);
+        ctx.fill();
+        text(ctx, moreOpen ? 'Less ▴' : 'Why locked? ▾', mr.x + mr.w / 2, mr.y + mr.h / 2, { size: S.small, bold: true, color: C.progress, align: 'center', baseline: 'middle', maxWidth: mr.w - 20 });
+      }
+      box(mr, () => (moreOpen = !moreOpen), 'typeMore');
+      y += mr.h + 14;
+    } else if (whyLine) y += para(ctx, whyLine, PAD, y, cw, { size: S.small, color: C.textMuted }) + 14;
     y += 16;
     const row = (label, sub, on, onTap, id) => {
-      const r = { x: PAD, y, w: cw, h: 120 };
+      const r = { x: PAD, y, w: cw, h: big ? Math.max(120, lineH(S.body, 1.15) + 2 * lineH(S.small, 1.2) + 30) : 120 };
+      if (big) {
+        if (ctx) {
+          ctx.fillStyle = on ? C.panelInfo : C.panelAlt;
+          ctx.strokeStyle = on ? C.progress : C.line;
+          ctx.lineWidth = on ? 5 : 3;
+          ctx.beginPath();
+          ctx.roundRect(r.x, r.y, r.w, r.h, 22);
+          ctx.fill();
+          ctx.stroke();
+          text(ctx, (on ? '✓ ' : '') + label, r.x + 24, r.y + 14, { size: S.body, bold: true, maxWidth: r.w - 48 });
+          para(ctx, sub, r.x + 24, r.y + 14 + lineH(S.body, 1.15), r.w - 48, { size: S.small, color: C.textMuted, maxLines: 2, lead: 1.2 });
+        }
+        box(r, onTap, id);
+        y += r.h + 16;
+        return;
+      }
       if (ctx) {
         ctx.fillStyle = on ? C.panelInfo : C.panelAlt;
         ctx.strokeStyle = on ? C.progress : C.line;
@@ -190,8 +255,9 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
 
     // Title.
     heading('Title');
-    const field = { x: PAD, y, w: cw - 260, h: 110 };
-    const sug = { x: PAD + cw - 240, y, w: 240, h: 110 };
+    const fh = big ? Math.max(110, lineH(S.heading, 1.5)) : 110;
+    const field = big ? { x: PAD, y, w: cw, h: fh } : { x: PAD, y, w: cw - 260, h: 110 };
+    const sug = big ? { x: PAD, y: y + fh + 16, w: cw, h: Math.max(110, lineH(S.button, 1.7)) } : { x: PAD + cw - 240, y, w: 240, h: 110 };
     if (ctx) {
       ctx.fillStyle = C.sheet;
       ctx.strokeStyle = setup.title.trim() ? C.outline : C.action;
@@ -205,13 +271,15 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     }
     box(field, () => editTitle(field), 'title');
     box(sug, suggest, 'suggest');
-    y += field.h + 40;
+    y += big ? sug.y + sug.h - y + 40 : field.h + 40;
 
     // Recipe: six slots, two columns.
     heading('Recipe', 'tap a slot to choose');
     const colW = (cw - 20) / 2;
+    // Milestone 41i: big text, one slot per row (picture, family, element, and its note on three lines).
+    const slotH = big ? Math.max(150, lineH(S.small, 1.15) * 2 + lineH(S.body, 1.15) + 30) : 150;
     FAMILIES.forEach((f, i) => {
-      const r = { x: PAD + (i % 2) * (colW + 20), y: y + Math.floor(i / 2) * 170, w: colW, h: 150 };
+      const r = big ? { x: PAD, y: y + i * (slotH + 16), w: cw, h: slotH } : { x: PAD + (i % 2) * (colW + 20), y: y + Math.floor(i / 2) * 170, w: colW, h: 150 };
       const el = setup.recipe[f.id] ? elementById(setup.recipe[f.id]) : null;
       const clash = el ? needsProblem(el, setup.recipe) : null;
       if (rects && clash) rects[`clash:${f.id}`] = r;
@@ -228,17 +296,20 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         const ir = { x: r.x + 16, y: r.y + 15, w: 120, h: 120 };
         if (el) assets.drawContained(ctx, el.art, ir);
         else text(ctx, '+', ir.x + ir.w / 2, ir.y + ir.h / 2, { size: 90, bold: true, color: C.action, align: 'center', baseline: 'middle' });
-        text(ctx, f.name, r.x + 150, r.y + 26, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
-        text(ctx, el ? el.name : 'Choose…', r.x + 150, r.y + 66, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
+        const y1 = big ? r.y + 14 : r.y + 26;
+        const y2 = big ? y1 + lineH(S.small, 1.15) : r.y + 66;
+        const y3 = big ? y2 + lineH(S.body, 1.15) : r.y + 108;
+        text(ctx, f.name, r.x + 150, y1, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
+        text(ctx, el ? el.name : 'Choose…', r.x + 150, y2, { size: S.body, bold: true, color: el ? C.text : C.actionDark, maxWidth: r.w - 166 });
         const m = el ? mastery(el.id) : null; // Milestone 40h: element mastery stars and line
         if (m?.level) drawStars(ctx, r.x + r.w - 14, r.y + 30, m.level);
-        if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, r.y + 108, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
-        else if (m?.line && !locked(f.id)) text(ctx, m.line, r.x + 150, r.y + 108, { size: S.small, bold: true, color: MASTERY_COL, maxWidth: r.w - 166 });
-        else if (locked(f.id)) text(ctx, reqLocked(f.id) ? 'Fixed by the request' : `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, r.y + 108, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
+        if (clash) text(ctx, `Needs ${clash.split(' needs ')[1]}`, r.x + 150, y3, { size: S.small, bold: true, color: C.bad, maxWidth: r.w - 166 });
+        else if (m?.line && !locked(f.id)) text(ctx, m.line, r.x + 150, y3, { size: S.small, bold: true, color: MASTERY_COL, maxWidth: r.w - 166 });
+        else if (locked(f.id)) text(ctx, reqLocked(f.id) ? 'Fixed by the request' : `Fixed by the ${ptype().name.toLowerCase()}`, r.x + 150, y3, { size: S.small, color: C.textMuted, maxWidth: r.w - 166 });
       }
       if (!locked(f.id)) box(r, () => openPicker(f.id), f.id);
     });
-    y += 3 * 170 + 30;
+    y += big ? FAMILIES.length * (slotH + 16) + 20 : 3 * 170 + 30;
     // Milestone 15: combo hints (a slot to change for an undiscovered combo; known combos by name).
     const hintSlots = comboHints(setup.recipe).map((h) => FAMILIES.find((f) => f.id === h.slot)?.name).filter(Boolean);
     const knownHere = combosIn(setup.recipe);
@@ -249,8 +320,12 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       ...(hintSlots.length ? [{ t: `✨ This recipe feels close to something special… try a different ${hintSlots.join(' or ')}.`, c: C.purple }] : []),
     ];
     for (const l of hintLines) {
-      if (ctx) text(ctx, l.t, PAD, y, { size: S.small, bold: true, color: l.c, maxWidth: cw });
       if (rects) rects[l.c === C.purple ? 'comboHint' : 'comboKnown'] = { x: PAD, y, w: cw, h: 50 };
+      if (big) {
+        y += para(ctx, l.t, PAD, y, cw, { size: S.small, bold: true, color: l.c }) + 14;
+        continue;
+      }
+      if (ctx) text(ctx, l.t, PAD, y, { size: S.small, bold: true, color: l.c, maxWidth: cw });
       y += 60;
     }
     if (hintLines.length) y += 10;
@@ -263,16 +338,15 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       const opts = [{ id: null, label: 'Self-publish', cost: 'Keep it all' }, ...ds.map((d) => ({ id: d.id, label: d.short, scope: d.scope, cost: 'Advance paid' }))];
       const half = (cw - 20) / 2;
       opts.forEach((o, i) =>
-        chip({ x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.deal === o.id, () => {
+        chip(big ? cell(i, 2) : { x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.deal === o.id, () => {
           setup.deal = o.id;
           if (o.scope && scopeOpen(o.scope)) setup.scope = o.scope;
         }, { id: `deal:${o.id ?? 'self'}`, cost: o.cost }),
       );
-      y += Math.ceil(opts.length / 2) * 130 + 10;
+      y += big ? rowsOf(opts.length, 2) * CG + 10 : Math.ceil(opts.length / 2) * 130 + 10;
       const d = ds.find((x) => x.id === setup.deal);
       const why = d ? dealWhy(d.id, setup) : null;
-      if (ctx) text(ctx, d ? why ?? d.terms : 'You keep every sale. Pick a signed deal to publish with it.', PAD, y, { size: S.small, color: why ? C.bad : d ? C.actionDark : C.textMuted, maxWidth: cw });
-      y += 70;
+      line(d ? why ?? d.terms : 'You keep every sale. Pick a signed deal to publish with it.', why ? C.bad : d ? C.actionDark : C.textMuted);
     }
     // Engine (Milestone 16): only once the studio has one.
     const engs = engineChoices(setup.recipe.technology);
@@ -281,21 +355,20 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       heading('Engine', setup.engine ? engs.find((e) => e.version.id === setup.engine)?.label : 'Licensed technology');
       const opts = [{ id: null, label: 'Licensed', ok: true }, ...engs.map((e) => ({ id: e.version.id, label: `${e.engine.name} ${e.version.label}`, ok: e.ok, why: e.why }))];
       const half = (cw - 20) / 2;
-      opts.forEach((o, i) => chip({ x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.engine === o.id, () => (setup.engine = o.id), { id: `engine:${o.id ?? 'licensed'}`, locked: !o.ok }));
-      y += Math.ceil(opts.length / 2) * 130 + 10;
+      opts.forEach((o, i) => chip(big ? cell(i, 2) : { x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * 130, w: half, h: 110 }, o.label, setup.engine === o.id, () => (setup.engine = o.id), { id: `engine:${o.id ?? 'licensed'}`, locked: !o.ok }));
+      y += big ? rowsOf(opts.length, 2) * CG + 10 : Math.ceil(opts.length / 2) * 130 + 10;
       const fx = setup.engine ? engineEffects(setup.engine, setup.recipe.technology) : null;
-      const line = fx ? `Graphics ${fx.output.graphics >= 0 ? '+' : ''}${fx.output.graphics}, Polish ${fx.output.polish >= 0 ? '+' : ''}${fx.output.polish}, Innovation +${fx.output.innovation}, bugs ${fx.bugPct}%, progress +${fx.progressPct}%` : engs.find((e) => !e.ok)?.why ? `Some versions can't make this Technology: ${engs.find((e) => !e.ok).why.toLowerCase()}` : 'Licensed technology: no own-engine effects, no upkeep.';
-      if (ctx) text(ctx, line, PAD, y, { size: S.small, color: fx ? C.actionDark : C.textMuted, maxWidth: cw });
-      y += 70;
+      const engLine = fx ? `Graphics ${fx.output.graphics >= 0 ? '+' : ''}${fx.output.graphics}, Polish ${fx.output.polish >= 0 ? '+' : ''}${fx.output.polish}, Innovation +${fx.output.innovation}, bugs ${fx.bugPct}%, progress +${fx.progressPct}%` : engs.find((e) => !e.ok)?.why ? `Some versions can't make this Technology: ${engs.find((e) => !e.ok).why.toLowerCase()}` : 'Licensed technology: no own-engine effects, no upkeep.';
+      line(engLine, fx ? C.actionDark : C.textMuted);
     }
 
     // Scope, audio, budget.
     // Scope: three to a row; locked ones greyed, why under them. Then this team's estimate and deadline.
     const third = (cw - 40) / 3;
-    const grid = (i) => ({ x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
+    const grid = (i) => (big ? cell(i, 3) : { x: PAD + (i % 3) * (third + 20), y: y + Math.floor(i / 3) * 130, w: third, h: 110 });
     heading('Scope');
     SCOPES.forEach((sc, i) => chip(grid(i), sc.name, setup.scope === sc.id, () => (setup.scope = sc.id), { id: `scope:${sc.id}`, reqLock: !!setup.request && sc.id !== setup.scope, cost: `${costPerDay(sc.id, setup.budget, setup.type, setup.localise).toLocaleString('en-GB')} Cr / day`, locked: !scopeOpen(sc.id) || (setup.type === 'remaster' && setup.source != null && setup.scope !== sc.id) }));
-    y += Math.ceil(SCOPES.length / 3) * 130 + 10;
+    y += big ? rowsOf(SCOPES.length, 3) * CG + 10 : Math.ceil(SCOPES.length / 3) * 130 + 10;
     const firstLocked = SCOPES.find((sc) => !scopeOpen(sc.id));
     const lines = [{ t: scope().line, c: C.text }];
     if (estimate && setup.team.length) {
@@ -305,6 +378,10 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     if (setup.team.length < scope().team.min) lines.push({ t: `Short-staffed: ${scope().name} usually has ${scope().team.min}–${scope().team.max} people. It still works, just slower.`, c: C.bad });
     if (firstLocked) lines.push({ t: `${firstLocked.name} and up: ${scopeReason(firstLocked.id)?.replace('Needs', 'need') ?? 'locked'} and later stages.`, c: C.textMuted });
     for (const l of lines) {
+      if (big) {
+        y += para(ctx, l.t, PAD, y, cw, { size: S.small, color: l.c }) + 10;
+        continue;
+      }
       if (ctx) text(ctx, l.t, PAD, y, { size: S.small, color: l.c, maxWidth: cw });
       y += 48;
     }
@@ -312,25 +389,34 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
     heading('Audio package', AUDIO_PACKAGES.find((a) => a.id === setup.audio).line);
     // Milestone 18: four packages, two to a row, with their price.
     const halfA = (cw - 20) / 2;
-    AUDIO_PACKAGES.forEach((a, i) => chip({ x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}`, cost: audioCost(a.id) ? `${audioCost(a.id).toLocaleString('en-GB')} Cr` : 'Free' }));
-    y += (Math.ceil(AUDIO_PACKAGES.length / 2) - 1) * 130;
-    y += 150; // chips are button height (110)
+    AUDIO_PACKAGES.forEach((a, i) => chip(big ? cell(i, 2) : { x: PAD + (i % 2) * (halfA + 20), y: y + Math.floor(i / 2) * 130, w: halfA, h: 110 }, a.name, setup.audio === a.id, () => (setup.audio = a.id), { id: `audio:${a.id}`, cost: audioCost(a.id) ? `${audioCost(a.id).toLocaleString('en-GB')} Cr` : 'Free' }));
+    if (big) y += rowsOf(AUDIO_PACKAGES.length, 2) * CG + 20;
+    else {
+      y += (Math.ceil(AUDIO_PACKAGES.length / 2) - 1) * 130;
+      y += 150; // chips are button height (110)
+    }
     // Milestone 21: localisation. A Global deal pays it (always on); otherwise Off / On once it is open.
     const globalDeal = setup.deal ? deals().find((d) => d.id === setup.deal)?.global : null;
     const locWhy = localisationWhy();
     if (globalDeal) setup.localise = 'publisher';
     else if (setup.localise === 'publisher' || (setup.localise === 'on' && locWhy)) setup.localise = 'off';
     heading('Localisation', globalDeal ? `Paid by ${globalDeal}` : setup.localise === 'on' ? 'On' : 'Off');
-    [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }].forEach((o, i) => chip({ x: PAD + i * (halfA + 20), y, w: halfA, h: 110 }, o.label, setup.localise === o.id || (o.id === 'on' && setup.localise === 'publisher'), () => (setup.localise = o.id), { id: `loc:${o.id}`, locked: !!globalDeal || (o.id === 'on' && !!locWhy), cost: o.id === 'on' ? `+${LOCALISATION.costPct}% cost` : 'Free' }));
-    y += 130;
+    [{ id: 'off', label: 'Off' }, { id: 'on', label: 'On' }].forEach((o, i) => chip(big ? cell(i, 2) : { x: PAD + i * (halfA + 20), y, w: halfA, h: 110 }, o.label, setup.localise === o.id || (o.id === 'on' && setup.localise === 'publisher'), () => (setup.localise = o.id), { id: `loc:${o.id}`, locked: !!globalDeal || (o.id === 'on' && !!locWhy), cost: o.id === 'on' ? `+${LOCALISATION.costPct}% cost` : 'Free' }));
+    y += big ? CG : 130;
     const locText = globalDeal ? `${globalDeal} localises it for free: ${localisationLine('publisher')}` : locWhy ?? localisationLine(setup.localise);
-    if (ctx) text(ctx, locText, PAD, y, { size: S.small, color: globalDeal ? C.good : locWhy ? C.textMuted : C.actionDark, maxWidth: cw });
-    y += 72;
+    if (big) y += para(ctx, locText, PAD, y, cw, { size: S.small, color: globalDeal ? C.good : locWhy ? C.textMuted : C.actionDark }) + 30;
+    else {
+      if (ctx) text(ctx, locText, PAD, y, { size: S.small, color: globalDeal ? C.good : locWhy ? C.textMuted : C.actionDark, maxWidth: cw });
+      y += 72;
+    }
     heading('Budget focus');
     BUDGET_FOCUS.forEach((b, i) => chip(grid(i), b.name, setup.budget === b.id, () => (setup.budget = b.id), { id: `budget:${b.id}`, cost: pctCost(PROJECT_BALANCE.budgetFocus[b.id]?.costPct ?? 0) }));
-    y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
-    if (ctx) text(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
-    y += 72;
+    y += big ? rowsOf(BUDGET_FOCUS.length, 3) * CG + 10 : Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
+    if (big) y += para(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, cw, { size: S.small, color: C.textMuted }) + 30;
+    else {
+      if (ctx) text(ctx, `${BUDGET_FOCUS.find((b) => b.id === setup.budget).line} Changes wait for the next milestone.`, PAD, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+      y += 72;
+    }
 
     // Core team (Milestone 13: everyone, by role; busy people greyed; a missing role gets its hint).
     const { min, max } = scope().team;
@@ -340,7 +426,10 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       const people = world.staffSystem.staff.filter((s) => s.role === role);
       if (!people.length) {
         const h = roleHints.find((x) => x.role === role);
-        const r = { x: PAD, y, w: cw, h: h ? 240 : 130 }; // Milestone 34: room for a full-size (110) button
+        const msg = h?.extraDays ? `No ${ROLES[role].name} yet: about ${h.extraDays} more day${h.extraDays === 1 ? '' : 's'} without one` : `No ${ROLES[role].name} yet (it still works, just slower)`;
+        const msgH = big ? para(null, msg, 0, 0, cw - 48, { size: S.body }) : 0;
+        const btnH = big ? Math.max(110, lineH(S.small, 1.2) * 2 + 24) : 110;
+        const r = big ? { x: PAD, y, w: cw, h: 18 + lineH(S.small, 1.2) + msgH + (h?.candidate && onFindRole ? btnH + 24 : 0) + 20 } : { x: PAD, y, w: cw, h: h ? 240 : 130 }; // Milestone 34: room for a full-size (110) button
         if (ctx) {
           ctx.fillStyle = C.panelDim;
           ctx.strokeStyle = h ? C.warn : C.line;
@@ -350,18 +439,22 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
           ctx.fill();
           ctx.stroke();
           text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted });
-          text(ctx, h?.extraDays ? `No ${ROLES[role].name} yet: about ${h.extraDays} more day${h.extraDays === 1 ? '' : 's'} without one` : `No ${ROLES[role].name} yet (it still works, just slower)`, r.x + 24, r.y + 62, { size: S.body, color: h ? C.bad : C.textFaint, maxWidth: r.w - 48 });
+          if (big) para(ctx, msg, r.x + 24, r.y + 18 + lineH(S.small, 1.2), r.w - 48, { size: S.body, color: h ? C.bad : C.textFaint });
+          else text(ctx, h?.extraDays ? `No ${ROLES[role].name} yet: about ${h.extraDays} more day${h.extraDays === 1 ? '' : 's'} without one` : `No ${ROLES[role].name} yet (it still works, just slower)`, r.x + 24, r.y + 62, { size: S.body, color: h ? C.bad : C.textFaint, maxWidth: r.w - 48 });
         }
         if (h?.candidate && onFindRole) {
-          const b = { x: r.x + 24, y: r.y + 110, w: r.w - 48, h: 110 };
-          if (ctx) drawButton(ctx, b, `Meet ${h.candidate.name} at the Recruitment Desk`, { accent: C.progress, font: font(S.small, true) });
+          const b = big ? { x: r.x + 24, y: r.y + 18 + lineH(S.small, 1.2) + msgH + 12, w: r.w - 48, h: btnH } : { x: r.x + 24, y: r.y + 110, w: r.w - 48, h: 110 };
+          if (ctx && big) {
+            drawButton(ctx, b, '', { accent: C.progress });
+            para(ctx, `Meet ${h.candidate.name} at the Recruitment Desk`, b.x + 20, b.y + (b.h - THEME.button.lip - para(null, `Meet ${h.candidate.name} at the Recruitment Desk`, 0, 0, b.w - 40, { size: S.small, bold: true, maxLines: 2, lead: 1.2 })) / 2, b.w - 40, { size: S.small, bold: true, align: 'center', color: C.textOnAction, maxLines: 2, lead: 1.2 });
+          } else if (ctx) drawButton(ctx, b, `Meet ${h.candidate.name} at the Recruitment Desk`, { accent: C.progress, font: font(S.small, true) });
           box(b, () => onFindRole(role), `find:${role}`);
         }
         y += r.h + 20;
         continue;
       }
       for (const person of people) {
-      const r = { x: PAD, y, w: cw, h: 130 };
+      const r = { x: PAD, y, w: cw, h: big ? Math.max(130, lineH(S.small, 1.2) * 2 + lineH(S.body, 1.2) + 28) : 130 };
       const busy = setup.team.includes(person.id) ? null : unavailable(person.id);
       const on = setup.team.includes(person.id);
       if (ctx) {
@@ -372,8 +465,21 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         ctx.roundRect(r.x, r.y, r.w, r.h, 22);
         ctx.fill();
         ctx.stroke();
-        text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted });
-        if (person) {
+        if (!big) text(ctx, `${ROLES[role].name} lead`, r.x + 24, r.y + 18, { size: S.small, color: C.textMuted }); // Milestone 41i: big text draws its own rows below
+        if (person && big) {
+          // Milestone 41i: role, name, then the main stat and the state, each on its own line; the face on the right.
+          const face = staffFace(person.art);
+          const fs = Math.min(130, r.h - 20);
+          assets.drawCrop(ctx, face.key, face.crop, { x: r.x + r.w - fs - 16, y: r.y + (r.h - fs) / 2, w: fs, h: fs });
+          const tw = r.w - fs - 64;
+          const main = STATS.find((st) => st.key === ROLES[role].primaryStat);
+          let ty = r.y + 12;
+          text(ctx, `${ROLES[role].name} lead`, r.x + 24, ty, { size: S.small, color: C.textMuted, maxWidth: tw });
+          ty += lineH(S.small, 1.2);
+          text(ctx, person.name, r.x + 24, ty, { size: S.body, bold: true, maxWidth: tw });
+          ty += lineH(S.body, 1.2);
+          text(ctx, `${main.label} ${person.stats[main.key]} · ${on ? '✓ In the team' : busy ?? 'Tap to add'}`, r.x + 24, ty, { size: S.small, bold: true, color: on ? C.progress : busy ? C.bad : C.actionDark, maxWidth: tw });
+        } else if (person) {
           const face = staffFace(person.art);
           assets.drawCrop(ctx, face.key, face.crop, { x: r.x + r.w - 130, y: r.y + 10, w: 110, h: 110 });
           text(ctx, person.name, r.x + 24, r.y + 58, { size: S.body, bold: true });
@@ -383,7 +489,7 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         }
       }
       if (person && !busy) box(r, () => (setup.team = on ? setup.team.filter((id) => id !== person.id) : [...setup.team, person.id]), person.id);
-      y += 150;
+      y += big ? r.h + 20 : 150;
       }
     }
     return { height: y + PAD, hit };
@@ -429,6 +535,11 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
         setup.team = [...firsts, ...free.filter((s) => !firsts.includes(s))].map((s) => s.id).slice(0, sc?.team.max ?? 3);
       }
       scroll.scrollY = 0;
+      moreOpen = false;
+    },
+    scrollToEnd() {
+      scroll.contentHeight = pass(null, null).height;
+      scroll.scrollY = scroll.maxScroll;
     },
     exit() {
       textPrompt.close();
@@ -472,7 +583,14 @@ export function createNewProjectScreen({ layout, assets, world, topBar, openPick
       scroll.end(ctx);
       const miss = missing();
       const sr = startRect();
-      drawButton(ctx, sr, miss.length ? `Start — needs ${miss.join(', ')}` : `Start "${setup.title.trim()}"`, { disabled: miss.length > 0, font: font(miss.length ? S.body : S.button, true) });
+      if (isBig()) {
+        // Milestone 41i: "Start" big, what is missing (or the title) on a smaller second line.
+        drawButton(ctx, sr, '', { disabled: miss.length > 0 });
+        const fg = miss.length ? C.textFaint : C.textOnAction;
+        const top = sr.y + (sr.h - lineH(S.button, 1.1) - lineH(S.small, 1.2)) / 2;
+        text(ctx, 'Start', sr.x + sr.w / 2, top, { size: S.button, bold: true, align: 'center', color: fg });
+        text(ctx, miss.length ? `Needs ${miss.join(', ')}` : `"${setup.title.trim()}"`, sr.x + sr.w / 2, top + lineH(S.button, 1.1), { size: S.small, bold: true, align: 'center', color: fg, maxWidth: sr.w - 40 });
+      } else drawButton(ctx, sr, miss.length ? `Start — needs ${miss.join(', ')}` : `Start "${setup.title.trim()}"`, { disabled: miss.length > 0, font: font(miss.length ? S.body : S.button, true) });
       topBar.render(ctx);
     },
   };

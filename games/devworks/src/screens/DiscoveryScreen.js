@@ -2,7 +2,8 @@
 // account's archive), each with its name, the recipe it was found with (the element icons), what it gives, and where
 // it was found (this studio, or an earlier one). Combos nobody has found yet stay hidden — only the count shows.
 // Drag scrolls.
-import { THEME } from '../../../../core/Theme.js';
+import { THEME, lineH } from '../../../../core/Theme.js';
+import { isBig, fitLine, grow } from '../ui/bigText.js'; // Milestone 41i: big text on the Fold cover
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementById } from '../../data/elements.js';
@@ -29,8 +30,9 @@ export function createDiscoveryScreen({ layout, assets, combos, topBar }) {
     const cw = w - PAD * 2;
     const list = combos.found();
     text(ctx, 'Discovery Archive', PAD, PAD, { size: S.title, bold: true });
-    text(ctx, list.length ? `${list.length} combo${list.length === 1 ? '' : 's'} found · more are still secret` : 'No combos found yet. Some recipes just work together.', PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw }); // Milestone 32: never a total of unrevealed items
-    let y = HEAD_H;
+    const sub = list.length ? `${list.length} combo${list.length === 1 ? '' : 's'} found · more are still secret` : 'No combos found yet. Some recipes just work together.'; // Milestone 32: never a total of unrevealed items
+    const subY = PAD + grow(84, lineH(S.title, 1.15) + 6);
+    let y = Math.max(HEAD_H, subY + fitLine(ctx, sub, PAD, subY, cw, { size: S.body, color: C.textMuted }, 0) + 20);
     for (const f of list) {
       const h = cardH(f, cw + 16);
       const r = { x: PAD - 8, y, w: cw + 16, h };

@@ -5,7 +5,9 @@
 import { THEME, font } from '../../../../core/Theme.js';
 import { ScrollList } from '../../../../core/ui/ScrollList.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
-import { drawStaffCard, STAFF_CARD_HEIGHT } from '../../../../core/ui/StaffCard.js';
+import { drawStaffCard, STAFF_CARD_HEIGHT, staffCardHeight } from '../../../../core/ui/StaffCard.js';
+import { isBig } from '../ui/bigText.js'; // Milestone 41i
+import { lineH } from '../../../../core/Theme.js';
 import { WORK_STATE } from '../../data/studio.js';
 import { STATS, ROLES, TIERS, TRAITS } from '../../data/staff.js';
 import { STATUS_ICONS } from '../../data/home.js';
@@ -35,12 +37,12 @@ export function staffCardView(world, w) {
 export function createRosterScreen({ renderer, layout, assets, world, topBar, openStaff, onHire = null }) {
   const hireRect = () => {
     const h = headRect();
-    return { x: h.x + h.w - 300, y: h.y, w: 300, h: h.h };
+    return { x: h.x + h.w - 300, y: h.y, w: 300, h: 110 };
   };
   const W = renderer.width;
   const headRect = () => {
     const t = topBar.rect();
-    return { x: layout.safeRect.x + 32, y: t.y + t.h + 20, w: layout.safeRect.w - 64, h: 110 };
+    return { x: layout.safeRect.x + 32, y: t.y + t.h + 20, w: layout.safeRect.w - 64, h: isBig() ? 110 + lineH(S.body, 1.3) : 110 }; // Milestone 41i: the count line under the title at big text
   };
   const listRect = () => {
     const h = headRect();
@@ -53,6 +55,8 @@ export function createRosterScreen({ renderer, layout, assets, world, topBar, op
     gap: 20,
     renderItem: (ctx, w, r) => drawStaffCard(ctx, r, staffCardView(world, w), assets),
   });
+  // Milestone 41i: the card grows with the text size (core staffCardHeight: 540 at Normal, as before).
+  Object.defineProperty(list, 'itemHeight', { get: () => (isBig() ? staffCardHeight() : STAFF_CARD_HEIGHT), set() {} });
 
   return {
     list,
@@ -90,10 +94,12 @@ export function createRosterScreen({ renderer, layout, assets, world, topBar, op
       ctx.textBaseline = 'middle';
       ctx.fillStyle = C.text;
       ctx.font = font(S.title, true);
-      ctx.fillText('Staff', h.x, h.y + h.h / 2);
+      const big = isBig();
+      ctx.fillText('Staff', h.x, big ? h.y + 55 : h.y + h.h / 2);
       ctx.fillStyle = C.textMuted;
       ctx.font = font(S.body);
-      ctx.fillText(`${world.workers.length} of ${world.staffCap ?? world.workers.length} · tap a card`, h.x + 150, h.y + h.h / 2, W * 0.45);
+      if (big) ctx.fillText(`${world.workers.length} of ${world.staffCap ?? world.workers.length} · tap a card`, h.x, h.y + 110 + lineH(S.body, 1.3) / 2, h.w);
+      else ctx.fillText(`${world.workers.length} of ${world.staffCap ?? world.workers.length} · tap a card`, h.x + 150, h.y + h.h / 2, W * 0.45);
       if (onHire) drawButton(ctx, hireRect(), 'Hire', { accent: C.good, font: font(S.button, true) });
       else {
         ctx.textAlign = 'right';

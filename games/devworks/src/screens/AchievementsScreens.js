@@ -26,6 +26,7 @@ export function createAchievementsScreen({ layout, assets, topBar, achievements 
         logo: x.def.icon ?? 'dev_ui_04',
         title: `${x.def.n}. ${x.def.name}${x.earned ? ' ✓' : ''}`,
         highlight: !!x.earned,
+        bigTitle: `${x.def.name}${x.earned ? ' ✓' : ''}`, // Milestone 41i: no number in front at big text
         lines: [
           x.def.text,
           ...(x.earned ? [{ text: `Earned ${runLabel(x.earned)}`, color: C.good, bold: true }] : x.progress ? [{ text: `${fmt(x.progress.value)} / ${fmt(x.progress.target)}`, color: C.actionDark }] : []),
@@ -62,14 +63,16 @@ export function createHallOfFameScreen({ layout, assets, topBar, achievements, m
         lines: [
           { text: `${e.kind === 'game' ? 'Game' : e.kind === 'engine' ? 'Engine' : 'Console'} · ${e.why.join(' · ')}`, color: C.purple, bold: true },
           e.kind === 'game' ? `Review ${e.numbers.review} · ${fmt(e.numbers.copies)} copies · ${fmt(e.numbers.revenue)} Credits` : e.kind === 'engine' ? `${e.numbers.customers} licence customers` : `${fmt(e.numbers.units)} sold · install base ${fmt(e.numbers.installBase)}`,
-          ...(e.staff?.length ? [{ text: `Credits: ${e.staff.join(', ')}`, color: C.textMuted }] : []),
-          { text: `Inducted ${runLabel(e)}`, color: C.textMuted },
+          ...(e.staff?.length ? [{ text: `Credits: ${e.staff.join(', ')}`, color: C.textMuted, more: true }] : []), // Milestone 41i: behind "More" at big text
+          { text: `Inducted ${runLabel(e)}`, color: C.textMuted, more: true },
         ],
         buttons: [],
       });
       const recCards = RECORD_DEFS.map((d) => {
         const r = recs.get(d.id);
-        return { id: `rec-${d.id}`, logo: 'dev_reward_10', title: `${d.name}: ${r ? (d.id === 'highestRank' ? `Rank ${r.info.rank ?? r.value}` : fmt(r.value)) : '—'}`, lines: r ? [{ text: `${r.info.title ?? r.info.console ?? r.info.rank ?? ''}${r.info.title || r.info.console || r.info.rank ? ' · ' : ''}${runLabel(r.info)}`, color: C.textMuted }] : [{ text: 'Not set yet', color: C.textMuted }], buttons: [] };
+        // Milestone 41i: at big text the record's name, then its number on its own row (bigger and bolder than the words).
+        const value = r ? (d.id === 'highestRank' ? `Rank ${r.info.rank ?? r.value}` : fmt(r.value)) : null;
+        return { id: `rec-${d.id}`, logo: 'dev_reward_10', bigTitle: d.name, value, valueColor: r ? C.actionDark : C.textFaint, title: `${d.name}: ${r ? (d.id === 'highestRank' ? `Rank ${r.info.rank ?? r.value}` : fmt(r.value)) : '—'}`, lines: r ? [{ text: `${r.info.title ?? r.info.console ?? r.info.rank ?? ''}${r.info.title || r.info.console || r.info.rank ? ' · ' : ''}${runLabel(r.info)}`, color: C.textMuted }] : [{ text: 'Not set yet', color: C.textMuted }], buttons: [] };
       });
       return {
         title: 'Hall of Fame',

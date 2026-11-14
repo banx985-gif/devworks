@@ -4,10 +4,10 @@
 // (src/ui/ideaInfo.js: fit with your genre — "?" until that pairing has shipped — who is good at it, how hard it is,
 // what it plays to) and the big Choose button puts it in the recipe and goes back to New Game.
 // Milestone 40h: an element's mastery (1–3 small stars on its card; a Mastery row in the strip).
-import { THEME, font } from '../../../../core/Theme.js';
+import { THEME, font, lineH, textScale } from '../../../../core/Theme.js';
 import { drawButton, drawPadlock, hitRect } from '../../../../core/ui/Button.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
-import { text } from '../../../../core/ui/Kit.js';
+import { text, para } from '../../../../core/ui/Kit.js';
 import { FAMILIES, elementsOf, needsProblem } from '../../data/elements.js';
 import { ideaInfo } from '../ui/ideaInfo.js';
 
@@ -16,6 +16,11 @@ const S = THEME.size;
 const PAD = 24;
 const GAP = 20;
 const STRIP_H = 450;
+// Milestone 41i (Larger = 1.8× on the Fold cover): two cards to a row, the name and its tag on their own lines; the info
+// strip shows each fact on its own row ("Fit: Great — …", wrapping), the first three, with the rest behind "More"; the
+// Choose button across the bottom. Normal and Large are drawn exactly as before.
+const BIG_TEXT = 1.6;
+const isBig = () => textScale() >= BIG_TEXT;
 const FIT_COL = { Great: C.good, Good: C.progress, OK: C.actionDark, Poor: C.bad, '?': C.textMuted };
 export const MASTERY_COL = '#C98A0B'; // Milestone 40h: the mastery stars' gold
 
@@ -40,6 +45,8 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
   let family = 'genre';
   let selected = null;
   let rects = []; // content-space { id, r }
+  let more = false; // Milestone 41i: the strip's other facts (big text)
+  let moreRect = null;
   const fam = () => FAMILIES.find((f) => f.id === family) ?? FAMILIES[0];
   const area = () => {
     const t = topBar.rect();
@@ -47,16 +54,25 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
     const y = t.y + t.h + 16;
     return { x: sr.x + 16, y, w: sr.w - 32, h: sr.y + sr.h - 16 - y };
   };
+  const titleH = () => (isBig() ? lineH(S.title, 1.15) + 20 : 110);
+  const btnH = () => (isBig() ? Math.max(110, lineH(S.button, 1.6)) : 110);
+  const stripH = () => {
+    if (!isBig()) return STRIP_H;
+    const a = area();
+    const base = lineH(S.heading, 1.2) + 3 * (2 * lineH(S.small, 1.2) + 12) + Math.max(84, lineH(S.small, 1.9)) + btnH() + 90;
+    return Math.round(Math.min(a.h * (more ? 0.82 : 0.5), more ? a.h * 0.82 : base));
+  };
   const gridRect = () => {
     const a = area();
-    return { x: a.x, y: a.y + 110, w: a.w, h: a.h - 110 - STRIP_H - 16 };
+    return { x: a.x, y: a.y + titleH(), w: a.w, h: a.h - titleH() - stripH() - 16 };
   };
   const stripRect = () => {
     const a = area();
-    return { x: a.x, y: a.y + a.h - STRIP_H, w: a.w, h: STRIP_H };
+    return { x: a.x, y: a.y + a.h - stripH(), w: a.w, h: stripH() };
   };
   const chooseRect = () => {
     const s = stripRect();
+    if (isBig()) return { x: s.x + 24, y: s.y + s.h - 24 - btnH(), w: s.w - 48, h: btnH() };
     return { x: s.x + s.w - 24 - Math.min(380, s.w * 0.36), y: s.y + s.h - 24 - 110, w: Math.min(380, s.w * 0.36), h: 110 };
   };
   const scroll = new ScrollPanel({ getRect: gridRect });
@@ -69,9 +85,11 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
   const pickable = (x) => x && x.open && !x.clash;
 
   function drawGrid(ctx, w) {
-    const cols = Math.max(3, Math.floor((w + GAP) / 300));
+    const big = isBig();
+    const cols = big ? Math.max(2, Math.floor((w + GAP) / 520)) : Math.max(3, Math.floor((w + GAP) / 300));
     const cw = (w - GAP * (cols - 1)) / cols;
-    const ch = cw + 96;
+    const artH = big ? Math.round(cw * 0.62) : cw - 40;
+    const ch = big ? 14 + artH + 10 + lineH(S.body, 1.15) + lineH(S.small, 1.2) + 16 : cw + 96;
     const now = recipe()[family];
     const last = lastUsed(family);
     rects = [];
@@ -88,11 +106,12 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
       ctx.fill();
       ctx.stroke();
       if (!x.open) ctx.globalAlpha = 0.35;
-      assets.drawContained(ctx, x.e.art, { x: r.x + 16, y: r.y + 14, w: r.w - 32, h: r.w - 40 });
+      assets.drawContained(ctx, x.e.art, { x: r.x + 16, y: r.y + 14, w: r.w - 32, h: artH });
       ctx.globalAlpha = 1;
-      text(ctx, x.e.name, r.x + r.w / 2, r.y + r.w - 10, { size: S.body, bold: true, align: 'center', color: x.open ? C.text : C.textFaint, maxWidth: r.w - 20 });
+      const ny = big ? r.y + 14 + artH + 10 : r.y + r.w - 10;
+      text(ctx, x.e.name, r.x + r.w / 2, ny, { size: S.body, bold: true, align: 'center', color: x.open ? C.text : C.textFaint, maxWidth: r.w - 20 });
       const tag = !x.open ? x.why : now === x.e.id ? '✓ Chosen' : x.clash ? `Needs ${x.clash.split(' needs ')[1] ?? 'more'}` : null;
-      if (tag) text(ctx, tag, r.x + r.w / 2, r.y + r.w + 36, { size: S.small, bold: true, align: 'center', color: !x.open || x.clash ? C.bad : C.good, maxWidth: r.w - 20 });
+      if (tag) text(ctx, tag, r.x + r.w / 2, big ? ny + lineH(S.body, 1.15) : r.y + r.w + 36, { size: S.small, bold: true, align: 'center', color: !x.open || x.clash ? C.bad : C.good, maxWidth: r.w - 20 });
       if (!x.open) drawPadlock(ctx, r.x + r.w - 40, r.y + 44, 32, C.textFaint);
       const mlv = x.open ? mastery(x.e.id)?.level ?? 0 : 0; // Milestone 40h: element mastery, 1–3 small stars
       if (mlv) drawStars(ctx, r.x + r.w - 18, r.y + 38, mlv);
@@ -120,7 +139,45 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
     ctx.stroke();
     const x = list().find((q) => q.e.id === selected);
     const tw = s.w - 48;
-    if (!x) {
+    moreRect = null;
+    if (isBig()) {
+      // One fact per row, wrapping; the first three, the rest behind "More".
+      const bottom = chooseRect().y - 12;
+      let y = s.y + 20;
+      if (!x) para(ctx, `Tap a card to see how it plays. ${fam().name}: pick one for this game.`, s.x + 24, y, tw, { color: C.textMuted, maxLines: 4 });
+      else {
+        const info = ideaInfo(x.e, { genre: recipe().genre ?? null, shipped });
+        text(ctx, x.e.name, s.x + 24, y, { size: S.heading, bold: true, maxWidth: tw });
+        y += lineH(S.heading, 1.2);
+        const m = mastery(x.e.id);
+        const facts = [
+          ['Fit', info.fit.grade ? `${info.fit.grade} — ${info.fit.line}` : info.fit.line, info.fit.grade ? FIT_COL[info.fit.grade] ?? C.text : C.text],
+          ['Difficulty', info.difficulty, info.difficulty === 'Hard' ? C.bad : info.difficulty === 'Medium' ? C.actionDark : C.good],
+          ...(!x.open ? [['Locked', x.why, C.bad]] : x.clash ? [['Needs', x.clash, C.bad]] : []),
+          ['Who', info.who, C.text],
+          ['Plays to', info.playsTo, C.text],
+          ...(m ? [['Mastery', m.line ? `${'★'.repeat(m.level)} ${m.line}` : m.toNext ? `${m.toNext} more released game${m.toNext === 1 ? '' : 's'} for ★${m.level + 1}` : '★★★', m.level ? MASTERY_COL : C.textMuted]] : []),
+        ];
+        const shown = more ? facts : facts.slice(0, 3);
+        const mh = Math.max(84, lineH(S.small, 1.9));
+        for (const [label, value, color] of shown) {
+          const h = para(null, `${label}: ${value}`, 0, 0, tw, { size: S.small, bold: true, maxLines: 3, lead: 1.2 });
+          if (y + h > bottom - (facts.length > 3 ? mh + 12 : 0)) break;
+          ctx.save();
+          para(ctx, `${label}: ${value}`, s.x + 24, y, tw, { size: S.small, bold: true, color, maxLines: 3, lead: 1.2 });
+          ctx.restore();
+          y += h + 12;
+        }
+        if (facts.length > 3) {
+          moreRect = { x: s.x + 24, y: bottom - mh, w: Math.min(tw, 420), h: mh };
+          ctx.fillStyle = C.panelInfo;
+          ctx.beginPath();
+          ctx.roundRect(moreRect.x, moreRect.y, moreRect.w, moreRect.h, 18);
+          ctx.fill();
+          text(ctx, more ? 'Less ▴' : `More ▾ (${facts.length - 3})`, moreRect.x + moreRect.w / 2, moreRect.y + mh / 2, { size: S.small, bold: true, color: C.progress, align: 'center', baseline: 'middle', maxWidth: moreRect.w - 20 });
+        }
+      }
+    } else if (!x) {
       text(ctx, `Tap a card to see how it plays. ${fam().name}: pick one for this game.`, s.x + 24, s.y + 30, { size: S.body, color: C.textMuted, maxWidth: tw });
     } else {
       const info = ideaInfo(x.e, { genre: recipe().genre ?? null, shipped });
@@ -157,6 +214,7 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
       family = params?.family ?? 'genre';
       selected = recipe()[family] ?? null;
       scroll.scrollY = 0;
+      more = false;
     },
     onDragStart: (p) => scroll.beginDrag(p),
     onDrag: (p) => scroll.drag(p),
@@ -164,6 +222,10 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
     onUp: (p) => scroll.endDrag(p),
     onTap(p) {
       if (topBar.handleTap(p)) return;
+      if (moreRect && hitRect(p, moreRect)) {
+        more = !more; // Milestone 41i
+        return;
+      }
       if (hitRect(p, chooseRect())) {
         const x = list().find((q) => q.e.id === selected);
         if (pickable(x)) onChoose(family, selected);
@@ -188,6 +250,13 @@ export function createIdeaCardsScreen({ layout, assets, topBar, recipe = () => (
       }
     },
     chooseRect,
+    // Milestone 41i (tests): the strip's "More" at big text.
+    toggleMore() {
+      more = !more;
+    },
+    select(id) {
+      selected = id;
+    },
     // Tests: the cards in grid order (id, open, why).
     cards: () => list().map((x) => ({ id: x.e.id, open: x.open, why: x.why, clash: x.clash })),
     // Tests: the info strip of the selected card.

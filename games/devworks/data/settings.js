@@ -46,7 +46,7 @@ export const SETTINGS = [
 export const SETTINGS_DEFAULTS = { muted: false, musicMuted: false, sfxMuted: false, screenShake: 'normal', showMenu: true, showHints: true, fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, textSizeChosen: false, showVisitors: true, colourBlindSymbols: false, statsMode: 'simple' };
 export const SHAKE_LEVELS = { off: 0, low: 0.5, normal: 1 }; // Milestone 40e: shake strength for each choice
 export const TEXT_SPEED = { fast: 0.7, normal: 1, slow: 1.6 }; // banner time multiplier
-export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.5 }; // Milestone 38: three UI-scale steps; Milestone 41e: Larger 1.3 → 1.5 (the Fold cover screen)
+export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.8 }; // Milestone 38: three UI-scale steps; Milestone 41e: Larger 1.3 → 1.5; Milestone 41i: → 1.8 (about 16 px body text on the Fold cover screen)
 // Milestone 41e: until the player picks a text size, a very narrow screen (the Fold's cover screen, ~320 CSS px wide) gets
 // Larger and any other Normal — folding or unfolding the phone switches between them (BOTWORKS M38's rule).
 export const TEXT_AUTO = { narrowCss: 360, narrow: 'larger', wide: 'normal' };

@@ -6,7 +6,10 @@
 // Layout and tapping share one pass, so they never disagree. Drag scrolls.
 // Milestone 41e (bigger text, the Fold's cover screen): every gap is measured from the real line heights at the chosen
 // text size (core Theme lineH), and a card's buttons go one per row when their labels don't fit side by side.
-import { THEME, lineH, font } from '../../../../core/Theme.js';
+// Milestone 41i (Larger = 1.8× on the Fold cover): at big text the long subtitle shows its first sentence and the rest
+// behind "More"; a card may give bigTitle + value (the number on its own row, bigger and bolder than the words) and
+// lines marked more: true, which wait behind the card's own "More" tap. Normal and Large are drawn exactly as before.
+import { THEME, lineH, font, textScale } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
@@ -40,6 +43,22 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
   };
   const scroll = new ScrollPanel({ getRect: panelRect });
   let hits = [];
+  let moreOpen = new Set(); // Milestone 41i: 'subtitle' and card ids opened with "More"
+  const BIG = () => textScale() >= 1.6;
+  const moreBtnH = () => Math.max(84, lineH(S.small, 1.9));
+  function moreButton(ctx, x, y, w, key, n) {
+    const r = { x, y, w, h: moreBtnH() };
+    const isOpen = moreOpen.has(key);
+    if (ctx) {
+      ctx.fillStyle = C.panelInfo;
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, 18);
+      ctx.fill();
+      text(ctx, isOpen ? 'Less ▴' : `More ▾${n ? ` (${n})` : ''}`, r.x + r.w / 2, r.y + r.h / 2, { size: S.small, bold: true, color: C.progress, align: 'center', baseline: 'middle', maxWidth: r.w - 20 });
+    }
+    hits.push({ id: `more:${key}`, r, b: { onTap: () => (isOpen ? moreOpen.delete(key) : moreOpen.add(key)) } });
+    return r.h;
+  }
 
   // One pass: draws when ctx is given; always records the buttons (content coordinates). Returns the height.
   function pass(ctx, w) {
@@ -50,7 +69,16 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
     if (m.icon && ctx) assets.drawContained(ctx, m.icon, { x: PAD, y: y - 6, w: 90, h: 90 });
     if (ctx) text(ctx, m.title, PAD + (m.icon ? 110 : 0), y, { size: S.title, bold: true, maxWidth: cw - 110 });
     y += Math.max(100, lineH(S.title, 1.15) + 24);
-    if (m.subtitle) {
+    const big = BIG();
+    if (m.subtitle && big) {
+      // The first sentence; the rest behind "More".
+      const cut = m.subtitle.search(/[.;](\s|$)/);
+      const first = cut > 0 && cut < m.subtitle.length - 2 ? m.subtitle.slice(0, cut + 1) : m.subtitle;
+      const shown = moreOpen.has('subtitle') ? m.subtitle : first;
+      y += para(ctx, shown, PAD, y, cw, { color: C.textMuted }) + 12;
+      if (first !== m.subtitle) y += moreButton(ctx, PAD, y, Math.min(cw, 420), 'subtitle', 0) + 24;
+      else y += 12;
+    } else if (m.subtitle) {
       if (ctx) para(ctx, m.subtitle, PAD, y, cw, { color: C.textMuted });
       y += wrapLines(m.subtitle, cw, S.body).length * lineH(S.body) + 24;
     }
@@ -69,11 +97,15 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
         const sideH = (c.logo ? LOGO : 0) + (face ? (c.logo ? 16 : 0) + FACE : 0);
         const tx = sideH ? LOGO + 40 : 24;
         const tw = cw + 16 - tx - 24;
-        const lines = c.lines.map((l) => mark(typeof l === 'string' ? { text: l } : l));
+        const allLines = c.lines.map((l) => mark(typeof l === 'string' ? { text: l } : l));
+        const hidden = big ? allLines.filter((l) => l.more).length : 0;
+        const lines = big && !moreOpen.has(c.id) ? allLines.filter((l) => !l.more) : allLines;
         const linesH = lines.reduce((t, l) => t + wrapLines(l.text, tw, S.small, l.bold).length * lineH(S.small) + 8, 0);
-        const titleLines = wrapLines(c.title, tw, S.body, true);
-        const titleH = Math.max(58, titleLines.length * lineH(S.body, 1.15) + 22);
-        const bodyH = Math.max(sideH ? sideH + 10 : 0, titleH + 12 + linesH);
+        const titleLines = wrapLines(big && c.bigTitle ? c.bigTitle : c.title, tw, S.body, true);
+        const valueH = big && c.value != null ? lineH(S.heading, 1.2) + 4 : 0;
+        const titleH = Math.max(58, titleLines.length * lineH(S.body, 1.15) + 22) + valueH;
+        const moreH = hidden ? moreBtnH() + 12 : 0;
+        const bodyH = Math.max(sideH ? sideH + 10 : 0, titleH + 12 + linesH + moreH);
         // Buttons side by side while every label fits its share of the width; otherwise one per row (Milestone 41e).
         const nB = c.buttons?.length ?? 0;
         const share = nB ? (cw + 16 - 40 - (nB - 1) * 16) / nB : 0;
@@ -91,9 +123,11 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
           if (c.logo) assets.drawContained(ctx, c.logo, { x: r.x + 20, y: r.y + 24, w: LOGO, h: LOGO });
           if (face) drawCastFace(ctx, assets, face, { x: r.x + 20 + (LOGO - FACE) / 2, y: r.y + 24 + (c.logo ? LOGO + 16 : 0), w: FACE, h: FACE });
           titleLines.forEach((l, i) => text(ctx, l, r.x + tx, r.y + 22 + i * lineH(S.body, 1.15), { size: S.body, bold: true, maxWidth: tw }));
+          if (valueH) text(ctx, String(c.value), r.x + tx, r.y + 22 + titleLines.length * lineH(S.body, 1.15) + 6, { size: S.heading, bold: true, color: c.valueColor ?? C.text, maxWidth: tw });
           let ly = r.y + 22 + titleH;
           for (const l of lines) ly += para(ctx, l.text, r.x + tx, ly, tw, { size: S.small, color: l.color ?? C.text, bold: l.bold }) + 8;
         }
+        if (hidden) moreButton(ctx, r.x + tx, r.y + 22 + titleH + linesH + 4, Math.min(tw, 360), c.id, hidden);
         if (c.buttons?.length) {
           const n = c.buttons.length;
           const bw = stack ? r.w - 40 : (r.w - 40 - (n - 1) * 16) / n;
@@ -114,6 +148,16 @@ export function createCardListScreen({ layout, assets, topBar, build }) {
     scroll, // Milestone 37: tests scroll the whole list (scrollY, contentHeight, clamp)
     enter() {
       scroll.scrollY = 0;
+      moreOpen = new Set();
+    },
+    scrollToEnd() {
+      scroll.contentHeight = pass(null, panelRect().w);
+      scroll.scrollY = scroll.maxScroll;
+      scroll.clamp();
+    },
+    // Milestone 41i (tests): open a card's (or the subtitle's) "More" at big text.
+    openMore(key) {
+      moreOpen.add(key);
     },
     onDragStart: (p) => scroll.beginDrag(p),
     onDrag: (p) => scroll.drag(p),

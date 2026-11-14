@@ -2,10 +2,10 @@
 // progress and Stop, then the six branches as tabs; each topic shows its tier and RP, its state (Done / Researching /
 // Open / Locked), what it needs or what it opens (elements, facilities), and Start when it can start. ?debug=1 adds
 // "finish this branch". Drag scrolls.
-import { THEME, font, lineH } from '../../../../core/Theme.js';
+import { THEME, font, lineH, textScale } from '../../../../core/Theme.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
-import { text, tabRects, drawTabs, tabAt } from '../../../../core/ui/Kit.js';
+import { text, para, tabRects, drawTabs, tabAt } from '../../../../core/ui/Kit.js';
 import { BRANCHES, RESEARCH, researchById } from '../../data/research.js';
 import { elementById } from '../../data/elements.js';
 import { facilityById } from '../../data/facilities.js';
@@ -50,18 +50,45 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
       hits.discoveries = { x: w - PAD - 360, y: y - 11, w: 360, h: 110 };
       drawButton(ctx, hits.discoveries, 'Discoveries', { accent: C.purple });
     }
-    y += 84;
+    // Milestone 41i (Larger = 1.8× on the Fold cover): the RP line wraps, the card grows with its lines and Stop sits
+    // under the bar; Normal and Large are laid out as before.
+    const big = textScale() >= 1.6;
+    y += big ? Math.max(84, lineH(S.title, 1.15) + 10) : 84;
     assets.drawContained(ctx, 'dev_reward_03', { x: PAD, y: y - 8, w: 56, h: 56 });
-    text(ctx, `${research.rp.toLocaleString('en-GB')} RP · about +${research.dailyRp().toFixed(1)} a day, more from each release`, PAD + 68, y, { size: S.body, color: C.textMuted, maxWidth: cw - 68 });
-    y += 72;
+    const rpLine = `${research.rp.toLocaleString('en-GB')} RP · about +${research.dailyRp().toFixed(1)} a day, more from each release`;
+    if (big) y += Math.max(72, para(ctx, rpLine, PAD + 68, y, cw - 68, { color: C.textMuted, maxLines: 3 }) + 20);
+    else {
+      text(ctx, rpLine, PAD + 68, y, { size: S.body, color: C.textMuted, maxWidth: cw - 68 });
+      y += 72;
+    }
     // The queue.
-    const card = { x: PAD - 8, y, w: cw + 16, h: 200 };
+    const bigH = research.active ? 24 + lineH(S.heading, 1.15) + lineH(S.small, 1.3) + 28 + 24 + 110 + 24 : 30 + lineH(S.heading, 1.2) + para(null, 'Pick an open topic below. Stopping later keeps its progress.', 0, 0, cw - 32, { size: S.small }) + 30;
+    const card = { x: PAD - 8, y, w: cw + 16, h: big ? Math.max(200, bigH) : 200 };
     ctx.fillStyle = C.panelInfo;
     ctx.beginPath();
     ctx.roundRect(card.x, card.y, card.w, card.h, 24);
     ctx.fill();
     const act = research.active;
-    if (act) {
+    if (act && big) {
+      const n = researchById(act);
+      let cy = card.y + 24;
+      text(ctx, `Researching: ${n.name}`, card.x + 24, cy, { size: S.heading, bold: true, maxWidth: card.w - 48 });
+      cy += lineH(S.heading, 1.15);
+      const d = research.daysLeft();
+      text(ctx, `${Math.round(research.fraction(act) * 100)}% · about ${d === Infinity ? '?' : d} day${d === 1 ? '' : 's'} left`, card.x + 24, cy, { size: S.small, color: C.textMuted, maxWidth: card.w - 48 });
+      cy += lineH(S.small, 1.3);
+      ctx.fillStyle = C.track;
+      ctx.beginPath();
+      ctx.roundRect(card.x + 24, cy, card.w - 48, 28, 14);
+      ctx.fill();
+      ctx.fillStyle = C.progress;
+      ctx.beginPath();
+      ctx.roundRect(card.x + 24, cy, Math.max(28, (card.w - 48) * research.fraction(act)), 28, 14);
+      ctx.fill();
+      cy += 28 + 24;
+      hits.stop = { x: card.x + 24, y: cy, w: Math.min(360, card.w - 48), h: 110 };
+      drawButton(ctx, hits.stop, 'Stop', { accent: C.bad });
+    } else if (act) {
       const n = researchById(act);
       text(ctx, `Researching: ${n.name}`, card.x + 24, card.y + 22, { size: S.heading, bold: true, maxWidth: card.w - 290 });
       const d = research.daysLeft();
@@ -78,7 +105,8 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
       drawButton(ctx, hits.stop, 'Stop', { accent: C.bad });
     } else {
       text(ctx, 'Nothing being researched', card.x + 24, card.y + 30, { size: S.heading, bold: true, maxWidth: card.w - 48 });
-      text(ctx, 'Pick an open topic below. Stopping later keeps its progress.', card.x + 24, card.y + 100, { size: S.small, color: C.textMuted, maxWidth: card.w - 48 });
+      if (big) para(ctx, 'Pick an open topic below. Stopping later keeps its progress.', card.x + 24, card.y + 30 + lineH(S.heading, 1.2), card.w - 48, { size: S.small, color: C.textMuted });
+      else text(ctx, 'Pick an open topic below. Stopping later keeps its progress.', card.x + 24, card.y + 100, { size: S.small, color: C.textMuted, maxWidth: card.w - 48 });
     }
     y += card.h + 30;
     // Branch tabs.
@@ -88,8 +116,11 @@ export function createResearchScreen({ layout, assets, research, topBar, debugFi
     drawTabs(ctx, hits.tabs, tabs, branch);
     y += 134;
     const b = BRANCHES.find((x) => x.id === branch);
-    text(ctx, `${b.name}: ${b.line}`, PAD, y, { size: S.body, bold: true, maxWidth: cw });
-    y += 60;
+    if (big) y += para(ctx, `${b.name}: ${b.line}`, PAD, y, cw, { size: S.body, bold: true }) + 16;
+    else {
+      text(ctx, `${b.name}: ${b.line}`, PAD, y, { size: S.body, bold: true, maxWidth: cw });
+      y += 60;
+    }
     const RL = rowLines();
     for (const n of RESEARCH.filter((r) => r.branch === branch)) {
       const st = research.status(n.id);

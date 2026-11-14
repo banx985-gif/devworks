@@ -4,7 +4,7 @@
 // Milestone 5b: the Founding Developer gets their flag, founder perk and history (years, games credited) at the end.
 // Milestone 13: the career (continuous employment, games credited, genres and themes, franchises, awards, trainings,
 // mentoring links) and the actions: Train, Mentor (Elite and up), Let go (asks first).
-import { THEME, font } from '../../../../core/Theme.js';
+import { THEME, font, lineH, textScale } from '../../../../core/Theme.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { elementById } from '../../data/elements.js';
 import { text, para, wrapLines } from '../../../../core/ui/Kit.js';
@@ -15,6 +15,11 @@ import { STATUS_ICONS } from '../../data/home.js';
 const C = THEME.color;
 const S = THEME.size;
 const PAD = 36;
+// Milestone 41i (big text on the Fold cover): at "Larger" (1.8×) the screen goes one item per row — short labels, the
+// numbers bigger than the words, the long career behind a "More" tap. Normal and Large keep the old layout exactly.
+export const BIG_TEXT = 1.6;
+const isBig = () => textScale() >= BIG_TEXT;
+const L = (base, size = S.body, lead = 1.3) => Math.max(base, lineH(size, lead)); // a row height that grows with the text
 
 // history(id) → { crunchDays, crunches } (Milestone 7: crunch exposure) or null.
 // career(id) → the record from recruitment.careerOf (Milestone 13) or null; actions(id) → [{ id, label, sub, disabled,
@@ -25,6 +30,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
   let scrollY = 0;
   let drag = null;
   let contentH = 0;
+  let more = false; // Milestone 41i: the career's full list (big text)
 
   const areaRect = () => {
     const t = topBar.rect();
@@ -50,7 +56,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
 
   function heading(ctx, label, x, y) {
     text(ctx, label, x, y, { size: S.heading, bold: true });
-    return y + 64;
+    return y + L(64, S.heading, 1.25);
   }
 
   // Draws everything from the top of the content (y0) and returns the content height.
@@ -62,7 +68,8 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     let y = y0 + PAD;
 
     // Header: portrait left, facts right.
-    const pr = { x, y, w: 300, h: 420 };
+    const big = isBig();
+    const pr = big ? { x, y, w: 230, h: 320 } : { x, y, w: 300, h: 420 };
     ctx.fillStyle = C.panelAlt;
     ctx.beginPath();
     ctx.roundRect(pr.x, pr.y, pr.w, pr.h, 24);
@@ -71,12 +78,28 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     const tx = pr.x + pr.w + 32;
     const tw = x + cw - tx;
     let ty = pr.y;
+    const godTitle = staffDefById(s.id)?.title; // Milestone 40g: a Works God says what they are god of
+    const roleLine = `${ROLES[s.role].name} · ${TIERS[s.tier].name}${godTitle ? ` · ${godTitle}` : ''}${legacy(s.id) ? ' · Legacy' : ''}`;
+    const need = sys.xpNeeded(s.level);
+    if (big) {
+      // Name and role beside a smaller portrait; level, pay and what they are doing in full-width rows under it.
+      ty += para(ctx, s.name, tx, ty, tw, { size: S.title, bold: true, maxLines: 2, lead: 1.1 }) + 8;
+      ty += para(ctx, roleLine, tx, ty, tw, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxLines: 3, lead: 1.2 });
+      y = Math.max(pr.y + pr.h, ty) + 24;
+      text(ctx, `Level ${s.level}`, x, y, { size: S.heading, bold: true });
+      text(ctx, `XP ${s.xp} / ${need}`, x + cw, y + 6, { color: C.textMuted, align: 'right' });
+      y += L(60, S.heading, 1.2);
+      bar(ctx, x, y, cw, 22, s.xp / need, C.purple);
+      y += 44;
+      text(ctx, 'Pay a month', x, y, { color: C.textMuted });
+      text(ctx, `${s.salary.toLocaleString('en-GB')} Cr`, x + cw, y, { bold: true, align: 'right' });
+      y += L(60);
+      y += para(ctx, `Now: ${world.stateLine(w, WORK_STATE[w.phase].line)}`, x, y, cw, { color: C.actionDark, bold: true, maxLines: 3 }) + 30;
+    } else {
     text(ctx, s.name, tx, ty, { size: S.title, bold: true, maxWidth: tw });
     ty += 70;
-    const godTitle = staffDefById(s.id)?.title; // Milestone 40g: a Works God says what they are god of
-    text(ctx, `${ROLES[s.role].name} · ${TIERS[s.tier].name}${godTitle ? ` · ${godTitle}` : ''}${legacy(s.id) ? ' · Legacy' : ''}`, tx, ty, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxWidth: tw }); // Milestone 33: Legacy Staff
+    text(ctx, roleLine, tx, ty, { color: legacy(s.id) ? C.good : C.textMuted, bold: legacy(s.id), maxWidth: tw }); // Milestone 33: Legacy Staff
     ty += 60;
-    const need = sys.xpNeeded(s.level);
     text(ctx, `Level ${s.level}`, tx, ty, { bold: true });
     text(ctx, `XP ${s.xp} / ${need}`, tx + tw, ty + 4, { size: S.small, color: C.textMuted, align: 'right' });
     ty += 50;
@@ -87,6 +110,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     const now = `Now: ${world.stateLine(w, WORK_STATE[w.phase].line)}`;
     para(ctx, now, tx, ty, tw, { color: C.actionDark, bold: true, maxLines: 3 });
     y = pr.y + pr.h + 40;
+    }
 
     // Condition.
     y = heading(ctx, 'Condition', x, y);
@@ -94,6 +118,16 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       ['Energy', s.energy, w.tiredIcon, STATUS_ICONS.tired, C.progress],
       ['Morale', s.morale, s.status.stressed, STATUS_ICONS.stressed, C.good],
     ]) {
+      if (big) {
+        // Label and number on one row (the number bold and bigger), the bar under them at full width.
+        text(ctx, label, x, y + 8, { bold: true });
+        text(ctx, String(Math.round(value)), x + cw - (low ? 70 : 0), y, { size: S.heading, bold: true, align: 'right' });
+        if (low) assets.draw(ctx, icon, x + cw - 56, y + 4, 56, 56);
+        y += L(64, S.heading, 1.2);
+        bar(ctx, x, y, cw, 24, value / 100, low ? C.warn : color);
+        y += 48;
+        continue;
+      }
       text(ctx, label, x, y, { bold: true });
       bar(ctx, x + 180, y + 6, cw - 180 - 150, 28, value / 100, low ? C.warn : color);
       text(ctx, String(Math.round(value)), x + cw - 80, y, { bold: true, align: 'right' });
@@ -105,11 +139,23 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     // Work stats against the tier cap; the role's main stat gets a star.
     const cap = sys.statCap(s);
     y = heading(ctx, 'Work stats', x, y);
-    text(ctx, `${TIERS[s.tier].name} cap ${cap}`, x + cw, y - 60, { size: S.small, color: C.textMuted, align: 'right' });
+    if (big) {
+      text(ctx, `Cap ${cap} (${TIERS[s.tier].name})`, x, y, { size: S.small, color: C.textMuted, maxWidth: cw });
+      y += L(44, S.small);
+    } else text(ctx, `${TIERS[s.tier].name} cap ${cap}`, x + cw, y - 60, { size: S.small, color: C.textMuted, align: 'right' });
     const primary = ROLES[s.role].primaryStat;
     for (const st of STATS) {
       const v = s.stats[st.key];
       const main = st.key === primary;
+      if (big) {
+        // "★ CODE" and the number on one row, the bar under them: no long name (it is the same word).
+        text(ctx, `${main ? '★ ' : ''}${st.label}`, x, y + 8, { bold: true, color: main ? C.actionDark : C.text });
+        text(ctx, advanced() ? `${v}/${cap}` : String(v), x + cw, y, { size: S.heading, bold: true, align: 'right' });
+        y += L(64, S.heading, 1.2);
+        bar(ctx, x, y, cw, 22, v / cap, main ? C.action : C.progress);
+        y += 44;
+        continue;
+      }
       text(ctx, `${main ? '★ ' : ''}${st.label}`, x, y, { bold: true, color: main ? C.actionDark : C.text });
       text(ctx, st.name, x + 150, y + 4, { size: S.small, color: C.textMuted });
       bar(ctx, x + 340, y + 6, cw - 340 - (advanced() ? 170 : 110), 28, v / cap, main ? C.action : C.progress);
@@ -127,6 +173,15 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       const chipW = ctx.measureText(label).width + 40;
       ctx.fillStyle = C.panelInfo;
       ctx.beginPath();
+      if (big) {
+        const chipH = L(58, S.body, 1.45);
+        ctx.roundRect(x, y, Math.min(cw, chipW), chipH, chipH / 2);
+        ctx.fill();
+        text(ctx, label, x + 20, y + (chipH - lineH(S.body, 1.15)) / 2 + 2, { bold: true, color: def.signature ? C.actionDark : C.purple, maxWidth: cw - 40 });
+        y += chipH + 16;
+        y += para(ctx, def.text, x, y, cw, { color: C.textMuted }) + 24;
+        continue;
+      }
       ctx.roundRect(x, y, chipW, 58, 29);
       ctx.fill();
       text(ctx, label, x + 20, y + 10, { bold: true, color: def.signature ? C.actionDark : C.purple });
@@ -162,8 +217,16 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
         ...(cr.mentors.length ? [`Mentored by ${cr.mentors.map(nameOf).join(', ')}`] : []),
         ...(cr.mentees.length ? [`Mentor to ${cr.mentees.map(nameOf).join(', ')}`] : []),
       ];
-      for (const line of lines) {
+      // Big text: the first two lines, the rest behind "More".
+      const shown = big && !more ? lines.slice(0, 2) : lines;
+      for (const line of shown) {
         y += para(ctx, line, x, y, cw, { color: C.text }) + 10;
+      }
+      if (big && lines.length > 2) {
+        const r = { x, y: y + 6, w: cw, h: L(THEME.button.minH, S.body, 1.9) };
+        drawButton(ctx, r, more ? 'Less ▴' : `More ▾ (${lines.length - 2} lines)`, { accent: C.progress, font: font(S.body, true) });
+        buttons.push({ id: 'more', r, onTap: () => (more = !more) });
+        y += r.h + 18;
       }
       y += 20;
     }
@@ -172,12 +235,15 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     const acts = actions(s.id);
     if (acts.length) {
       const bw = (cw - 20 * (acts.length - 1)) / acts.length;
+      ctx.font = font(S.body, true);
+      const stack = big && acts.some((a) => ctx.measureText(a.label).width > bw - 40); // Milestone 41i: one button per row
+      const bh = big ? L(THEME.button.minH, S.body, 1.9) : THEME.button.minH;
       acts.forEach((a, i) => {
-        const r = { x: x + i * (bw + 20), y, w: bw, h: THEME.button.minH };
+        const r = stack ? { x, y: y + i * (bh + 16), w: cw, h: bh } : { x: x + i * (bw + 20), y, w: bw, h: bh };
         drawButton(ctx, r, a.label, { disabled: a.disabled, accent: a.accent ?? C.progress, font: font(S.body, true) });
         buttons.push({ ...a, r });
       });
-      y += THEME.button.minH + 12;
+      y += (stack ? acts.length * (bh + 16) - 16 : bh) + 12;
       const subs = acts.filter((a) => a.sub).map((a) => a.sub);
       for (const t of subs) y += para(ctx, t, x, y, cw, { color: C.textMuted, size: S.small }) + 6;
       y += 30;
@@ -201,13 +267,18 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
       ctx.strokeStyle = C.gold;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.roundRect(x, y, chipW, 58, 29);
+      const big = isBig();
+      const fh = big ? L(58, S.body, 1.45) : 58;
+      ctx.roundRect(x, y, big ? Math.min(cw, chipW) : chipW, fh, fh / 2);
       ctx.fill();
       ctx.stroke();
-      text(ctx, `★ ${f.flag}`, x + 20, y + 10, { bold: true, color: C.gold });
-      y += 74;
-      text(ctx, f.perk.name, x, y, { bold: true });
-      y += 48;
+      text(ctx, `★ ${f.flag}`, x + 20, big ? y + (fh - lineH(S.body, 1.15)) / 2 + 2 : y + 10, { bold: true, color: C.gold, maxWidth: big ? cw - 40 : undefined });
+      y += fh + 16;
+      if (big) y += para(ctx, f.perk.name, x, y, cw, { bold: true }) + 8;
+      else {
+        text(ctx, f.perk.name, x, y, { bold: true });
+        y += 48;
+      }
       y += para(ctx, f.perk.text, x, y, cw, { color: C.textMuted }) + 12;
       const games = f.history.gamesCredited.length;
       const lines = [
@@ -215,6 +286,10 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
         `Games credited: ${games}`,
       ];
       for (const line of lines) {
+        if (big) {
+          y += para(ctx, line, x, y, cw, { color: C.actionDark, bold: true }) + 8;
+          continue;
+        }
         text(ctx, line, x, y, { color: C.actionDark, bold: true, maxWidth: cw });
         y += 50;
       }
@@ -229,6 +304,7 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     enter(params) {
       id = params.id;
       scrollY = 0;
+      more = false;
     },
     onDragStart(p) {
       if (p.startY > areaRect().y) drag = { id: p.id, y: p.y, start: scrollY };
@@ -255,6 +331,10 @@ export function createStaffDetailScreen({ layout, assets, world, topBar, founder
     },
     scrollToEnd() {
       scrollY = maxScroll();
+    },
+    // Milestone 41i (tests): the career's "More" at big text.
+    openMore() {
+      more = true;
     },
     render(ctx) {
       const w = world.workerById(id);

@@ -3,6 +3,7 @@
 // attributes as bars (aged), and what a game gets from it — and one button per engine project (each opens its sheet
 // to pick the team and start). Drag scrolls.
 import { THEME } from '../../../../core/Theme.js';
+import { isBig, fitLine, grow } from '../ui/bigText.js'; // Milestone 41i: big text on the Fold cover
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { text } from '../../../../core/ui/Kit.js';
@@ -68,8 +69,7 @@ export function createEngineScreen({ layout, assets, engines, topBar, textPrompt
       ctx.fill();
       y += card.h + 24;
     } else if (!list.length) {
-      text(ctx, 'No engine yet. Games use licensed technology. Build your own with the Programmers (at a Code Station, or the Engine Lab after 3D Rendering).', PAD, y, { size: S.body, color: C.textMuted, maxWidth: cw });
-      y += 150;
+      y += fitLine(ctx, 'No engine yet. Games use licensed technology. Build your own with the Programmers (at a Code Station, or the Engine Lab after 3D Rendering).', PAD, y, cw, { size: S.body, color: C.textMuted, maxLines: 6 }, 150, 30);
     }
     // Engine projects.
     text(ctx, 'Engine projects', PAD, y, { size: S.heading, bold: true });

@@ -11,6 +11,7 @@ const S = THEME.size;
 const PAD = 32;
 const ROW_H = 250;
 const HEAD_H = 190;
+const headH = () => Math.max(HEAD_H, PAD + Math.max(84, lineH(S.title, 1.12)) + lineH(S.body, 1.3) + 16); // Milestone 41i: grows with the text
 const ORDER = { Peak: 0, Growing: 1, Declining: 2, Upcoming: 3, Dead: 4 };
 
 export function createPlatformMarketScreen({ layout, assets, business, clock, topBar }) {
@@ -31,7 +32,7 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
     const list = rows();
     text(ctx, 'Platform Market', PAD, PAD, { size: S.title, bold: true });
     const out = list.filter((x) => ['Growing', 'Peak', 'Declining'].includes(x.status)).length;
-    text(ctx, `Year ${clock.year} · ${out} platform${out === 1 ? '' : 's'} out now`, PAD, PAD + 84, { size: S.body, color: C.textMuted, maxWidth: cw });
+    text(ctx, `Year ${clock.year} · ${out} platform${out === 1 ? '' : 's'} out now`, PAD, PAD + Math.max(84, lineH(S.title, 1.12)), { size: S.body, color: C.textMuted, maxWidth: cw }); // Milestone 41i: under the title at any text size
     // Milestone 41e: the row's lines by the real line heights at the chosen text size (the row grows with bigger text).
     const L1 = 20;
     const L2 = L1 + lineH(S.heading, 1.1) + 4;
@@ -41,7 +42,7 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
     const RH = Math.max(ROW_H, LB + 18 + 22);
     list.forEach((x, k) => {
       const p = x.platform;
-      const r = { x: PAD - 8, y: HEAD_H + k * (RH + 16), w: cw + 16, h: RH };
+      const r = { x: PAD - 8, y: headH() + k * (RH + 16), w: cw + 16, h: RH };
       const dim = x.status === 'Upcoming' || x.status === 'Dead';
       ctx.fillStyle = dim ? C.panelDim : C.panelAlt;
       ctx.strokeStyle = C.line;
@@ -56,10 +57,10 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
       ctx.restore();
       const tx = r.x + 206;
       const tw = r.x + r.w - 20 - tx;
-      text(ctx, p.name, tx, r.y + L1, { size: S.heading, bold: true, maxWidth: tw - 200 });
-      // Status chip, top right.
+      // Status chip, top right (Milestone 41i: the name stops before it).
       ctx.font = font(S.small, true); // Milestone 41e: measured at the chosen text size (the chip fits its label)
       const chipW = ctx.measureText(x.status).width + 36;
+      text(ctx, p.name, tx, r.y + L1, { size: S.heading, bold: true, maxWidth: Math.min(tw - 200, tw - chipW - 16) });
       ctx.fillStyle = statusColour(x.status);
       ctx.beginPath();
       ctx.roundRect(r.x + r.w - 20 - chipW, r.y + 20, chipW, 48, 24);
@@ -81,7 +82,7 @@ export function createPlatformMarketScreen({ layout, assets, business, clock, to
         ctx.fill();
       }
     });
-    return HEAD_H + list.length * (Math.max(ROW_H, 20 + lineH(S.heading, 1.1) + 4 + lineH(S.small, 1.2) + 4 + lineH(S.small, 1.2) + 8 + lineH(S.body, 1.15) + 6 + 40) + 16) + PAD; // Milestone 41e: the same row height as drawn
+    return headH() + list.length * (Math.max(ROW_H, 20 + lineH(S.heading, 1.1) + 4 + lineH(S.small, 1.2) + 4 + lineH(S.small, 1.2) + 8 + lineH(S.body, 1.15) + 6 + 40) + 16) + PAD; // Milestone 41e: the same row height as drawn
   }
 
   return {

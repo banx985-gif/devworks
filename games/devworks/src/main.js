@@ -99,6 +99,8 @@ import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking c
 import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans and Uncle Ray walk in
 import { enableSmoothArt, smoothContext } from '../../../core/SmoothArt.js'; // Milestone 41c: smooth art, no jaggy look
 import { PHONE_ART, PHONE_ART_LO } from '../data/phoneArt.js'; // Milestone 41c: Lanczos phone copies (tools/devworks-phone-art.mjs)
+import { WEBP_ART } from '../data/webpArt.js'; // Milestone 41i: smaller WebP copies (tools/devworks-webp.mjs)
+import { createPictureKeeper } from './app/pictureKeeper.js'; // Milestone 41i: pictures per screen
 import { NativeBridge } from '../../../core/NativeBridge.js'; // Milestone 41a: the phone app's features
 import { setupNativeApp } from './app/nativeApp.js'; // Milestone 41a: real AdMob (test ids) + Google Play Billing in the app
 import { APP_TEXT, PRIVACY_URL } from '../data/app.js'; // Milestone 41a
@@ -243,6 +245,7 @@ import { drawCover, drawOutputs } from './ui/gameCard.js';
 import { createTestScreen } from './screens/TestScreen.js';
 import { createRouteTestScreen } from './screens/RouteTestScreen.js';
 import { createStudioMenus } from './ui/studioMenus.js';
+import { isBig as isBigText } from './ui/bigText.js'; // Milestone 41i
 import { registerPlaceholders } from './ui/placeholders.js';
 const COL = THEME.color;
 
@@ -326,7 +329,13 @@ const assets = new AssetManager({ bus });
 // Milestone 41f (phone memory): on Graphics Low — or Auto on a phone with 4 GB or less — the half-size Low set first
 // (decided at start-up: every picture loads once, so a change of Graphics applies from the next start).
 const lowPictures = settings.get('fpsMode') === 'low' || (settings.get('fpsMode') === 'auto' && (navigator.deviceMemory ?? 8) <= 4);
-assets.resolve = (src) => [...(lowPictures && PHONE_ART_LO[src] ? [PHONE_ART_LO[src]] : []), ...(PHONE_ART[src] ? [PHONE_ART[src]] : []), src];
+// Milestone 41i: each of those tries its WebP copy first (smaller files; the PNG next if WebP can't load).
+const withWebp = (p) => (WEBP_ART.has(p) ? [p.replace(/\.png$/, '.webp'), p] : [p]);
+assets.resolve = (src) => [...(lowPictures && PHONE_ART_LO[src] ? [PHONE_ART_LO[src]] : []), ...(PHONE_ART[src] ? [PHONE_ART[src]] : []), src].flatMap(withWebp);
+// Milestone 41i (phone memory on High): pictures load when a screen first asks for them and are let go about 10 s after
+// nothing draws them (src/app/pictureKeeper.js); only the small UI and brand pictures load at start.
+const keeper = createPictureKeeper({ assets });
+setInterval(() => keeper.sweep(), 2000);
 const router = new ScreenRouter(bus, { roots: ['studio', 'test', 'title'] });
 const dialog = new Dialog({ layout, assets }); // confirm boxes (delete a slot)
 const sheet = new BottomSheet({ layout, assets, onClose: () => studio.selection.clear() });
@@ -464,12 +473,13 @@ assets.setFallback('dev_ui_menu', (ctx, x, y, w, h) => {
     ctx.fill();
   }
 });
-for (const [k, src] of ITEM_OPTIONAL_ART) assets.loadOptional(k, src);
-for (const [k, src] of OPTIONAL_ART) assets.loadOptional(k, src); // drawn by code until the files exist
-for (const [k, src] of STAT_ICON_ART) assets.loadOptional(k, src); // Milestone 40q/40u: the live panel's music note and sparkle (phone copies; a coloured dot if missing)
+// Milestone 41i: remembered, loaded the first time something asks for them (src/app/pictureKeeper.js).
+for (const [k, src] of ITEM_OPTIONAL_ART) keeper.remember(k, src);
+for (const [k, src] of OPTIONAL_ART) keeper.remember(k, src); // drawn by code until the files exist
+for (const [k, src] of STAT_ICON_ART) keeper.remember(k, src); // Milestone 40q/40u: the live panel's music note and sparkle (phone copies; a coloured dot if missing)
 // Milestone 40n: the staff's whole-face pictures (data/portraits.js); a frame uses the full-body crop until its face is in.
 setFaceCheck((k) => assets.has(k));
-for (const [k, src] of STAFF_FACE_ART) assets.loadOptional(k, src);
+for (const [k, src] of STAFF_FACE_ART) keeper.remember(k, src);
 bus.on('clock:month', () => started && elements.check());
 bus.on('reputation:rankUp', () => started && elements.check());
 let started = false; // after the save has loaded
@@ -1191,7 +1201,8 @@ const bootScreen = {
       // hanging on a reload), and the boot carries on after 45 s at the latest — a picture still on its way pops in when
       // it arrives (core AssetManager).
       Promise.race([
-        assets.loadImages(ASSETS, (done, total) => (this.progress = done / total), { concurrency: 48 }).then((r) => debug.log(`assets: ${r.loaded} loaded, ${r.missing.length} missing`)),
+        // Milestone 41i: every picture is registered; only the small UI and brand ones load now, the rest per screen.
+        (assets.register(ASSETS), assets.ensure(BOOT_ART(), (done, total) => (this.progress = done / total))).then(() => debug.log(`assets: ${assets.images.size} loaded at start (${Object.keys(ASSETS).length} registered), ${assets.missing.size} missing`)),
         new Promise((r) => setTimeout(() => (debug.log('assets: still loading after 45 s, starting anyway'), r()), 45000)),
       ]).then(() => debug.enabled && logArtCheck()),
       prepareSaves().catch((err) => console.error('[DEVWORKS] saves unavailable', err)),
@@ -2293,7 +2304,10 @@ function drawReviews(ctx, t, record) {
   const w = Math.min(sr.w - 48, 1000);
   const x = sr.x + (sr.w - w) / 2;
   const y = sr.y + 40;
-  const rowH = 190;
+  // Milestone 41i (Larger = 1.8×): each critic row grows with its three lines (outlet, critic, quote).
+  const big = isBigText();
+  const RL = [24 + lineH(THEME.size.heading, 1.1) / 2, 24 + lineH(THEME.size.heading, 1.1) + lineH(THEME.size.small, 1.2) / 2, 24 + lineH(THEME.size.heading, 1.1) + lineH(THEME.size.small, 1.2) + lineH(30, 1.2) / 2];
+  const rowH = big ? Math.max(190, RL[2] + lineH(30, 1.2) / 2 + 30) : 190;
   // Milestone 41e: the header grows with the text size (title, score, verdict, key line).
   const headH = Math.max(270, 80 + lineH(THEME.size.title, 0.5) + lineH(THEME.size.heading, 1.1) + lineH(THEME.size.small, 0.75) + lineH(THEME.size.small, 1.15) * 1.6 + 16);
   const h = headH + r.reviews.length * rowH + 30;
@@ -2357,15 +2371,15 @@ function drawReviews(ctx, t, record) {
     const tx = face ? x + 344 : x + 210;
     ctx.fillStyle = COL.text;
     ctx.font = font(THEME.size.heading, true);
-    ctx.fillText(o.name, tx, face ? ry + 36 : ry + 50, x + w - 50 - tx);
+    ctx.fillText(o.name, tx, big ? ry + RL[0] : face ? ry + 36 : ry + 50, x + w - 50 - tx);
     if (face) {
       ctx.fillStyle = COL.actionDark;
       ctx.font = font(THEME.size.small, true);
-      ctx.fillText(critic.name, tx, ry + 80, x + w - 50 - tx);
+      ctx.fillText(critic.name, tx, big ? ry + RL[1] : ry + 80, x + w - 50 - tx);
     }
     ctx.fillStyle = COL.textMuted;
     ctx.font = font(30);
-    ctx.fillText(`"${o.line}"`, tx, face ? ry + 128 : ry + 112, x + w - 50 - tx);
+    ctx.fillText(`"${o.line}"`, tx, big ? ry + (face ? RL[2] : RL[1]) : face ? ry + 128 : ry + 112, x + w - 50 - tx);
   });
   ctx.restore();
 }
@@ -3232,9 +3246,34 @@ const saveInspector = createSaveInspector({ layout, assets, topBar: subTopBar, s
 // Milestone 37: the art check at ?debug=1 start (core AssetValidator: the locked list against the manifest and what
 // loaded), and the art gallery (every listed picture, by folder: the screenshot pass draws them all).
 let artCheck = null;
-function logArtCheck() {
+// Milestone 41i: pictures load per screen now, so the check asks the server whether each file is there (no decoding).
+const BOOT_ART = () => Object.keys(ASSETS).filter((k) => /\/(ui|brand)\//.test(ASSETS[k]));
+const fileThere = new Map();
+async function probeArt(manifest) {
+  const keys = Object.keys(manifest).filter((k) => !fileThere.has(k));
+  let i = 0;
+  const worker = async () => {
+    while (i < keys.length) {
+      const k = keys[i++];
+      const urls = (assets.resolve?.(manifest[k]) ?? [manifest[k]]).map((u) => assets.basePath + u);
+      let ok = false;
+      for (const u of urls) {
+        try {
+          if ((await fetch(u, { method: 'HEAD' })).ok) {
+            ok = true;
+            break;
+          }
+        } catch {}
+      }
+      fileThere.set(k, ok);
+    }
+  };
+  await Promise.all(Array.from({ length: 12 }, worker));
+}
+async function logArtCheck() {
   const manifest = Object.fromEntries(Object.entries(ASSETS).filter(([k]) => !SHARED_ART.includes(k) && !TEST_ART.includes(k)));
-  const files = Object.fromEntries([...assets.images.keys()].filter((k) => manifest[k]).map((k) => [k, manifest[k]]));
+  await probeArt(manifest);
+  const files = Object.fromEntries(Object.keys(manifest).filter((k) => fileThere.get(k) || assets.images.has(k)).map((k) => [k, manifest[k]]));
   artCheck = validateAssets({ artList: [...ART_LIST, ...GOD_ART, ...CAST_ART], manifest, files }); // Milestone 40g: + the Works Gods; 40k: + the cast's faces
   debug.log(assetSummary(artCheck));
   if (!artCheck.ok) console.warn('[DEVWORKS art]', JSON.stringify({ missing: artCheck.missing, unused: artCheck.unused, unlisted: artCheck.unlisted }));
@@ -3354,7 +3393,17 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { debugOverlay: debug, visitors, debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, walkers, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { keeper, debugOverlay: debug, visitors, debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, walkers, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  // Milestone 41i: the five redone screens' "More" states, for the big-text audit (tools/dw_m41i_audit.mjs) and tests.
+  window.__dw.m41iMore = [
+    { name: 'staff_more', open: () => { router.go('staff', { id: world.workers[0].id }); staffDetail.openMore(); staffDetail.scrollToEnd(); } },
+    { name: 'ledger_month2', open: () => { router.go('ledger'); setTimeout(() => ledger.toggleMonth(1), 250); } },
+    { name: 'ideas_card', open: () => { router.go('ideas', { family: 'genre' }); ideaCards.select(ideaCards.cards()[0].id); } },
+    { name: 'ideas_more', open: () => { router.go('ideas', { family: 'genre' }); ideaCards.select(ideaCards.cards()[0].id); ideaCards.toggleMore(); } },
+    { name: 'ideas_locked', open: () => { router.go('ideas', { family: 'genre' }); ideaCards.select(ideaCards.cards().find((c) => !c.open)?.id ?? ideaCards.cards()[0].id); } },
+    { name: 'sponsors_more', open: () => { router.go('sponsors'); for (const o of sponsors.offers) sponsorsScreen.openMore(o.id); sponsorsScreen.openMore('subtitle'); } },
+    { name: 'hall_more', open: () => { router.go('hallOfFame'); hallOfFameScreen.openMore('subtitle'); } },
+  ];
 }
 
 router

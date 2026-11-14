@@ -5,6 +5,8 @@
 // editable after RANDOMISE ALL. "Review" opens the confirmation panel (spec §6); START STUDIO creates the save.
 // Drag scrolls. Layout and tapping share one pass (lay out → draw and/or hit-test), so they can never disagree.
 import { THEME, font } from '../../../../core/Theme.js';
+import { lineH as lineHeight } from '../../../../core/Theme.js'; // Milestone 41i
+import { isBig } from '../ui/bigText.js'; // Milestone 41i: big text on the Fold cover
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { card, text, para } from '../../../../core/ui/Kit.js';
@@ -79,7 +81,16 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       if (rects && id) rects[id] = r;
       if (tap && !hit && hitRect(tap, r)) hit = fn;
     };
+    const big = isBig();
     const heading = (label, sub = null) => {
+      if (big) {
+        // Milestone 41i: the note under the heading, on its own line.
+        if (ctx) text(ctx, label, PAD, y, { size: S.heading, bold: true, maxWidth: cw });
+        y += lineHeight(S.heading, 1.2);
+        if (sub) y += para(ctx, sub, PAD, y, cw, { size: S.small, color: C.textMuted, maxLines: 2 }) + 8;
+        y += 8;
+        return;
+      }
       if (ctx) {
         text(ctx, label, PAD, y, { size: S.heading, bold: true });
         if (sub) text(ctx, sub, PAD + cw, y + 8, { size: S.small, color: C.textMuted, align: 'right', maxWidth: cw * 0.5 });
@@ -96,8 +107,9 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
     // A typed field with a Random button beside it.
     const field = (id, label, value, placeholder, max) => {
       heading(label);
-      const f = { x: PAD, y, w: cw - 270, h: 110 };
-      const rnd = { x: PAD + cw - 250, y, w: 250, h: 110 };
+      const fh = big ? Math.max(110, lineHeight(S.heading, 1.5)) : 110;
+      const f = big ? { x: PAD, y, w: cw, h: fh } : { x: PAD, y, w: cw - 270, h: 110 };
+      const rnd = big ? { x: PAD, y: y + fh + 14, w: cw, h: Math.max(110, lineHeight(S.button, 1.6)) } : { x: PAD + cw - 250, y, w: 250, h: 110 };
       if (ctx) {
         ctx.fillStyle = C.sheet;
         ctx.strokeStyle = value.trim() ? C.outline : C.action;
@@ -111,14 +123,17 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       }
       box(f, () => edit(id, f, max, placeholder), id);
       box(rnd, random[id], `${id}Random`);
-      y += 110 + 20;
+      y += big ? rnd.y + rnd.h - y + 20 : 110 + 20;
     };
     beginSection('names', C.action);
     field('studio', 'Studio name', setup.studio, 'Tap to name your studio', NAME_MAX.studio);
     y += 16;
     field('director', 'Studio Director (you)', setup.director, 'Tap to type your name', NAME_MAX.director);
-    if (ctx) text(ctx, `Studio Director ${setup.director.trim() || '…'} — ${setup.studio.trim() || '…'}`, PAD, y, { size: S.body, color: C.actionDark, bold: true, maxWidth: cw });
-    y += 50;
+    if (big) y += para(ctx, `Studio Director ${setup.director.trim() || '…'} — ${setup.studio.trim() || '…'}`, PAD, y, cw, { size: S.body, color: C.actionDark, bold: true, maxLines: 2 }) + 10;
+    else {
+      if (ctx) text(ctx, `Studio Director ${setup.director.trim() || '…'} — ${setup.studio.trim() || '…'}`, PAD, y, { size: S.body, color: C.actionDark, bold: true, maxWidth: cw });
+      y += 50;
+    }
     endSection('names');
 
     // Colour: six swatches + Random, then the sign preview.
@@ -159,9 +174,12 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       const d = startStaffById(f.id);
       const on = setup.founder === f.id;
       const team = f.team.map((id) => startStaffById(id).name.split(' ')[0]).join(', ');
-      const tw = cw - 230 - 40;
+      const PW = big ? 150 : 200; // Milestone 41i: a smaller portrait, the lines by their real heights at big text
+      const tw = big ? cw - PW - 60 : cw - 230 - 40;
       const perkH = para(null, f.perk.text, 0, 0, tw, { size: S.small });
-      const h = Math.max(240, 244 + perkH);
+      const roleLine = `${ROLES[d.role].name} · ${TRAITS[d.traits[0]].name}`;
+      const bigLines = big ? [lineHeight(S.heading, 1.15), para(null, roleLine, 0, 0, tw, { maxLines: 2, lead: 1.2 }) + 6, para(null, f.perk.name, 0, 0, tw, { bold: true, maxLines: 2, lead: 1.2 }) + 6, perkH + 10, para(null, `Starts with: ${team}`, 0, 0, tw, { size: S.small, bold: true, maxLines: 2 })] : null;
+      const h = big ? Math.max(PW + 40, 48 + bigLines.reduce((a, b) => a + b, 0)) : Math.max(240, 244 + perkH);
       const r = { x: PAD, y, w: cw, h };
       if (ctx) {
         card(ctx, r, on ? 'selected' : 'normal');
@@ -171,9 +189,18 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
           ctx.roundRect(r.x + 4, r.y + 22, 10, r.h - 44, 5);
           ctx.fill();
         }
-        drawPortrait(ctx, assets, d.art, { x: r.x + 20, y: r.y + 20, w: 200, h: 200 }, on ? C.good : null);
-        const tx = r.x + 250;
+        drawPortrait(ctx, assets, d.art, { x: r.x + 20, y: r.y + 20, w: PW, h: PW }, on ? C.good : null);
+        const tx = r.x + PW + 50;
         let ty = r.y + 24;
+        if (big) {
+          text(ctx, d.name, tx, ty, { size: S.heading, bold: true, maxWidth: on ? tw - 60 : tw });
+          if (on) text(ctx, '✓', r.x + r.w - 24, ty, { size: S.heading, bold: true, color: C.good, align: 'right' });
+          ty += bigLines[0];
+          ty += para(ctx, roleLine, tx, ty, tw, { color: C.textMuted, maxLines: 2, lead: 1.2 }) + 6;
+          ty += para(ctx, f.perk.name, tx, ty, tw, { bold: true, color: C.purple, maxLines: 2, lead: 1.2 }) + 6;
+          ty += para(ctx, f.perk.text, tx, ty, tw, { size: S.small }) + 10;
+          para(ctx, `Starts with: ${team}`, tx, ty, tw, { size: S.small, bold: true, color: C.actionDark, maxLines: 2 });
+        } else {
         text(ctx, d.name, tx, ty, { size: S.heading, bold: true, maxWidth: tw - 140 });
         if (on) text(ctx, '✓ Founder', r.x + r.w - 24, ty + 6, { size: S.small, bold: true, color: C.good, align: 'right' });
         ty += 56;
@@ -184,6 +211,7 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
         ty += para(ctx, f.perk.text, tx, ty, tw, { size: S.small });
         ty += 10;
         text(ctx, `Starts with: ${team}`, tx, ty, { size: S.small, bold: true, color: C.actionDark, maxWidth: tw });
+        }
       }
       box(r, () => (setup.founder = f.id), `founder:${f.id}`);
       y += h + 20;
@@ -323,15 +351,20 @@ export function createSetupScreen({ layout, assets, textPrompt, onBack, onStart 
       const tcx = sr.x + sr.w / 2 + 60;
       const tw = Math.min(560, sr.x + sr.w - 24 - (hr.x + hr.w + 24));
       drawDashedCard(ctx, { x: tcx - tw / 2, y: hr.y - 4, w: tw, h: hr.h + 8 }, C.action, { dash: [], line: 4 });
+      if (isBig()) {
+        // Milestone 41i: one line on the plate at big text (the slot number after the name).
+        text(ctx, `${ngPlus ? `New Game+ ${ngPlus}` : 'New Studio'} · ${slot + 1}`, sr.x + sr.w / 2 + 60, hr.y + hr.h / 2, { size: S.heading, bold: true, align: 'center', baseline: 'middle', maxWidth: tw - 24 });
+      } else {
       text(ctx, ngPlus ? `New Game+ ${ngPlus}` : 'New Studio', sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 - 20, { size: S.title, bold: true, align: 'center', baseline: 'middle' });
       text(ctx, `Save slot ${slot + 1}`, sr.x + sr.w / 2 + 60, hr.y + hr.h / 2 + 34, { size: S.small, color: C.textMuted, align: 'center', baseline: 'middle' });
+      }
       // Milestone 40p: no plain panel any more — the sections are cards over the title picture.
       scroll.contentHeight = pass(null, null).height;
       scroll.begin(ctx);
       scroll.contentHeight = pass(ctx, null).height;
       scroll.end(ctx);
       const miss = missing();
-      drawButton(ctx, bottomRect(), miss.length ? `Needs ${miss.join(' and ')}` : 'Review and start', { disabled: miss.length > 0, font: font(miss.length ? S.body : S.button, true) });
+      drawButton(ctx, bottomRect(), miss.length ? `Needs ${miss.join(' and ')}` : 'Review and start', { disabled: miss.length > 0, font: font(miss.length ? (isBig() ? S.small : S.body) : S.button, true) });
       if (confirming) drawConfirm(ctx);
     },
   };

@@ -4,11 +4,12 @@
 // team with what each lead is doing. Drag scrolls when it does not fit.
 // Milestone 7: the schedule (due date, on track / behind / late, crunch days left), the budget focus (a change waits
 // for the next milestone) and, when the game waits at Beta or Gold, a button for the decision.
-import { THEME, font } from '../../../../core/Theme.js';
+import { THEME, font, lineH } from '../../../../core/Theme.js';
+import { isBig, fitLine, grow } from '../ui/bigText.js'; // Milestone 41i: big text on the Fold cover
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 import { BUDGET_FOCUS, DECISION_POINTS, scopeById } from '../../data/projects.js';
 import { ScrollPanel } from '../../../../core/ui/ScrollPanel.js';
-import { text } from '../../../../core/ui/Kit.js';
+import { text, para } from '../../../../core/ui/Kit.js';
 import { WORK_STATE } from '../../data/studio.js';
 import { ROLES } from '../../data/staff.js';
 import { drawRecipeIcons, drawOutputs } from '../ui/gameCard.js';
@@ -31,7 +32,95 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
   };
   const scroll = new ScrollPanel({ getRect: panelRect });
 
+  // Milestone 41i (Larger = 1.8× on the Fold cover): one item per row — each milestone's name over its bar, headings with
+  // their note under them, budget focus two to a row, each team member on two lines. Normal / Large: drawContent below.
+  function drawBig(ctx, v, w) {
+    const cw = w - PAD * 2;
+    let y = PAD;
+    const head = (label, note, noteColor = C.textMuted) => {
+      text(ctx, label, PAD, y, { size: S.heading, bold: true, maxWidth: cw });
+      y += lineH(S.heading, 1.2);
+      if (note) y += para(ctx, note, PAD, y, cw, { color: noteColor, bold: true, maxLines: 2 }) + 8;
+      y += 8;
+    };
+    y += para(ctx, v.title, PAD, y, cw, { size: S.title, bold: true, maxLines: 2, lead: 1.1 }) + 6;
+    y += para(ctx, `${scopeById(v.scope)?.name ?? ''} game`, PAD, y, cw, { size: S.small, color: C.textMuted }) + 16;
+    if (v.decision) {
+      const r = { x: PAD, y, w: cw, h: Math.max(110, lineH(S.body, 1.2) * 2 + 24) };
+      drawButton(ctx, r, '', { accent: C.action });
+      const label = `${DECISION_POINTS[v.decision.point]} decision: choose now`;
+      const lh = para(null, label, 0, 0, r.w - 40, { bold: true, maxLines: 2, lead: 1.2 });
+      para(ctx, label, r.x + 20, r.y + (r.h - THEME.button.lip - lh) / 2, r.w - 40, { bold: true, align: 'center', color: C.textOnAction, maxLines: 2, lead: 1.2 });
+      rects.decide = { r, onTap: openDecision };
+      y += r.h + 30;
+    }
+    drawRecipeIcons(ctx, assets, v.recipe, PAD, y, 100, 14);
+    y += 130;
+    head('Milestones', `Day ${v.days} · ${v.phaseIndex + 1} of 5`);
+    projects.phases.forEach((ph, i) => {
+      const f = v.phaseFracs[i];
+      const now = i === v.phaseIndex;
+      text(ctx, ph.name, PAD, y, { bold: now, color: now ? C.text : f >= 1 ? C.good : C.textMuted, maxWidth: cw - 160 });
+      text(ctx, f >= 1 ? '✓' : `${Math.floor(f * 100)}%`, PAD + cw, y, { bold: true, align: 'right', color: f >= 1 ? C.good : C.text });
+      y += lineH(S.body, 1.25);
+      ctx.fillStyle = C.track;
+      ctx.beginPath();
+      ctx.roundRect(PAD, y, cw, 24, 12);
+      ctx.fill();
+      if (f > 0) {
+        ctx.fillStyle = f >= 1 ? C.good : C.action;
+        ctx.beginPath();
+        ctx.roundRect(PAD, y, Math.max(24, cw * f), 24, 12);
+        ctx.fill();
+      }
+      y += 44;
+    });
+    y += 16;
+    const [label, colour] = STATUS[v.status];
+    head('Schedule', label, colour);
+    const small = (t, color = C.textMuted, bold = false) => (y += para(ctx, t, PAD, y, cw, { size: S.small, color, bold }) + 10);
+    if (v.deadlineDay != null) small(`Due ${dateLabel(v.deadlineDay)} · at this pace done ${dateLabel(Math.max(v.projectedDay, 0))}`);
+    if (v.crunchLeft > 0) small(`Crunching: ${v.crunchLeft} more day${v.crunchLeft === 1 ? '' : 's'} (tiring, more bugs)`, C.bad, true);
+    const notes = [v.cut && 'feature package cut', v.outsourced && 'QA outsourced'].filter(Boolean);
+    if (notes.length) small(notes.join(' · '));
+    y += 20;
+    head('Budget focus');
+    const CH = Math.max(110, lineH(S.body, 1.15) + lineH(S.small, 1.15) + 28);
+    const half = (cw - 20) / 2;
+    BUDGET_FOCUS.forEach((b, i) => {
+      const r = { x: PAD + (i % 2) * (half + 20), y: y + Math.floor(i / 2) * (CH + 20), w: half, h: CH };
+      const now = v.focus === b.id;
+      const next = v.pendingFocus === b.id;
+      drawButton(ctx, r, '', { selected: now || next, accent: next ? C.action : C.progress });
+      const pct = PROJECT_BALANCE.budgetFocus[b.id]?.costPct ?? 0;
+      const fg = now || next ? '#FFF8EC' : C.textOnAction;
+      text(ctx, now ? `✓ ${b.name}` : next ? `→ ${b.name}` : b.name, r.x + r.w / 2, r.y + 12 + lineH(S.body, 1.15) / 2, { bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+      text(ctx, !pct ? 'Normal cost' : `${pct > 0 ? '+' : '−'}${Math.abs(pct)}% cost`, r.x + r.w / 2, r.y + 12 + lineH(S.body, 1.15) + lineH(S.small, 1.15) / 2, { size: S.small, bold: true, align: 'center', baseline: 'middle', color: fg, maxWidth: r.w - 24 });
+      rects[`focus:${b.id}`] = { r, onTap: () => projects.setFocus(b.id, job()) };
+    });
+    y += Math.ceil(BUDGET_FOCUS.length / 2) * (CH + 20) + 10;
+    const nowF = BUDGET_FOCUS.find((b) => b.id === v.focus);
+    const nextF = BUDGET_FOCUS.find((b) => b.id === v.pendingFocus);
+    small(nextF ? `${nextF.name} starts at the next milestone. Now: ${nowF.line}` : nowF.line, nextF ? C.actionDark : C.textMuted);
+    y += 20;
+    head('Game so far', `${v.breakthroughs} breakthrough${v.breakthroughs === 1 ? '' : 's'}`, C.gold);
+    y += drawOutputs(ctx, v.outputs, v.bugs, PAD, y, cw, { rowH: lineH(S.body, 1.45), labelW: Math.min(cw * 0.45, 420) }) + 20;
+    text(ctx, 'Cost so far', PAD, y, { color: C.textMuted });
+    text(ctx, `${v.cost.toLocaleString('en-GB')} Cr`, PAD + cw, y, { bold: true, align: 'right' });
+    y += lineH(S.body, 1.3) + 30;
+    head('Core team');
+    for (const id of v.team) {
+      const wk = world.workerById(id);
+      if (!wk) continue;
+      text(ctx, `${wk.staff.name} (${ROLES[wk.staff.role].name})`, PAD, y, { bold: true, maxWidth: cw });
+      y += lineH(S.body, 1.2);
+      y += para(ctx, world.stateLine(wk, WORK_STATE[wk.phase].line), PAD, y, cw, { size: S.small, color: C.actionDark, maxLines: 2, lead: 1.2 }) + 16;
+    }
+    return y + PAD;
+  }
+
   function drawContent(ctx, v, w) {
+    if (isBig()) return drawBig(ctx, v, w);
     const cw = w - PAD * 2;
     let y = PAD;
     text(ctx, v.title, PAD, y, { size: S.title, bold: true, maxWidth: cw });
@@ -111,8 +200,7 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
     y += Math.ceil(BUDGET_FOCUS.length / 3) * 130 + 10;
     const nowF = BUDGET_FOCUS.find((b) => b.id === v.focus);
     const nextF = BUDGET_FOCUS.find((b) => b.id === v.pendingFocus);
-    text(ctx, nextF ? `${nextF.name} starts at the next milestone. Now: ${nowF.line}` : nowF.line, PAD, y, { size: S.small, color: nextF ? C.actionDark : C.textMuted, maxWidth: cw });
-    y += 70;
+    y += fitLine(ctx, nextF ? `${nextF.name} starts at the next milestone. Now: ${nowF.line}` : nowF.line, PAD, y, cw, { size: S.small, color: nextF ? C.actionDark : C.textMuted }, 70);
 
     // Output stats so far.
     text(ctx, 'Game so far', PAD, y, { size: S.heading, bold: true });
@@ -179,7 +267,7 @@ export function createProjectScreen({ layout, assets, world, projects, topBar, d
       scroll.begin(ctx);
       rects = {};
       if (v) scroll.contentHeight = drawContent(ctx, v, r.w);
-      else text(ctx, 'No game in the works. Start one from Create → New Game.', PAD, PAD, { size: S.body, color: C.textMuted, maxWidth: r.w - PAD * 2 });
+      else fitLine(ctx, 'No game in the works. Start one from Create → New Game.', PAD, PAD, r.w - PAD * 2, { size: S.body, color: C.textMuted }, 0);
       scroll.end(ctx);
       topBar.render(ctx);
     },

@@ -1,6 +1,6 @@
 // Credits (Milestone 40e, series common feature §2): Settings → Credits rolls the core CreditsRoll with the studio logo.
 // Hold to speed it up; Back (or the phone's) leaves; it starts again when it reaches the end.
-import { THEME, font } from '../../../../core/Theme.js';
+import { THEME, font, textScale } from '../../../../core/Theme.js';
 import { CreditsRoll } from '../../../../core/ui/CreditsRoll.js';
 import { drawButton, hitRect } from '../../../../core/ui/Button.js';
 
@@ -28,7 +28,11 @@ export const CREDITS_BLOCKS = [
 ];
 
 export function createCreditsScreen({ layout, assets, renderer, onBack }) {
-  const roll = new CreditsRoll({ blocks: CREDITS_BLOCKS, speed: 110 });
+  // Milestone 41i: core CreditsRoll spaces lines for Normal text; at a bigger text size each line and heading gets the
+  // extra room its bigger font needs (an empty gap after it), so the lines never overlap. Normal: exactly as before.
+  const blocksFor = (k) => (k <= 1 ? CREDITS_BLOCKS : CREDITS_BLOCKS.flatMap((b) => (b.line ? [b, { gap: Math.round(38 * (k - 1) * 1.2) }] : b.heading ? [b, { gap: Math.round(44 * (k - 1) * 1.2) }] : [b])));
+  let rollScale = textScale();
+  let roll = new CreditsRoll({ blocks: blocksFor(rollScale), speed: 110 });
   let held = false;
   const backRect = () => ({ x: layout.safeRect.x + 24, y: layout.safeRect.y + 24, w: 200, h: 110 });
   const area = () => {
@@ -36,9 +40,15 @@ export function createCreditsScreen({ layout, assets, renderer, onBack }) {
     return { x: s.x + 24, y: s.y + 160, w: s.w - 48, h: s.h - 200 };
   };
   return {
-    roll,
+    get roll() {
+      return roll;
+    },
     backRect,
     enter() {
+      if (textScale() !== rollScale) {
+        rollScale = textScale();
+        roll = new CreditsRoll({ blocks: blocksFor(rollScale), speed: 110 });
+      }
       roll.restart();
       roll.offset = area().h * 0.55; // start with the logo already on its way up
     },
