@@ -97,6 +97,9 @@ import { TextPrompt } from '../../../core/ui/TextPrompt.js';
 import { watchTextPrompt } from './ui/textBoxFix.js'; // Milestone 40o
 import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking chibis
 import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans and Uncle Ray walk in
+import { NativeBridge } from '../../../core/NativeBridge.js'; // Milestone 41a: the phone app's features
+import { setupNativeApp } from './app/nativeApp.js'; // Milestone 41a: real AdMob (test ids) + Google Play Billing in the app
+import { APP_TEXT, PRIVACY_URL } from '../data/app.js'; // Milestone 41a
 import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
@@ -240,6 +243,9 @@ const COL = THEME.color;
 
 // Milestone 34: Settings / Accessibility (device settings, bible §51). What each one does: data/settings.js.
 const settings = new Settings({ key: SETTINGS_KEY, defaults: SETTINGS_DEFAULTS });
+const bridge = new NativeBridge(); // Milestone 41a: isNative only inside the Android app
+let nativeApp = null; // Milestone 41a: the real ads / store (set when the save storage is ready)
+let consentAsked = false;
 const BASE_MIN_H = THEME.button.minH;
 function applySettings() {
   setTextScale(TEXT_SCALE[settings.get('textSize')] ?? 1); // Milestone 38: three steps
@@ -957,14 +963,27 @@ async function prepareSaves() {
   }
   slots = new SaveSlots({ adapter, keys: SAVE.slots, metaKey: SAVE.metaKey, version: SAVE.version, migrations: { 1: migrateToV2, 2: migrateToV3, 3: migrateToV4, 4: migrateToV5 }, rolling: SAVE.rolling, bus });
   // Milestone 36: ?debug=1 → the pretend store (its next ad / purchase is set on the Store screen); none otherwise.
-  // Milestone 40m: the Android test app (Capacitor) uses the pretend store too — no real ads or purchases in it.
-  if (new URLSearchParams(window.location.search).has('debug') || window.Capacitor?.isNativePlatform?.()) {
+  // Milestone 41a: the Android app uses the real providers (AdMob with Google's TEST ids until data/app.js AD_IDS is
+  // switched, Google Play Billing) — studio server standard §3; the pretend store is web + ?debug=1 only.
+  nativeApp = setupNativeApp({ bridge, monetisation, dialog, accent: COL.progress });
+  if (nativeApp && router.currentName === 'title' && !consentAsked) {
+    consentAsked = true; // the title screen is already up: ask now
+    nativeApp.askConsent();
+  }
+  if (!nativeApp && new URLSearchParams(window.location.search).has('debug')) {
     const persist = { load: () => JSON.parse(localStorage.getItem('devworks:fakeStore') ?? 'null'), save: (st) => localStorage.setItem('devworks:fakeStore', JSON.stringify(st)) };
     monetisation.setProvider(new FakeStoreProvider({ products: fakeProducts(), persist, present: (kind, id, outcome) => new Promise((res) => dialog.show({ title: kind === 'rewarded' ? 'Rewarded ad (pretend)' : 'Ad (pretend)', body: 'A real ad would play here.', dismissible: false, buttons: [{ id: 'close', label: 'Close', accent: COL.progress, onTap: () => res(outcome) }] })) }));
   }
   monetisation.startup().catch((e) => console.error('[DEVWORKS] store startup failed', e));
   await refreshSlots();
 }
+// Milestone 41a: the ads & privacy question (Google's form where its rules apply, else the game's own) once the title
+// screen is up on the first launch of the app; Settings → Privacy & legal asks again (force).
+bus.on('screen:change', () => {
+  if (!nativeApp || consentAsked || router.currentName !== 'title') return;
+  consentAsked = true;
+  nativeApp.askConsent();
+});
 // The slot cards: what each slot holds now (read fresh from storage).
 async function refreshSlots() {
   const all = await slots.peekAll();
@@ -2944,11 +2963,14 @@ const settingsScreen = createSettingsScreen({
 });
 bus.on('screen:change', () => (walksResetNote = null));
 function showLegal() {
+  // Milestone 41a / 41g: the full privacy page, and in the app the ad choice (asked again).
+  const page = { id: 'page', label: 'Privacy policy', accent: COL.progress, onTap: () => (bridge.isNative ? bridge.openUrl(PRIVACY_URL) : window.open(PRIVACY_URL, '_blank', 'noopener')) };
+  const ads = nativeApp ? [{ id: 'ads', label: 'Ad choices', accent: COL.progress, onTap: () => nativeApp.askConsent(true) }] : [];
   dialog.show({
     title: 'Privacy & legal',
-    body: 'DEVWORKS keeps your saves on this device only. It has no account and collects no personal data of its own. Any ads or purchases go through the store and ad services of your device, under their own privacy policies.',
+    body: nativeApp ? `${APP_TEXT.privacyBody} ${APP_TEXT.privacyAdsNow(nativeApp.consent.value.personalised, nativeApp.consent.value.source)}.` : 'DEVWORKS keeps your saves on this device only. It has no account and collects no personal data of its own. Any ads or purchases go through the store and ad services of your device, under their own privacy policies.',
     art: 'dev_brand_01',
-    buttons: [{ id: 'ok', label: 'Close', accent: COL.progress }],
+    buttons: [page, ...ads, { id: 'ok', label: 'Close', accent: COL.progress }],
   });
 }
 const creditsScreen = createCreditsScreen({ layout, assets, renderer, onBack: () => router.back() });
