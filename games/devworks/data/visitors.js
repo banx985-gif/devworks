@@ -43,6 +43,7 @@ export const VISITORS = {
   },
   // Seconds (real time, only while the clock runs on the studio screen).
   arriveGap: 0.7, // between one fan stepping in and the next
+  sheetWaitSec: 6, // a visit waits this long for its fans' sheets to load
   stops: [1, 2], // places each fan stops at (a desk or the trophy shelf)
   lookSec: [2.2, 3.6], // standing at a stop
   cheerSec: 1.6, // the cheer at a stop

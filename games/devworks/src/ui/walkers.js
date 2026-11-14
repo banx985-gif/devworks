@@ -6,7 +6,7 @@
 //
 //   const walkers = createWalkers({ assets, fetchJson })     walkers.ready → Promise (walkers.json read)
 //   walkers.frameFor(art, { state, back, mirror, stride, t, seed }) → { key, sx, sy, sw, sh, dx, dy, dw, dh, flip } | null
-//       state 'walking' | 'working' | 'idle'; back: facing away (up the screen); mirror: facing the other way;
+//       state 'walking' | 'working' | 'idle' | 'cheering' (a visitor, Milestone 40v); back: facing away (up the screen); mirror: facing the other way;
 //       stride: distance walked (plan units) for the walk frames; t: seconds for idle / work; dx, dy, dw, dh are
 //       relative to the feet (draw at feet.x + dx, feet.y + dy)
 //   walkers.has(art) → the sheet is in · walkers.want(art) asks for it
@@ -23,7 +23,8 @@ export function createWalkers({ assets, fetchJson = (u) => fetch(u).then((r) => 
   const ready = fetchJson(`${WALKERS_DIR}walkers.json`)
     .then((m) => (meta = m))
     .catch(() => null);
-  const rowOf = (anim, back) => meta?.rows.find((r) => r.anim === anim && r.facing === (back ? 'back' : 'front')) ?? null;
+  // Milestone 40v: a visitor's sheet has its own rows (idle, walk, cheer); the staff's use the shared list.
+  const rowOf = (anim, back, s) => (s?.rows ?? meta?.rows)?.find((r) => r.anim === anim && r.facing === (back ? 'back' : 'front')) ?? null;
   function want(art) {
     if (!meta?.sheets?.[art] || asked.has(art)) return;
     asked.add(art);
@@ -34,8 +35,9 @@ export function createWalkers({ assets, fetchJson = (u) => fetch(u).then((r) => 
     want(art);
     if (!has(art)) return null;
     const s = meta.sheets[art];
-    const anim = state === 'walking' ? 'walk' : state === 'working' ? 'work' : 'idle';
-    const row = rowOf(anim, back);
+    const anim = state === 'walking' ? 'walk' : state === 'working' ? 'work' : state === 'cheering' ? 'cheer' : 'idle';
+    // A cheer faces you (Milestone 40v: there is no back cheer row); anything a sheet lacks falls back to idle.
+    const row = rowOf(anim, anim === 'cheer' ? false : back, s) ?? rowOf('idle', back, s);
     if (!row) return null;
     const n = row.frames;
     const f = anim === 'walk' ? Math.floor((stride / strideLen) * WALKER_LOOK.strideFrames) % n : Math.floor(t * row.fps + seed * 7) % n;

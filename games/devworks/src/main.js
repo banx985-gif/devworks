@@ -96,6 +96,7 @@ import { FloatFeed } from '../../../core/FloatFeed.js';
 import { TextPrompt } from '../../../core/ui/TextPrompt.js';
 import { watchTextPrompt } from './ui/textBoxFix.js'; // Milestone 40o
 import { createWalkers } from './ui/walkers.js'; // Milestone 40t: the walking chibis
+import { createVisitors } from './systems/visitors.js'; // Milestone 40v: fans and Uncle Ray walk in
 import { ScrollPanel } from '../../../core/ui/ScrollPanel.js'; // Milestone 37: the art gallery
 import { BottomSheet } from '../../../core/ui/BottomSheet.js';
 import { Dialog } from '../../../core/ui/Modal.js';
@@ -454,6 +455,7 @@ const loop = new FixedStepLoop({
     celebrate.update(dt);
     if (started) devPops.update(dt, !clock.paused);
     if (started) liveBuild.update(dt); // Milestone 40b
+    if (started) visitorWatch(dt); // Milestone 40v
     if (tip && (tip.t += dt) > TIP_SEC * textTime()) tip = null;
     if (beat && !feedback.active && (beat.age += dt) > DEV_POPS.phaseBannerSec * textTime()) beat = null; // Milestone 34: Banner time
     if (started) {
@@ -1158,8 +1160,22 @@ const celebrate = new VfxSystem({ assets, width: W, height: renderer.height, fon
 const shipped = () => projects.catalogue.list().filter((r) => r.release).reverse();
 // Milestone 40t: the people in the studio walk, sit and work as their chibis (sprite sheets, loaded per person).
 const walkers = createWalkers({ assets });
+// Milestone 40v: fans walk in on launch days, conventions and fan events; Uncle Ray when the guide speaks and on the
+// year's awards day. Cosmetic only (Math.random, never the studio's seeded random; nothing saved).
+const visitors = createVisitors({
+  world,
+  has: (sheet) => walkers.has(sheet),
+  want: (sheet) => walkers.want(sheet),
+  today: () => clock.totalDays,
+  latestGame: () => {
+    const r = shipped()[0];
+    return r ? { title: r.title, review: r.release.score } : null;
+  },
+  fame: () => business.reputation.value,
+});
 const studio = createStudioScreen({
   walkers,
+  visitors,
   renderer,
   layout,
   assets,
@@ -1815,6 +1831,36 @@ setInterval(() => assets.sprites.prune(5, 45), 5000);
 // Interstitials only at natural break points (after a release, after a year end), shown once nothing else is up.
 let pendingBreak = null;
 bus.on('game:released', () => (pendingBreak = 'afterRelease'));
+// Milestone 40v: visitors. Fans: a launch (your game, your console), a convention, a fan event (a milestone reached, an
+// award won). Uncle Ray: each time the first-time guide speaks, and the year's awards day (the first ceremony each year
+// your studio is in). Only on the studio screen with the clock running; "Show visitors" in Settings turns them off.
+bus.on('game:released', ({ record }) => visitors.fanVisit('launch', { review: record?.release?.score ?? 0 }));
+bus.on('console:launched', () => visitors.fanVisit('launch'));
+bus.on('marketing:run', ({ action }) => action?.id === 'convention' && visitors.fanVisit('convention'));
+bus.on('milestone:reached', ({ id }) => id !== 'MS_FIRST_RELEASE' && visitors.fanVisit('fan')); // the first release is a launch already
+bus.on('award:won', () => visitors.fanVisit('fan'));
+let mentorAwardsYear = -1;
+bus.on('award:result', ({ result }) => {
+  if (result?.playerPlace == null || result.year === mentorAwardsYear) return;
+  mentorAwardsYear = result.year;
+  visitors.mentor('awards');
+});
+let mentorGuideStep = null;
+const guideSpeaking = () => started && guide.active && !!guide.current && router.currentName === 'studio';
+function visitorWatch(dt) {
+  if (guideSpeaking() && guide.current.id !== mentorGuideStep) {
+    mentorGuideStep = guide.current.id;
+    visitors.mentor('guide');
+  }
+  visitors.update(dt, {
+    onStudio: router.currentName === 'studio' && !studio.buildMode,
+    running: !clock.paused && !loop.paused,
+    enabled: settings.get('showVisitors') !== false,
+    low: settings.get('fpsMode') === 'low' || lowMode(),
+    hint: guideSpeaking,
+    cellOnScreen: (col, row) => studio.cellOnScreen(col, row),
+  });
+}
 bus.on('clock:year', () => (pendingBreak ??= 'yearEnd'));
 function breakWatch() {
   if (!pendingBreak || monetisation.ads.showing) return;
@@ -3085,7 +3131,7 @@ if (debug.enabled) {
     for (const d of ALL_STAFF) if (world.workers.length < stageById(5).staffCap) recruitment.debugJoin(d.id);
     return { staff: world.workers.length, stations: world.stations.length };
   };
-  window.__dw = { debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, walkers, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
+  window.__dw = { visitors, debugReviews, mastery, copycat, debugGodArrival, debugGodHire, debugGodCard, items, itemsUi, hintLine, MENU_OPEN, openMenuRow, menuState, facilityExtra, creditsScreen, syncMenuSlot, walks, helpWalks, offerWalk, requests, rewards, openDrop, liveBuild, walkers, ideaCards, governor, perfSnapshot, lowMode, debugStaff, bus, audio, studioAudio, haptics, applyFx, artGallery, logArtCheck, get artCheck() { return artCheck; }, monetisation, storeScreen, researchScreen, get pendingBreak() { return pendingBreak; }, saveInspector, restoreSlot, boundaries, runSystems, get lastBoundary() { return lastBoundary; }, get accountFile() { return accountFile; }, get storage() { return storage; }, openMenu, guide, coach, guideTarget, guideFill, helpScreen, settingsScreen, storeScreen, projectBoard, settings, splashScreen, get hintsSeen() { return hintsSeen; }, ending, ngplus, endingScreen, ngplusScreen, startNgPlusRun, get pendingNg() { return pendingNg; }, get accountStore() { return accountStore; }, achievements, achievementsScreen, hallOfFameScreen, secrets, rumourScreen, studioEvents, showBeat, eventFlow: () => eventFlow, distribution, consoles, consoleScreen, hardware, hardwareScreen, debugFullStudio, global, licensingScreen, publishingOfficeScreen, acquisitionsScreen, support, rivals, awards, awardsScreen, rivalsScreen, rankingsScreen, sponsors, sponsorsScreen, publishers, contracts, publishersScreen, contractsScreen, engines, engineScreen, combos, discoveryScreen, recruitment, training, staffActions, confirmLetGo, research, researchScreen, shop, archiveScreen, marketingScreen, checkStations, platformScreen, skipYear, decideNow, elements, renderer, layout, input, loop, router, assets, sheet, systemBack, clock, world, projects, business, ledger, catalogueScreen, floatFeed, vfx, celebrate, devPops, shipped, get beat() { return beat; }, get tip() { return tip; }, feedback, newProject, projectScreen, textPrompt, studioRng, studio, roster, staffDetail, topBar, subTopBar, bottomBar, autosave, badgeFor, get slot() { return slot; }, taps: [], profile, dialog, titleScreen, setupScreen, playSlot, startStudio, toTitle, deleteSlot, refreshSlots, get slots() { return slots; }, get slotIndex() { return slotIndex; }, get slotCards() { return slotCards; }, get started() { return started; } };
 }
 
 router

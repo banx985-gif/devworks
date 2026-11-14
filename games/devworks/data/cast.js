@@ -31,8 +31,8 @@ export const sponsorRepFace = (id) => {
   return i < 0 ? null : CAST_SPONSOR_REPS[i % CAST_SPONSOR_REPS.length];
 };
 // Fans / visitors: no names; they walk in on launch days, conventions and fan events once the series' sprite sheets
-// exist. Off until then (their faces are filed but not loaded).
-export const CAST_WALKING = false;
+// exist. On since Milestone 40v (their faces are still filed but not loaded: visitors only walk).
+export const CAST_WALKING = true; // Milestone 40v: the fans and Uncle Ray walk in (src/systems/visitors.js)
 export const CAST_FANS_LATER = ['face_01_curly_yellow_jumper', 'face_08_red_cardigan', 'face_09_pink_shorts', 'face_10_topknot_shorts', 'face_12_beach_shirt', 'face_15_denim_jacket', 'face_18_yellow_tee', 'face_19_sporty_red', 'face_20_athlete_blue', 'face_21_platinum_sporty', 'face_22_teal_sports_tee', 'face_23_ponytail_purple_sports', 'face_24_orange_tracksuit', 'face_26_grandad_cardigan'];
 
 // Every face the game loads now (the manifest, the art check and the portrait crops use this list).

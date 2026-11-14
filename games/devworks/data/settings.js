@@ -33,6 +33,7 @@ export const SETTINGS = [
   // DEVWORKS's own extras (after the series list).
   { id: 'master', label: 'Master volume', group: 'More options', tail: true, options: lvl([0, 25, 50, 75, 100]) },
   { id: 'lowVfx', label: 'Low effects', group: 'More options', tail: true, options: onOff, line: 'Simple drawn effects only (no picture effects), fewer particles.' },
+  { id: 'showVisitors', label: 'Show visitors', group: 'More options', tail: true, options: onOff, line: 'Fans walk in on launch days and shows; Uncle Ray drops by with tips.' }, // Milestone 40v
   { id: 'reducedWorkerDetail', label: 'Reduced worker detail', group: 'More options', tail: true, options: onOff, line: 'No icons or work pops over the workers; fewer of them animate.' },
   { id: 'confirmDestructive', label: 'Confirm before selling or letting go', group: 'More options', tail: true, options: onOff },
   { id: 'largerTargets', label: 'Larger buttons in sheets', group: 'More options', tail: true, options: onOff },
@@ -42,7 +43,7 @@ export const SETTINGS = [
   { id: 'colourBlindSymbols', label: 'Colour-blind-safe symbols', group: 'More options', tail: true, options: onOff, line: '✓ ✗ ! next to good, bad and risky lines.' },
   { id: 'statsMode', label: 'Stats', group: 'More options', tail: true, options: [{ id: 'simple', label: 'Simple' }, { id: 'advanced', label: 'Advanced' }] },
 ];
-export const SETTINGS_DEFAULTS = { muted: false, musicMuted: false, sfxMuted: false, screenShake: 'normal', showMenu: true, showHints: true, fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, colourBlindSymbols: false, statsMode: 'simple' };
+export const SETTINGS_DEFAULTS = { muted: false, musicMuted: false, sfxMuted: false, screenShake: 'normal', showMenu: true, showHints: true, fpsMode: 'auto', haptics: true, master: 100, music: 75, sfx: 100, textSize: 'normal', reducedFlashes: false, reducedMotion: false, lowVfx: false, reducedWorkerDetail: false, confirmDestructive: true, largerTargets: false, holdDuration: 0.8, textSpeed: 'normal', extraComboHints: false, showVisitors: true, colourBlindSymbols: false, statsMode: 'simple' };
 export const SHAKE_LEVELS = { off: 0, low: 0.5, normal: 1 }; // Milestone 40e: shake strength for each choice
 export const TEXT_SPEED = { fast: 0.7, normal: 1, slow: 1.6 }; // banner time multiplier
 export const TEXT_SCALE = { normal: 1, large: 1.15, larger: 1.3 }; // Milestone 38: three UI-scale steps

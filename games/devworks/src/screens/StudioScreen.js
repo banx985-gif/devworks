@@ -49,7 +49,7 @@ const ROOM_MAX_PX = 6e6; // Milestone 22: the cached floor's pixel budget (a muc
 const COVER_ASPECT = 336 / 483;
 const WORLD_PARALLAX = 0.15; // Milestone 40j: the scenery moves this much of the room's pan
 
-export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1, backdrop = null, reducedMotion = () => false, walkers = null }) {
+export function createStudioScreen({ renderer, layout, assets, bus, world, sheet, openStation, openStaff, projectView, showcase, vfx, isRunning, topBar, bottomBar, debug, sign = () => null, openShop = null, openFacility = null, labPrototype = () => null, workerIcons = () => true, workerDetail = () => ({ full: 24, every: 3 }), levelOf = () => ({ level: 1, pending: false }), stationDecor = null, shakeScale = () => 1, backdrop = null, reducedMotion = () => false, walkers = null, visitors = null }) {
   const W = renderer.width;
   const { cellSize: CELL, wallH, margin } = STUDIO;
   const { halfW: HW, halfH: HH } = STUDIO.view;
@@ -109,7 +109,19 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const wd = h * assets.aspect(w.def.art);
     return { x: f.x - wd / 2, y: f.y - h, w: wd, h };
   };
-  const depthOf = (it) => (it.kind === 'worker' ? it.agent.x + it.agent.y : (it.fp.col + it.fp.w / 2 + it.fp.row + it.fp.h / 2) * CELL);
+  // Milestone 40v: a visitor (fan or Uncle Ray) is drawn only as their chibi (null while the sheet isn't in: not drawn).
+  const visitorFrame = (v) => {
+    if (!walkers) return null;
+    const m = motionOf(v);
+    return walkers.frameFor(v.sheet, { state: visitors.animOf(v), back: m.back, mirror: m.back ? m.flip < 0 : m.flip > 0, stride: m.stride, t: animT, seed: m.seed, strideLen: WALKER.stride });
+  };
+  const visitorRect = (v) => {
+    const f = feetOf(v);
+    const ch = visitorFrame(v);
+    return ch ? { x: f.x - ch.dw * 0.32, y: f.y + ch.dy + ch.dh * 0.04, w: ch.dw * 0.64, h: -ch.dy - ch.dh * 0.04 } : { x: f.x, y: f.y, w: 0, h: 0 };
+  };
+  const visitorsIn = () => visitors?.list ?? [];
+  const depthOf = (it) => (it.kind === 'worker' || it.kind === 'visitor' ? it.agent.x + it.agent.y : (it.fp.col + it.fp.w / 2 + it.fp.row + it.fp.h / 2) * CELL);
 
   // Tapping: everything is hit-tested where it is drawn (projected), nearest-to-viewer first. Props are not in it.
   const selection = new Selection(bus, {
@@ -158,7 +170,8 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
   };
   function updateMotion(dt) {
     if (isRunning()) animT += dt;
-    for (const w of workers) {
+    for (const id of motion.keys()) if (String(id).startsWith('visitor_') && !visitorsIn().some((v) => v.id === id)) motion.delete(id); // Milestone 40v: gone
+    for (const w of [...workers, ...visitorsIn()]) {
       const m = motionOf(w);
       const dx = w.agent.x - m.x;
       const dy = w.agent.y - m.y;
@@ -234,6 +247,12 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     const w = camera.screenToWorld(sx, sy);
     return selection.pick(w.x, w.y);
   };
+  // Milestone 40v: the fan under a screen point (nearest the viewer first), or null.
+  const visitorAt = (sx, sy) => {
+    const w = camera.screenToWorld(sx, sy);
+    const hits = visitorsIn().filter((v) => !v.mentor && hitRect(w, visitorRect(v)));
+    return hits.sort((a, b) => depthOf(b) - depthOf(a))[0] ?? null;
+  };
 
   // Build Mode: a press on a station drags it (instead of panning). Stations win over staff standing in front.
   let press = null; // { id, station } — a finger down on a station
@@ -282,6 +301,22 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
     },
     get moving() {
       return moving;
+    },
+    // Milestone 40v: is a floor cell well inside the screen (clear of the bars)? Uncle Ray stands where you can see him.
+    cellOnScreen(col, row) {
+      const c = iso.corner(col + 0.5, row + 0.5);
+      const p = camera.worldToScreen(c.x, c.y);
+      const sr = layout.safeRect;
+      return p.x > sr.x + sr.w * 0.12 && p.x < sr.x + sr.w * 0.88 && p.y > sr.y + sr.h * 0.3 && p.y < sr.y + sr.h * 0.78;
+    },
+    // Milestone 40v: a visitor's box on the screen (tests tap it), or null.
+    visitorScreenRect(id) {
+      const v = visitorsIn().find((x) => x.id === id);
+      if (!v) return null;
+      const r = visitorRect(v);
+      const a = camera.worldToScreen(r.x, r.y);
+      const b = camera.worldToScreen(r.x + r.w, r.y + r.h);
+      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
     },
     setDebugBadge(b) {
       debugBadge = b;
@@ -503,6 +538,16 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
         return;
       }
       const picked = pickAt(p.x, p.y);
+      // Milestone 40v: staff always first; a facility unless the fan is standing in front of it there (you tap what you
+      // see: the rest of the facility still opens it). Uncle Ray is never tapped.
+      const vis0 = picked?.kind === 'worker' ? null : visitorAt(p.x, p.y);
+      const vis = vis0 && (!picked || depthOf(vis0) > depthOf(picked)) ? vis0 : null;
+      if (vis) {
+        visitors.tap(vis);
+        taps.push({ x: p.x, y: p.y, picked: vis.id });
+        if (taps.length > 50) taps.shift();
+        return;
+      }
       selection.select(picked);
       if (picked?.kind === 'worker') openStaff(picked.id);
       else if (picked) openStation(picked.id);
@@ -539,7 +584,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       assets.detail = DETAIL_STEPS.find((z) => z >= camera.zoom - 1e-6) ?? STUDIO.zoom.max;
       const vis = { x: camera.x - 60, y: camera.y - 60, w: camera.visibleW + 120, h: camera.visibleH + 120 };
       const seen = (r) => r.x < vis.x + vis.w && r.x + r.w > vis.x && r.y < vis.y + vis.h && r.y + r.h > vis.y;
-      const items = [...stations, ...props, ...onFloor()].filter((it) => it === moving?.station || seen(it.kind === 'worker' ? workerRect(it) : artRect(it))).sort((a, b) => depthOf(a) - depthOf(b));
+      const items = [...stations, ...props, ...onFloor(), ...visitorsIn()].filter((it) => it === moving?.station || seen(it.kind === 'worker' ? workerRect(it) : it.kind === 'visitor' ? visitorRect(it) : artRect(it))).sort((a, b) => depthOf(a) - depthOf(b)); // Milestone 40v: + visitors
       frameN++;
       const wd = workerDetail();
       const ccx = camera.x + camera.visibleW / 2;
@@ -554,6 +599,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       detailStats.logicOnly = onFloor().length - visWorkers.length;
       for (const it of items) {
         if (it.kind === 'worker') drawWorker(ctx, it, fullIds.has(it.id), wd.every);
+        else if (it.kind === 'visitor') drawVisitor(ctx, it);
         else if (it.kind === 'prop') drawProp(ctx, it);
         else if (it !== moving?.station) {
           const r = stationRect(it);
@@ -568,6 +614,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       assets.detail = 1;
       vfx?.render(ctx, 'world'); // the art pops, over the room but under the tags, so names always read
       for (const w of onFloor()) if (seen(workerRect(w))) drawNameTag(ctx, w);
+      for (const v of visitorsIn()) if (v.lineT > 0 && v.line && seen(visitorRect(v))) drawVisitorLine(ctx, v); // Milestone 40v
       drawShelfTag(ctx);
       drawProjectCard(ctx);
       camera.restore(ctx);
@@ -693,7 +740,7 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       isoPath(ctx, iso.outline(it.fp.col + 0.08, it.fp.row + 0.08, it.fp.w - 0.16, it.fp.h - 0.16));
       ctx.fill();
     }
-    for (const w of onFloor()) {
+    for (const w of [...onFloor(), ...visitorsIn().filter((v) => visitorFrame(v))]) {
       const f = feetOf(w);
       ctx.beginPath();
       ctx.ellipse(f.x, f.y - 4, 44, 16, 0, 0, Math.PI * 2);
@@ -786,6 +833,62 @@ export function createStudioScreen({ renderer, layout, assets, bus, world, sheet
       return;
     }
     drawCharacter(ctx, assets, w.def.art, f.x + shakeX, f.y, r.w, r.h, pose);
+  }
+
+  // Milestone 40v: a visitor — their chibi only (walk / cheer / idle frames), drawn by the feet like the staff.
+  function drawVisitor(ctx, v) {
+    const ch = visitorFrame(v);
+    if (!ch) return;
+    const f = feetOf(v);
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    if (ch.flip) ctx.scale(-1, 1);
+    ctx.drawImage(assets.get(ch.key), ch.sx, ch.sy, ch.sw, ch.sh, ch.dx, ch.dy, ch.dw, ch.dh);
+    ctx.restore();
+  }
+  // A visitor's line (a tapped fan's comment, Uncle Ray on awards day): a white bubble over their head, one size on
+  // screen at any zoom, fading out at the end.
+  function drawVisitorLine(ctx, v) {
+    const r = visitorRect(v);
+    ctx.font = font(S.small, true);
+    const maxW = Math.min(620, renderer.width * 0.7);
+    const lines = [];
+    let cur = '';
+    for (const wd of v.line.split(' ')) {
+      const t = cur ? cur + ' ' + wd : wd;
+      if (ctx.measureText(t).width > maxW && cur) {
+        lines.push(cur);
+        cur = wd;
+      } else cur = t;
+    }
+    if (cur) lines.push(cur);
+    const lh = S.small + 8;
+    const bw = Math.min(maxW, Math.max(...lines.map((l) => ctx.measureText(l).width))) + 40;
+    const bh = lines.length * lh + 26;
+    // Kept inside the screen (a fan or Uncle Ray near the edge): the bubble slides sideways, its tail stays on the head.
+    const sr = layout.safeRect;
+    const hx = camera.worldToScreen(r.x + r.w / 2, r.y).x;
+    const off = Math.max(sr.x + 16 - (hx - bw / 2), Math.min(0, sr.x + sr.w - 16 - (hx + bw / 2)));
+    fixedSize(ctx, r.x + r.w / 2, r.y - 8, () => {
+      ctx.globalAlpha = Math.min(1, v.lineT / 0.35);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = C.outline;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.roundRect(off - bw / 2, -bh - 18, bw, bh, 22);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-14, -20);
+      ctx.lineTo(0, -2);
+      ctx.lineTo(14, -20);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = C.text;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      lines.forEach((l, i) => ctx.fillText(l, off, -bh - 18 + 13 + lh * (i + 0.5)));
+    });
   }
 
   // The released games' covers on the Showcase Shelf, newest first (art only; the tag over the shelf names them).
